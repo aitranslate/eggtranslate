@@ -14,11 +14,9 @@ export type FileType = 'srt' | 'audio' | 'video';
 // 转录状态
 export type TranscriptionStatus =
   | 'idle'           // 未开始
-  | 'loading_model'  // 加载模型中
-  | 'decoding'       // 解码音频中
-  | 'chunking'       // 分片中
-  | 'transcribing'   // 转录中（分块转录）
-  | 'llm_merging'    // LLM 智能合并中
+  | 'uploading'      // 上传音频中
+  | 'transcribing'   // API 转录中
+  | 'llm_merging'    // LLM 组句中
   | 'completed'      // 已完成
   | 'failed';        // 失败
 
@@ -31,16 +29,6 @@ export interface TranscriptionProgressDetail {
   totalLlmBatches?: number;   // LLM 总批次数
 }
 
-// 转录配置
-export interface TranscriptionConfig {
-  repoId: string;              // HuggingFace 模型仓库 ID
-  backend: 'webgpu-hybrid' | 'wasm';  // 计算后端
-  encoderQuant: 'int8' | 'fp32';      // 编码器量化
-  decoderQuant: 'int8' | 'fp32';      // 解码器量化
-}
-
-// 转录模型状态
-export type ModelStatus = 'not_loaded' | 'loading' | 'loaded' | 'error';
 
 // 转录单词（parakeet 输出）
 export interface TranscriptionWord {
