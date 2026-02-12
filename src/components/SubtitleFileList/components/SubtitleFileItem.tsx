@@ -137,7 +137,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
       <div className="mb-4">
         <div className="flex items-center gap-4">
           {/* 进度显示 */}
-          <TranslationProgress file={file} translationStats={translationStats} />
+          <TranslationProgress file={file} isTranslating={isTranslating} translationStats={translationStats} />
 
           {/* 操作按钮 */}
           <FileActionButtons
