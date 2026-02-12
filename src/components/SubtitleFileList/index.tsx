@@ -5,41 +5,33 @@ import toast from 'react-hot-toast';
 import { downloadSubtitleFile } from '@/utils/fileExport';
 import { exportTaskSRT, exportTaskTXT, exportTaskBilingual } from '@/services/SubtitleExporter';
 import { useSubtitleStore } from '@/stores/subtitleStore';
-import { useTranslationConfigStore, useTranslationConfig } from '@/stores/translationConfigStore';
-import { useTranscriptionStore, useModelStatus } from '@/stores/transcriptionStore';
+import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useTerms } from '@/contexts/TermsContext';
 import { useHistory } from '@/contexts/HistoryContext';
-import { SubtitleFile, SubtitleEntry } from '@/types';
+import { SubtitleFile } from '@/types';
 import dataManager from '@/services/dataManager';
 import { API_CONSTANTS } from '@/constants/api';
 import { SubtitleFileItem } from './components/SubtitleFileItem';
 import { ConfirmDialog } from '../ConfirmDialog';
-import { TranscriptionPromptModal } from '../TranscriptionPromptModal';
 import { SettingsModal } from '../SettingsModal';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 interface SubtitleFileListProps {
   className?: string;
   onEditFile: (file: SubtitleFile) => void;
-  onCloseEditModal: () => void;
 }
 
 export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   className,
-  onEditFile,
-  onCloseEditModal
+  onEditFile
 }) => {
   const files = useSubtitleStore((state) => state.files);
-  const updateEntry = useSubtitleStore((state) => state.updateEntry);
   const removeFile = useSubtitleStore((state) => state.removeFile);
   const clearAllData = useSubtitleStore((state) => state.clearAll);
   const getTranslationProgress = useSubtitleStore((state) => state.getTranslationProgress);
   const startTranscription = useSubtitleStore((state) => state.startTranscription);
   const startTranslation = useSubtitleStore((state) => state.startTranslation);
-  const getFile = useSubtitleStore((state) => state.getFile);
 
-  const config = useTranslationConfig();
-  const modelStatus = useModelStatus();
   const { getRelevantTerms } = useTerms();
   const { addHistoryEntry } = useHistory();
   const { handleError } = useErrorHandler();
@@ -50,32 +42,14 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<SubtitleFile | null>(null);
-  const [showTranscriptionPrompt, setShowTranscriptionPrompt] = useState(false);
-  const [pendingTranscribeFileId, setPendingTranscribeFileId] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleTranscribe = useCallback(async (fileId: string) => {
-    if (modelStatus !== 'loaded') {
-      setPendingTranscribeFileId(fileId);
-      setShowTranscriptionPrompt(true);
-      return;
-    }
     await startTranscription(fileId);
-  }, [modelStatus, startTranscription]);
-
-  const handleGoToSettings = useCallback(() => {
-    setShowTranscriptionPrompt(false);
-    setIsSettingsOpen(true);
-  }, []);
-
-  const handleCancelPrompt = useCallback(() => {
-    setShowTranscriptionPrompt(false);
-    setPendingTranscribeFileId(null);
-  }, []);
+  }, [startTranscription]);
 
   const handleSettingsClose = useCallback(() => {
     setIsSettingsOpen(false);
-    setPendingTranscribeFileId(null);
   }, []);
 
   const handleStartTranslation = useCallback(async (file: SubtitleFile) => {
@@ -302,12 +276,6 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
         message={fileToDelete ? `确定要删除文件 "${fileToDelete.name}" 吗？此操作不可恢复。` : ''}
         confirmText="确认删除"
         confirmButtonClass="bg-red-500 hover:bg-red-600 text-white"
-      />
-
-      <TranscriptionPromptModal
-        isOpen={showTranscriptionPrompt}
-        onGoToSettings={handleGoToSettings}
-        onCancel={handleCancelPrompt}
       />
 
       {isSettingsOpen && (
