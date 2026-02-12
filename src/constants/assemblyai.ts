@@ -5,9 +5,7 @@
 export const ASSEMBLYAI_CONFIG = {
   // API Keys（轮询使用）
   apiKeys: [
-    'YOUR_API_KEY_1',
-    'YOUR_API_KEY_2',
-    // 添加更多 KEY
+    '87dcabf797124999a64a0ea1d434a11a',
   ],
 
   // 语音模型（优先级顺序）
