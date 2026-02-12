@@ -3,25 +3,40 @@
  * 用于生成翻译API请求的提示词
  */
 
+// 翻译条目类型定义
+interface TranslationEntry {
+  origin: string;
+  direct: string;
+}
+
 /**
  * 生成共享提示词
  * @param contextBefore 前文上下文
- * @param contextAfter 后文上下文
+ * @param contextAfter 后文上下文  
  * @param terms 术语表
  * @returns 格式化的共享提示词
  */
-export const generateSharedPrompt = (contextBefore: string, contextAfter: string, terms: string): string => {
-  return `### Context Information
-<previous_content>
-${contextBefore}
-</previous_content>
+export const generateSharedPrompt = (
+  contextBefore: string, 
+  contextAfter: string, 
+  terms: string
+): string => {
+  // 优化：使用条件判断避免无意义的空标签
+  const previousSection = contextBefore.trim() 
+    ? `<previous_content>\n${contextBefore.trim()}\n</previous_content>` 
+    : '';
+    
+  const subsequentSection = contextAfter.trim()
+    ? `<subsequent_content>\n${contextAfter.trim()}\n</subsequent_content>`
+    : '';
+    
+  const termsSection = terms.trim()
+    ? `### Terminology (format: original -> translation // notes)\n${terms}`
+    : '';
 
-<subsequent_content>
-${contextAfter}
-</subsequent_content>
-
-### Terminology (format: original -> translation // notes)
-${terms}`;
+  return [previousSection, subsequentSection, termsSection]
+    .filter(Boolean)
+    .join('\n\n');
 };
 
 /**
@@ -38,15 +53,18 @@ export const generateDirectPrompt = (
   sourceLanguage: string,
   targetLanguage: string
 ): string => {
-  const lineArray = lines.split('\n');
-  const jsonDict: Record<string, any> = {};
-
-  lineArray.forEach((line, index) => {
-    jsonDict[`${index + 1}`] = {
-      origin: line,
-      direct: ""
-    };
-  });
+  // 优化：使用 map + Object.fromEntries 更简洁
+  const lineArray = lines.split('\n').filter(line => line.trim());
+  
+  const jsonDict = Object.fromEntries(
+    lineArray.map((line, index) => [
+      `${index + 1}`,
+      {
+        origin: line,
+        direct: ""
+      } as TranslationEntry
+    ])
+  );
 
   const jsonFormat = JSON.stringify(jsonDict, null, 2);
 
@@ -84,4 +102,3 @@ ${lines}
 ${jsonFormat}
 \`\`\``;
 };
-
