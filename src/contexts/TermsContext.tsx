@@ -83,7 +83,7 @@ export const TermsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const updateTerm = useCallback(async (index: number, original: string, translation: string, notes?: string) => {
     const updatedTerm = { original, translation, notes };
     dispatch({ type: 'UPDATE_TERM', payload: { index, term: updatedTerm } });
-    await dataManager.updateTerm(index, original, translation, notes);
+    await dataManager.updateTerm(index, original, translation);
   }, []);
 
   const clearTerms = useCallback(async () => {

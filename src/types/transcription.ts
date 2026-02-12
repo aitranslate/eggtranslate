@@ -63,6 +63,7 @@ export interface TranscriptionProgressInfo {
   percent: number;           // 总体进度百分比
   currentChunk?: number;     // 当前处理块（如适用）
   totalChunks?: number;      // 总块数（如适用）
+  tokens?: number;           // Token 使用量（如适用）
 }
 
 /**
@@ -102,6 +103,7 @@ export interface SubtitleFile {
   entries: SubtitleEntry[];
   filename: string;
   currentTaskId: string;
+  taskId?: string;                    // 兼容 SubtitleFileMetadata
   type?: FileType;                    // Legacy: 'srt' | 'audio' | 'video' - TODO: migrate to fileType
   fileType?: 'srt' | 'audio-video';   // Unified type: use this field in new code
   fileSize?: number;                  // Unified size (bytes): use this field in new code
@@ -114,4 +116,5 @@ export interface SubtitleFile {
   // Phase 3 会移除 entries 数组，只保留这些统计信息
   entryCount?: number;                // 字幕条目总数（缓存）
   translatedCount?: number;           // 已翻译数量（缓存）
+  tokensUsed?: number;                // Token 使用量（缓存）
 }

@@ -8,7 +8,7 @@ import { useSubtitleStore } from '@/stores/subtitleStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useTerms } from '@/contexts/TermsContext';
 import { useHistory } from '@/contexts/HistoryContext';
-import { SubtitleFile } from '@/types';
+import { SubtitleFile, SubtitleFileMetadata } from '@/types';
 import dataManager from '@/services/dataManager';
 import { API_CONSTANTS } from '@/constants/api';
 import { SubtitleFileItem } from './components/SubtitleFileItem';
@@ -18,7 +18,7 @@ import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 interface SubtitleFileListProps {
   className?: string;
-  onEditFile: (file: SubtitleFile) => void;
+  onEditFile: (file: SubtitleFileMetadata) => void;
 }
 
 export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
@@ -41,7 +41,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   const [currentTranslatingFileId, setCurrentTranslatingFileId] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [fileToDelete, setFileToDelete] = useState<SubtitleFile | null>(null);
+  const [fileToDelete, setFileToDelete] = useState<SubtitleFileMetadata | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleTranscribe = useCallback(async (fileId: string) => {
@@ -52,7 +52,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     setIsSettingsOpen(false);
   }, []);
 
-  const handleStartTranslation = useCallback(async (file: SubtitleFile) => {
+  const handleStartTranslation = useCallback(async (file: SubtitleFileMetadata) => {
     setCurrentTranslatingFileId(file.id);
 
     try {
@@ -155,7 +155,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     }
   }, [clearAllData, handleError]);
 
-  const handleDeleteFile = useCallback(async (file: SubtitleFile) => {
+  const handleDeleteFile = useCallback(async (file: SubtitleFileMetadata) => {
     setFileToDelete(file);
     setShowDeleteConfirm(true);
   }, []);
@@ -174,7 +174,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     }
   }, [fileToDelete, removeFile, handleError]);
 
-  const handleExport = useCallback((file: SubtitleFile, format: 'srt' | 'txt' | 'bilingual') => {
+  const handleExport = useCallback((file: SubtitleFileMetadata, format: 'srt' | 'txt' | 'bilingual') => {
     let content = '';
     let extension: 'srt' | 'txt' = 'txt';
 

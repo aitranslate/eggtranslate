@@ -4,7 +4,7 @@
  * @returns 转换后的 wav 文件
  */
 export async function convertToWav(file: File): Promise<Blob> {
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
 
   // 1. 解码音视频文件 (浏览器原生支持从视频中提取音频流)
   const arrayBuffer = await file.arrayBuffer();

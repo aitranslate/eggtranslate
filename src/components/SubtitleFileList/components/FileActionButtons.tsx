@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
 import { Languages, Mic, Edit3, Download, Trash2 } from 'lucide-react';
-import { SubtitleFile } from '@/types';
+import { SubtitleFile, SubtitleFileMetadata } from '@/types';
 import { canRetranscribe } from '@/utils/fileUtils';
 
 interface FileActionButtonsProps {
-  file: SubtitleFile;
+  file: SubtitleFileMetadata;
   isTranslating: boolean;
   translationStats: {
     percentage: number;
@@ -34,10 +34,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
 
   const isTranscribing = useMemo(() =>
     file.transcriptionStatus === 'transcribing' ||
-    file.transcriptionStatus === 'llm_merging' ||
-    file.transcriptionStatus === 'decoding' ||
-    file.transcriptionStatus === 'chunking' ||
-    file.transcriptionStatus === 'loading_model',
+    file.transcriptionStatus === 'uploading',
     [file.transcriptionStatus]
   );
 

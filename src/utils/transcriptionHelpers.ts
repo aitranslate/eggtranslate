@@ -4,7 +4,7 @@
  */
 
 import { TRANSCRIPTION_BATCH_CONSTANTS } from '@/constants/transcription';
-import type { TranscriptionWord } from '@/types/transcription';
+import type { TranscriptionWord } from '@/types';
 
 // 重新导出类型
 export type { TranscriptionWord };
@@ -35,7 +35,7 @@ export const hasPauseBefore = (
   if (idx === 0) return true; // 第一个词，前面默认有停顿
 
   const prevWord = words[idx - 1];
-  const gap = firstWord.start_time - prevWord.end_time;
+  const gap = firstWord.start - prevWord.end;
   return gap > threshold;
 };
 

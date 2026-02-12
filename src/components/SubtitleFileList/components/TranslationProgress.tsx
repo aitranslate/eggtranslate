@@ -1,10 +1,10 @@
 import { motion } from 'framer-motion';
 import { Zap } from 'lucide-react';
-import { SubtitleFile } from '@/types';
+import { SubtitleFile, SubtitleFileMetadata } from '@/types';
 import { useMemo } from 'react';
 
 interface TranslationProgressProps {
-  file: SubtitleFile;
+  file: SubtitleFileMetadata;
   translationStats?: {
     total: number;
     translated: number;
@@ -26,27 +26,18 @@ export const TranslationProgress: React.FC<TranslationProgressProps> = ({
 
     switch (file.transcriptionStatus) {
       case 'uploading':
-      case 'decoding':
-      case 'chunking':
       case 'transcribing':
         progressTitle = '转录中';
         progressPercent = file.transcriptionProgress?.percent || 0;
         progressDetail = '正在处理音频...';
+        tokensDisplay = ''; // 转录阶段不显示 tokens
         break;
 
-      case 'llm_merging':
       case 'completed':
         progressTitle = '转录完成';
         progressPercent = 100;
         progressDetail = `共 ${file.entryCount} 条字幕`;
-        tokensDisplay = ''; // 转录阶段不显示 tokens
-        break;
-
-      case 'translating':
-        progressTitle = '翻译中';
-        progressPercent = file.translationProgress?.percent || 0;
-        progressDetail = `${file.translatedCount || 0} / ${file.entryCount} 已翻译`;
-        tokensDisplay = `${file.translationStats?.tokens || 0} tokens`;
+        tokensDisplay = ''; // 转录完成后也不显示 tokens
         break;
 
       default:
@@ -63,7 +54,7 @@ export const TranslationProgress: React.FC<TranslationProgressProps> = ({
       : 'from-blue-500 to-purple-500';
 
     return { progressTitle, progressPercent, progressColor, progressDetail, tokensDisplay };
-  }, [file.transcriptionStatus, file.translationStatus, file.transcriptionProgress, file.translationProgress, file.translationStats, file.entryCount, file.translatedCount, translationStats]);
+  }, [file.transcriptionStatus, file.transcriptionProgress, file.entryCount]);
 
   return (
     <div className="flex-grow relative">
@@ -86,10 +77,13 @@ export const TranslationProgress: React.FC<TranslationProgressProps> = ({
       {/* 左下角：进度详情 | 右下角：tokens */}
       <div className="flex justify-between text-xs text-gray-500 mt-1">
         <span>{progressInfo.progressDetail}</span>
-        <span className="flex items-center gap-1">
-          <Zap className="h-3 w-3" />
-          <span>{tokensDisplay}</span>
-        </span>
+        {/* 仅在翻译阶段显示 tokens */}
+        {(file.transcriptionStatus === 'completed' || !file.transcriptionStatus) && (
+          <span className="flex items-center gap-1">
+            <Zap className="h-3 w-3" />
+            <span>{progressInfo.tokensDisplay || (translationStats?.tokens || 0)}</span>
+          </span>
+        )}
       </div>
     </div>
   );

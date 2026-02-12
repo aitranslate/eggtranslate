@@ -5,11 +5,15 @@ import type { KeytermGroup } from '@/types/transcription';
 interface KeytermGroupsSettingsProps {
   groups: KeytermGroup[];
   onGroupsChange: (groups: KeytermGroup[]) => void;
+  keytermsEnabled: boolean;
+  onKeytermsEnabledChange: (enabled: boolean) => void;
 }
 
 export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
   groups,
-  onGroupsChange
+  onGroupsChange,
+  keytermsEnabled,
+  onKeytermsEnabledChange
 }) => {
   const [activeGroupId, setActiveGroupId] = useState(groups[0]?.id || '');
   const [newKeyterm, setNewKeyterm] = useState('');
@@ -77,7 +81,19 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
     <div className="space-y-6">
       {/* 热词分组 */}
       <div className="space-y-3">
-        <h3 className="apple-heading-small">热词提示</h3>
+        <div className="flex justify-between items-center">
+          <h3 className="apple-heading-small">热词提示</h3>
+          <button
+            onClick={() => onKeytermsEnabledChange(!keytermsEnabled)}
+            className={`w-12 h-6 rounded-full transition-colors ${
+              keytermsEnabled ? 'bg-blue-500' : 'bg-gray-300'
+            }`}
+          >
+            <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+              keytermsEnabled ? 'translate-x-6' : 'translate-x-0.5'
+            }`} />
+          </button>
+        </div>
 
         {/* 分组标签 */}
         <div className="flex flex-wrap gap-2">
@@ -171,10 +187,6 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
         {/* 当前分组的热词列表 */}
         {activeGroup && (
           <div className="space-y-3">
-            <p className="text-sm text-gray-600">
-              {activeGroup.name}的热词列表
-            </p>
-
             {activeGroup.keyterms.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {activeGroup.keyterms.map((term) => (

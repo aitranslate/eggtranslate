@@ -317,10 +317,15 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         return;
       }
 
+      // ✅ 获取热词（所有分组的词汇合并）
+      const { keytermGroups, keytermsEnabled } = useTranscriptionStore.getState();
+      const allKeyterms = keytermsEnabled ? keytermGroups.flatMap(g => g.keyterms) : [];
+
       get().updateTranscriptionStatus(fileId, 'uploading');
 
       const result = await runTranscriptionPipeline(
         fileRef,
+        allKeyterms,
         {
           onUploading: () => {
             get().updateTranscriptionStatus(fileId, 'uploading');
@@ -328,8 +333,11 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
           onTranscribing: () => {
             get().updateTranscriptionStatus(fileId, 'transcribing');
           },
+          onProgress: (percent) => {
+            get().updateTranscriptionProgress(fileId, { percent });
+          },
           onCompleted: () => {
-            get().updateTranscriptionStatus(fileId, 'completed');
+            // 状态更新将在数据保存和统计更新后进行
           },
           onError: (error) => {
             toast.error(`转录失败: ${error}`);
@@ -343,6 +351,9 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
 
       // 更新统计信息
       get().updateFileStatistics(fileId);
+
+      // 现在更新状态为 completed（确保 entryCount 已正确更新）
+      get().updateTranscriptionStatus(fileId, 'completed');
 
       toast.success(`转录完成！生成 ${result.entries.length} 条字幕`);
     } catch (error) {

@@ -2,7 +2,7 @@
  * 文件工具函数
  */
 
-import type { SubtitleFile } from '@/types/transcription';
+import type { SubtitleFile, SubtitleFileMetadata } from '@/types';
 
 /**
  * 判断文件是否可以重新转录
@@ -14,7 +14,7 @@ import type { SubtitleFile } from '@/types/transcription';
  * @param file - 字幕文件对象
  * @returns 是否可以重新转录
  */
-export const canRetranscribe = (file: SubtitleFile): boolean => {
+export const canRetranscribe = (file: SubtitleFile | SubtitleFileMetadata): boolean => {
   // SRT 文件：不需要转录
   if (file.fileType === 'srt') {
     return false;

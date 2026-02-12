@@ -9,7 +9,7 @@ export const ASSEMBLYAI_CONFIG = {
   ],
 
   // 语音模型（优先级顺序）
-  speechModels: ["universal-3-pro", "universal-2"] as const,
+  speechModels: ["universal-3-pro", "universal-2"] as string[],
 
   // 默认热词（用户可扩展）
   defaultKeyterms: [] as string[],

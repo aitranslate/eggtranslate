@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, memo } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { SubtitleFile } from '@/types';
+import { SubtitleFile, SubtitleFileMetadata } from '@/types';
 import dataManager from '@/services/dataManager';
 import { FileIcon } from './FileIcon';
 import { TranslationProgress } from './TranslationProgress';
@@ -10,12 +10,12 @@ import { formatFileSize } from '../utils/fileHelpers';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 interface SubtitleFileItemProps {
-  file: SubtitleFile;
+  file: SubtitleFileMetadata;
   index: number;
-  onEdit: (file: SubtitleFile) => void;
-  onStartTranslation: (file: SubtitleFile) => Promise<void>;
-  onExport: (file: SubtitleFile, format: 'srt' | 'txt' | 'bilingual') => void;
-  onDelete: (file: SubtitleFile) => Promise<void>;
+  onEdit: (file: SubtitleFileMetadata) => void;
+  onStartTranslation: (file: SubtitleFileMetadata) => Promise<void>;
+  onExport: (file: SubtitleFileMetadata, format: 'srt' | 'txt' | 'bilingual') => void;
+  onDelete: (file: SubtitleFileMetadata) => Promise<void>;
   onTranscribe: (fileId: string) => Promise<void>;
   isTranslatingGlobally: boolean;
   currentTranslatingFileId: string | null;
@@ -34,10 +34,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
 }) => {
   const isTranscribing = useMemo(() =>
     file.transcriptionStatus === 'transcribing' ||
-    file.transcriptionStatus === 'llm_merging' ||
-    file.transcriptionStatus === 'decoding' ||
-    file.transcriptionStatus === 'chunking' ||
-    file.transcriptionStatus === 'loading_model',
+    file.transcriptionStatus === 'uploading',
     [file.transcriptionStatus]
   );
 
@@ -51,7 +48,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   const translationStats = useMemo(() => {
     const entryCount = file.entryCount ?? 0;
     const translatedCount = file.translatedCount ?? 0;
-    const tokens = file.tokensUsed ?? 0;
+    const tokens = file.tokensUsed || 0;
 
     return {
       total: entryCount,
@@ -129,7 +126,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
               isTranslating && translationStats.percentage > 0 ? '翻译中' :
               translationStats.percentage > 0 ? '翻译失败' : '转录完成'
             ) :
-            file.transcriptionStatus === 'transcribing' || file.transcriptionStatus === 'llm_merging' || file.transcriptionStatus === 'loading_model' || file.transcriptionStatus === 'decoding' || file.transcriptionStatus === 'chunking' ? '转录中' :
+            file.transcriptionStatus === 'transcribing' || file.transcriptionStatus === 'uploading' ? '转录中' :
             file.transcriptionStatus === 'failed' ? '转录失败' :
             '等待转录'
           )}
@@ -162,13 +159,11 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
 };
 
 export const SubtitleFileItemMemo = memo(SubtitleFileItem, (prevProps, nextProps) => {
-  const fileKeys: (keyof SubtitleFile)[] = [
+  const fileKeys: (keyof SubtitleFileMetadata)[] = [
     'id',
     'name',
-    'type',
     'fileSize',
-    'transcriptionStatus',
-    'taskId'
+    'transcriptionStatus'
   ];
 
   for (const key of fileKeys) {
@@ -180,8 +175,7 @@ export const SubtitleFileItemMemo = memo(SubtitleFileItem, (prevProps, nextProps
   const prevProgress = prevProps.file.transcriptionProgress;
   const nextProgress = nextProps.file.transcriptionProgress;
   if (prevProgress?.percent !== nextProgress?.percent ||
-      prevProgress?.tokens !== nextProgress?.tokens ||
-      prevProgress?.llmBatch !== nextProgress?.llmBatch) {
+      prevProgress?.tokens !== nextProgress?.tokens) {
     return false;
   }
 

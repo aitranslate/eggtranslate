@@ -9,11 +9,10 @@ import type { KeytermGroup } from '@/types/transcription';
 import dataManager from '@/services/dataManager';
 
 interface TranscriptionStore {
-  // 热词分组
   keytermGroups: KeytermGroup[];
-
-  // Actions
+  keytermsEnabled: boolean;
   updateKeytermGroups: (groups: KeytermGroup[]) => Promise<void>;
+  setKeytermsEnabled: (enabled: boolean) => void;
 }
 
 const DEFAULT_GROUPS: KeytermGroup[] = [
@@ -22,37 +21,30 @@ const DEFAULT_GROUPS: KeytermGroup[] = [
 
 export const useTranscriptionStore = create<TranscriptionStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       keytermGroups: DEFAULT_GROUPS,
+      keytermsEnabled: true,
 
       updateKeytermGroups: async (groups) => {
         set({ keytermGroups: groups });
         await dataManager.saveTranscriptionConfig({ keytermGroups: groups });
       },
+
+      setKeytermsEnabled: (enabled) => {
+        set({ keytermsEnabled: enabled });
+      },
     }),
     {
       name: 'transcription-storage',
       partialize: (state) => ({
-        keytermGroups: state.keytermGroups
+        keytermGroups: state.keytermGroups,
+        keytermsEnabled: state.keytermsEnabled
       })
     }
   )
 );
 
-// 初始化：加载保存的配置
-if (typeof window !== 'undefined') {
-  (async () => {
-    try {
-      const savedConfig = await dataManager.getTranscriptionConfig();
-      if (savedConfig?.keytermGroups) {
-        useTranscriptionStore.setState({ keytermGroups: savedConfig.keytermGroups });
-      }
-    } catch (error) {
-      console.error('[transcriptionStore] 初始化失败:', error);
-    }
-  })();
-}
-
-// 导出 hooks
 export const useKeytermGroups = () => useTranscriptionStore((state) => state.keytermGroups);
 export const useUpdateKeytermGroups = () => useTranscriptionStore((state) => state.updateKeytermGroups);
+export const useKeytermsEnabled = () => useTranscriptionStore((state) => state.keytermsEnabled);
+export const useSetKeytermsEnabled = () => useTranscriptionStore((state) => state.setKeytermsEnabled);

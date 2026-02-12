@@ -1,7 +1,7 @@
 import { AssemblyAI } from "assemblyai";
 import { ASSEMBLYAI_CONFIG } from "@/constants/assemblyai";
 import { convertToWav } from "@/utils/convertToWav";
-import type { TranscriptionWord } from "@/types/transcription";
+import type { TranscriptionWord } from "@/types";
 import { toAppError } from "@/utils/errors";
 
 /**
@@ -27,6 +27,52 @@ export class AssemblyAIService {
     const keys = ASSEMBLYAI_CONFIG.apiKeys;
     const apiKey = keys[Math.floor(Math.random() * keys.length)];
     return new AssemblyAI({ apiKey });
+  }
+
+  /**
+   * 轮询转录状态
+   * @param transcriptId 转录任务 ID
+   * @param onProgress 进度回调（状态 + 百分比）
+   * @param timeout 超时时间（秒）
+   * @returns 转录结果
+   */
+  private async pollTranscriptStatus(
+    transcriptId: string,
+    onProgress?: (status: string, percent: number) => void,
+    timeout: number = 120
+  ): Promise<any> {
+    const client = this.createClient();
+    const startTime = Date.now();
+    const timeoutMs = timeout * 1000;
+
+    while (true) {
+      // 检查超时
+      if (Date.now() - startTime > timeoutMs) {
+        throw new Error(`Transcription timeout after ${timeout}s`);
+      }
+
+      // 获取状态
+      const transcript = await client.transcripts.get(transcriptId);
+
+      switch (transcript.status) {
+        case 'queued':
+          onProgress?.('queued', 10);
+          break;
+        case 'processing':
+          onProgress?.('processing', 50);
+          break;
+        case 'completed':
+          onProgress?.('completed', 100);
+          return transcript;
+        case 'error':
+          throw new Error(`Transcription failed: ${transcript.error}`);
+        case 'terminated':
+          throw new Error('Transcription was terminated');
+      }
+
+      // 等待 1 秒后继续轮询
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
   }
 
   /**
@@ -62,8 +108,8 @@ export class AssemblyAIService {
       // 4. 转换为 TranscriptionWord 格式
       return transcript.words.map(w => ({
         text: w.text,
-        start_time: w.start / 1000,  // 毫秒 → 秒
-        end_time: w.end / 1000,
+        start: w.start / 1000,  // 毫秒 → 秒
+        end: w.end / 1000,
         confidence: w.confidence
       }));
 
@@ -77,32 +123,50 @@ export class AssemblyAIService {
   /**
    * 转录音视频文件，返回句子级别（带时间戳）
    * @param mediaFile 音频或视频文件
+   * @param options 热词等配置
+   * @param onProgress 进度回调（状态 + 百分比）
    * @returns 句子数组（包含时间戳）
    */
   async transcribeWithSentences(
-    mediaFile: File
+    mediaFile: File,
+    options: { keyterms?: string[] } = {},
+    onProgress?: (status: string, percent: number) => void
   ): Promise<AssemblyAISentence[]> {
     try {
       const client = this.createClient();
 
       // 1. 转换为 WAV
+      onProgress?.('uploading', 5);
       const wavBlob = await convertToWav(mediaFile);
       const wavFile = new File([wavBlob], 'audio.wav', { type: 'audio/wav' });
 
-      // 2. 调用 AssemblyAI
+      // 2. 上传并启动转录
+      onProgress?.('uploading', 10);
       const transcript = await client.transcripts.transcribe({
         audio: wavFile,
         speech_models: ASSEMBLYAI_CONFIG.speechModels,
-        language_detection: true
+        language_detection: true,
+        keyterms_prompt: options.keyterms || ASSEMBLYAI_CONFIG.defaultKeyterms
       });
 
-      // 3. 检查错误
+      // 3. 轮询状态直到完成
+      while (transcript.status === 'queued' || transcript.status === 'processing') {
+        onProgress?.(transcript.status, transcript.status === 'processing' ? 50 : 10);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        // 重新获取状态
+        const updated = await client.transcripts.get(transcript.id);
+        Object.assign(transcript, updated);
+      }
+
       if (transcript.status === 'error') {
         throw new Error(`Transcription failed: ${transcript.error}`);
       }
 
-      // 4. 返回句子（AssemblyAI 已自动分割）
-      return transcript.sentences?.map(s => ({
+      // 4. 使用官方 SDK 方法获取 sentences
+      onProgress?.('completed', 100);
+      const { sentences } = await client.transcripts.sentences(transcript.id);
+
+      return sentences?.map(s => ({
         text: s.text,
         start: s.start,
         end: s.end

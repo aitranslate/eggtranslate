@@ -14,6 +14,7 @@ import { toAppError } from '@/utils/errors';
 export interface ProgressCallbacks {
   onUploading?: () => void;
   onTranscribing?: () => void;
+  onProgress?: (percent: number) => void;
   onCompleted?: () => void;
   onError?: (error: string) => void;
 }
@@ -21,23 +22,32 @@ export interface ProgressCallbacks {
 /**
  * 执行转录流程
  * @param fileRef - 音视频文件引用
+ * @param keyterms - 热词列表
  * @param callbacks - 进度回调
  * @returns 转录结果
  */
 export const runTranscriptionPipeline = async (
   fileRef: File,
+  keyterms: string[] = [],
   callbacks: ProgressCallbacks = {}
 ): Promise<{
   entries: SubtitleEntry[];
   duration: number;
 }> => {
   try {
-    // 1. 上传并转录
-    callbacks.onUploading?.();
-    const sentences = await assemblyaiService.transcribeWithSentences(fileRef);
+    // 1. 上传并转录（带进度回调）
+    const sentences = await assemblyaiService.transcribeWithSentences(
+      fileRef,
+      { keyterms },
+      (status, percent) => {
+        callbacks.onProgress?.(percent);
+        if (status === 'uploading') callbacks.onUploading?.();
+        else if (status === 'processing') callbacks.onTranscribing?.();
+        else if (status === 'completed') callbacks.onCompleted?.();
+      }
+    );
 
-    callbacks.onTranscribing?.();
-    toast(`转录完成，共 ${sentences.length} 个句子`);
+    toast('转录完成，共 ' + sentences.length + ' 个句子');
 
     // 2. 生成字幕条目
     const entries: SubtitleEntry[] = [];
@@ -46,7 +56,7 @@ export const runTranscriptionPipeline = async (
     for (const sentence of sentences) {
       entries.push({
         id: entryId++,
-        startTime: formatTime(sentence.start / 1000),  // 毫秒 → 秒
+        startTime: formatTime(sentence.start / 1000),
         endTime: formatTime(sentence.end / 1000),
         text: sentence.text,
         translatedText: '',
@@ -80,5 +90,5 @@ function formatTime(seconds: number): string {
   const secs = totalSeconds % 60;
   const milliseconds = Math.round((seconds % 1) * 1000);
 
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(milliseconds).toString().padStart(3, '0')}`;
+  return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0') + ',' + String(milliseconds).toString().padStart(3, '0');
 }

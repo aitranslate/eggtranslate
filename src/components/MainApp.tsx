@@ -18,7 +18,7 @@ import { GuideModal } from './GuideModal';
 import { useFiles } from '@/stores/subtitleStore';
 import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
 import { useHistory } from '@/contexts/HistoryContext';
-import { SubtitleFile } from '@/types';
+import { SubtitleFile, SubtitleFileMetadata } from '@/types';
 import { useTerms } from '@/contexts/TermsContext';
 import dataManager from '@/services/dataManager';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -63,7 +63,7 @@ export const MainApp: React.FC = () => {
   const { handleError } = useErrorHandler();
   useScrollAnimation();
 
-  const handleEditFile = useCallback((file: SubtitleFile) => {
+  const handleEditFile = useCallback((file: SubtitleFileMetadata) => {
     setEditingFileId(file.id);
     setIsEditingModalOpen(true);
   }, []);
@@ -161,7 +161,6 @@ export const MainApp: React.FC = () => {
           <div className="apple-animate-on-scroll apple-delay-200">
             <SubtitleFileList
               onEditFile={handleEditFile}
-              onCloseEditModal={handleCloseEditModal}
             />
           </div>
         )}
