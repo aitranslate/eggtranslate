@@ -7,7 +7,6 @@ import {
   CurrentTranslationTask,
   SingleTask,
   BatchTasks,
-  TranscriptionConfig,
 } from '@/types';
 import TaskManager from './modules/TaskManager';
 import TermsManager from './modules/TermsManager';
@@ -15,6 +14,11 @@ import ConfigManager from './modules/ConfigManager';
 import HistoryManager from './modules/HistoryManager';
 import TranscriptionConfigManager from './modules/TranscriptionConfigManager';
 import { toAppError } from '@/utils/errors';
+
+// 转录配置类型（本地定义，从 TranscriptionConfigManager 导入）
+interface TranscriptionConfig {
+  keytermGroups?: import('@/types/transcription').KeytermGroup[];
+}
 
 /**
  * 数据管理器 - 内存数据存储与异步持久化

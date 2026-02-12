@@ -1,6 +1,13 @@
 // 导入 SubtitleEntry 类型以避免循环依赖
 import type { SubtitleEntry } from './index';
 
+// 热词分组
+export interface KeytermGroup {
+  id: string;
+  name: string;
+  keyterms: string[];
+}
+
 // 文件类型
 export type FileType = 'srt' | 'audio' | 'video';
 

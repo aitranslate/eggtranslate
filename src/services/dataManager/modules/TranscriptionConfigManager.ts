@@ -1,10 +1,15 @@
 import localforage from 'localforage';
-import { TranscriptionConfig } from '@/types';
 import { toAppError } from '@/utils/errors';
+import type { KeytermGroup } from '@/types/transcription';
 
 /**
  * 转录配置管理器 - 负责转录配置的 CRUD 操作
+ * 简化版本：只管理热词分组
  */
+interface TranscriptionConfig {
+  keytermGroups?: KeytermGroup[];
+}
+
 class TranscriptionConfigManager {
   private memoryStore: {
     transcription_config?: TranscriptionConfig;
@@ -42,3 +47,4 @@ class TranscriptionConfigManager {
 }
 
 export default TranscriptionConfigManager;
+
