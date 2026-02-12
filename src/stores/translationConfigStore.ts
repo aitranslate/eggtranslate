@@ -64,7 +64,6 @@ const DEFAULT_CONFIG: TranslationConfig = {
   threadCount: 4,
   contextBefore: 5,
   contextAfter: 3,
-  enableReflection: true
 };
 
 const DEFAULT_PROGRESS: TranslationProgress = {

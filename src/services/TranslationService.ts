@@ -1,7 +1,7 @@
 import { TranslationConfig } from '@/types';
 import { jsonrepair } from 'jsonrepair';
 import dataManager from '@/services/dataManager';
-import { generateSharedPrompt, generateDirectPrompt, generateReflectionPrompt } from '@/utils/translationPrompts';
+import { generateSharedPrompt, generateDirectPrompt } from '@/utils/translationPrompts';
 import { callLLM } from '@/utils/llmApi';
 import { DEFAULT_TRANSLATION_CONFIG } from '@/constants/translationDefaults';
 import { API_CONSTANTS, OPENAI_DEFAULTS } from '@/constants/api';
@@ -11,7 +11,7 @@ import { toAppError } from '@/utils/errors';
  * 翻译服务 - 纯业务逻辑层
  *
  * 职责：
- * - 翻译逻辑（直译 + 反思翻译）
+ * - 翻译逻辑（信达雅一步翻译）
  * - 进度管理
  * - 任务控制
  * - 连接测试
@@ -149,7 +149,7 @@ class TranslationService {
 
       try {
         // 验证直译结果
-        this.validateTranslationResult(directResult, texts, 'direct');
+        this.validateTranslationResult(directResult, texts);
         break;  // 验证成功，跳出重试循环
       } catch (error) {
         // 只在失败时打印调试信息
@@ -165,65 +165,9 @@ class TranslationService {
       }
     }
 
-    let totalTokensUsed = directTokensUsed;
-
-    // 第二步：反思翻译（如果启用）
-    if (this.config.enableReflection) {
-      try {
-        const reflectionPrompt = generateReflectionPrompt(
-          directResult,
-          textToTranslate,
-          sharedPrompt,
-          this.config.sourceLanguage,
-          this.config.targetLanguage
-        );
-
-        const { content: reflectionContent, tokensUsed: reflectionTokensUsed } = await callLLM(
-          {
-            baseURL: this.config.baseURL,
-            apiKey: this.config.apiKey,
-            model: this.config.model,
-            rpm: this.config.rpm
-          },
-          [{ role: 'user', content: reflectionPrompt }],
-          { signal, temperature: API_CONSTANTS.DEFAULT_TEMPERATURE, maxRetries: 1 }
-        );
-
-        totalTokensUsed += reflectionTokensUsed;
-
-        const repairedReflectionJson = jsonrepair(reflectionContent);
-        const reflectionResult = JSON.parse(repairedReflectionJson);
-
-        // 验证反思结果
-        this.validateTranslationResult(reflectionResult, texts, 'reflection');
-
-        // 转换为直译格式
-        const formattedResult: Record<string, any> = {};
-        Object.keys(reflectionResult).forEach(key => {
-          formattedResult[key] = {
-            origin: reflectionResult[key].origin,
-            direct: reflectionResult[key].free || reflectionResult[key].direct
-          };
-        });
-
-        return {
-          translations: formattedResult,
-          tokensUsed: totalTokensUsed
-        };
-      } catch (error) {
-        const appError = toAppError(error, '反思翻译失败');
-        console.warn('[TranslationService] 反思翻译失败，使用直译结果:', appError.message);
-        return {
-          translations: directResult,
-          tokensUsed: totalTokensUsed
-        };
-      }
-    }
-
-    // 未启用反思翻译，返回直译结果
     return {
       translations: directResult,
-      tokensUsed: totalTokensUsed
+      tokensUsed: directTokensUsed
     };
   }
 
@@ -338,15 +282,12 @@ class TranslationService {
    * 验证翻译结果
    * @param result LLM 返回的翻译结果
    * @param originalTexts 原文数组
-   * @param phase 'direct' | 'reflection'
    * @throws Error 验证失败时抛出错误
    */
   private validateTranslationResult(
     result: Record<string, any>,
-    originalTexts: string[],
-    phase: 'direct' | 'reflection'
+    originalTexts: string[]
   ): void {
-    // 1. 行数匹配验证
     const expectedKeys = originalTexts.map((_, i) => String(i + 1));
     const actualKeys = Object.keys(result);
 
@@ -356,23 +297,13 @@ class TranslationService {
       }
     }
 
-    // 2. JSON 结构验证
     for (const key of expectedKeys) {
       const entry = result[key];
       if (!entry || typeof entry !== 'object') {
         throw new Error(`翻译结果 "${key}" 不是有效对象`);
       }
-
-      if (phase === 'direct') {
-        // 只检查字段是否存在，允许空字符串（LLM 可能合并翻译策略）
-        if (!('direct' in entry)) {
-          throw new Error(`直译结果 "${key}" 缺少 "direct" 字段`);
-        }
-      } else if (phase === 'reflection') {
-        // 只检查字段是否存在
-        if (!('free' in entry) && !('direct' in entry)) {
-          throw new Error(`反思结果 "${key}" 缺少 "free" 或 "direct" 字段`);
-        }
+      if (!('direct' in entry)) {
+        throw new Error(`翻译结果 "${key}" 缺少 "direct" 字段`);
       }
     }
   }

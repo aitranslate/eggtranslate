@@ -120,38 +120,6 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
               className="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
             />
           </div>
-
-          <div className="flex items-center">
-            <div className="flex items-center">
-              <div
-                className="relative cursor-pointer"
-                onClick={() => onConfigChange('enableReflection', !config.enableReflection)}
-              >
-                <input
-                  type="checkbox"
-                  checked={config.enableReflection || false}
-                  onChange={(e) => e.stopPropagation()}
-                  className="sr-only"
-                />
-                <div
-                  className={`block w-14 h-8 rounded-full transition-colors ${
-                    config.enableReflection ? 'bg-blue-500' : 'bg-gray-300'
-                  }`}
-                ></div>
-                <div
-                  className={`absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform shadow-sm ${
-                    config.enableReflection ? 'transform translate-x-6' : ''
-                  }`}
-                ></div>
-              </div>
-              <div className="ml-3 text-gray-700">
-                <div className="font-medium">反思翻译</div>
-                <p className="text-xs text-gray-500 mt-1">
-                  提高翻译质量，但会消耗更多tokens
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </>

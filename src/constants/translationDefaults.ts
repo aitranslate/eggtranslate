@@ -19,7 +19,6 @@ export const DEFAULT_TRANSLATION_CONFIG: TranslationConfig = {
   batchSize: 20,
   threadCount: 4,
   rpm: 0,
-  enableReflection: false,
 };
 
 /**

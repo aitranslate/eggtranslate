@@ -27,7 +27,6 @@ export interface TranslationConfig extends LLMConfig {
   contextAfter: number;
   batchSize: number;
   threadCount: number;
-  enableReflection: boolean; // 是否启用反思翻译
 }
 
 // 翻译进度类型

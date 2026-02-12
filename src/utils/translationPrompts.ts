@@ -25,12 +25,12 @@ ${terms}`;
 };
 
 /**
- * 生成直译提示词
+ * 生成翻译提示词（信达雅一步翻译）
  * @param lines 需要翻译的文本行
  * @param sharedPrompt 共享提示词
  * @param sourceLanguage 源语言
  * @param targetLanguage 目标语言
- * @returns 格式化的直译提示词
+ * @returns 格式化的翻译提示词
  */
 export const generateDirectPrompt = (
   lines: string,
@@ -51,108 +51,38 @@ export const generateDirectPrompt = (
   const jsonFormat = JSON.stringify(jsonDict, null, 2);
 
   return `## Role
-You are a professional Netflix subtitle translator, fluent in both ${sourceLanguage} and ${targetLanguage}, as well as their respective cultures.
-Your expertise lies in accurately understanding the semantics and structure of the original ${sourceLanguage} text and faithfully translating it into ${targetLanguage} while preserving the original meaning.
+You are a professional Netflix subtitle translator fluent in ${sourceLanguage} and ${targetLanguage}. You always respond in valid JSON only.
 
 ## Task
-We have a segment of original ${sourceLanguage} subtitles that need to be directly translated into ${targetLanguage}. These subtitles come from a specific context and may contain specific themes and terminology.
-
-1. Translate the original ${sourceLanguage} subtitles into ${targetLanguage} line by line
-2. Ensure the translation is faithful to the original, accurately conveying the original meaning
-3. Consider the context and professional terminology
+Translate the following ${sourceLanguage} subtitles into ${targetLanguage}.
 
 ${sharedPrompt}
 
-<translation_principles>
-1. Faithful to the original: Accurately convey the content and meaning of the original text, without arbitrarily changing, adding, or omitting content.
-2. Accurate terminology: Use professional terms correctly and maintain consistency in terminology.
-3. Understand the context: Fully comprehend and reflect the background and contextual relationships of the text.
-</translation_principles>
+<translation_guidelines>
+1. **Accuracy**: Faithfully convey the original meaning — never add, omit, or distort.
+2. **Naturalness**: Use expressions native ${targetLanguage} speakers would actually say.
+3. **Conciseness**: Subtitles must be readable at viewing speed — prefer compact phrasing.
+4. **Consistency**: Maintain consistent terminology, especially for names and technical terms.
+5. **Tone**: Match register to content — casual for dialogue, formal for narration.
+6. **Cultural Adaptation**: Adapt references only when necessary, never at the cost of meaning.
+7. **Context**: Use surrounding subtitles to resolve ambiguity.
+</translation_guidelines>
 
-## INPUT
+<subtitle_constraints>
+- Keep each subtitle short enough to read at normal playback speed.
+- Maintain strict 1:1 mapping with source entries — do not merge or split.
+- Preserve natural speech rhythm in line breaks.
+</subtitle_constraints>
+
+## Input
 <subtitles>
 ${lines}
 </subtitles>
 
-## Output in only JSON format and no other text
+## Output
 \`\`\`json
 ${jsonFormat}
-\`\`\`
-
-Note: Start you answer with \`\`\`json and end with \`\`\`, do not add any other text.`;
-};
-
-/**
- * 生成反思提示词
- * @param directTranslations 直译结果
- * @param lines 原始文本行
- * @param sharedPrompt 共享提示词
- * @param sourceLanguage 源语言
- * @param targetLanguage 目标语言
- * @returns 格式化的反思提示词
- */
-export const generateReflectionPrompt = (
-  directTranslations: Record<string, any>,
-  lines: string,
-  sharedPrompt: string,
-  sourceLanguage: string,
-  targetLanguage: string
-): string => {
-  // 创建包含反思和自由翻译字段的JSON格式
-  const jsonDict: Record<string, any> = {};
-
-  Object.keys(directTranslations).forEach(key => {
-    jsonDict[key] = {
-      origin: directTranslations[key].origin,
-      direct: directTranslations[key].direct,
-      reflect: "your reflection on direct translation",
-      free: "your free translation"
-    };
-  });
-
-  const jsonFormat = JSON.stringify(jsonDict, null, 2);
-
-  return `## Role
-You are a professional Netflix subtitle translator and language consultant.
-Your expertise lies not only in accurately understanding the original ${sourceLanguage} but also in optimizing the ${targetLanguage} translation to better suit the target language's expression habits and cultural background.
-
-## Task
-We already have a direct translation version of the original ${sourceLanguage} subtitles.
-Your task is to reflect on and improve these direct translations to create more natural and fluent ${targetLanguage} subtitles.
-
-1. Analyze the direct translation results line by line, pointing out existing issues
-2. Provide detailed modification suggestions
-3. Perform free translation based on your analysis
-4. Do not add comments or explanations in the translation, as the subtitles are for the audience to read
-5. Do not leave empty lines in the free translation, as the subtitles are for the audience to read
-
-${sharedPrompt}
-
-<Translation Analysis Steps>
-Please use a two-step thinking process to handle the text line by line:
-
-1. Direct Translation Reflection:
-   - Evaluate language fluency
-   - Check if the language style is consistent with the original text
-   - Check the conciseness of the subtitles, point out where the translation is too wordy
-
-2. ${targetLanguage} Free Translation:
-   - Aim for contextual smoothness and naturalness, conforming to ${targetLanguage} expression habits
-   - Ensure it's easy for ${targetLanguage} audience to understand and accept
-   - Adapt the language style to match the theme (e.g., use casual language for tutorials, professional terminology for technical content, formal language for documentaries)
-</Translation Analysis Steps>
-
-## INPUT
-<subtitles>
-${lines}
-</subtitles>
-
-## Output in only JSON format and no other text
-\`\`\`json
-${jsonFormat}
-\`\`\`
-
-Note: Start you answer with \`\`\`json and end with \`\`\`, do not add any other text.`;
+\`\`\``;
 };
 
 /**
