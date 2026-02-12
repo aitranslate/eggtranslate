@@ -11,31 +11,37 @@ export interface KeytermGroup {
 // 文件类型
 export type FileType = 'srt' | 'audio' | 'video';
 
-// 转录状态
+// 转录状态（极简流程）
 export type TranscriptionStatus =
-  | 'idle'           // 未开始
-  | 'uploading'      // 上传音频中
-  | 'transcribing'   // API 转录中
-  | 'llm_merging'    // LLM 组句中
-  | 'completed'      // 已完成
-  | 'failed';        // 失败
+  | 'idle'          // 未开始
+  | 'uploading'     // 上传音频中
+  | 'transcribing'  // API 转录中
+  | 'completed'     // 已完成
+  | 'failed';       // 失败
 
-// 转录进度详情
+// 转录进度详情（极简版）
 export interface TranscriptionProgressDetail {
   status: TranscriptionStatus;
-  currentChunk?: number;    // 当前转录块 (1/20)
-  totalChunks?: number;      // 总块数
-  llmBatch?: number;         // LLM 合并批次 (2/10)
-  totalLlmBatches?: number;   // LLM 总批次数
+  currentChunk?: number;    // 当前处理块（如适用）
+  totalChunks?: number;     // 总块数（如适用）
 }
 
 
-// 转录单词（parakeet 输出）
+// 转录单词（AssemblyAI 输出）
 export interface TranscriptionWord {
   text: string;
-  start_time: number;
-  end_time: number;
+  start: number;           // 毫秒
+  end: number;             // 毫秒
   confidence: number;
+}
+
+// AssemblyAI Sentence 类型（极简流程使用）
+export interface AssemblyAISentence {
+  text: string;
+  start: number;           // 毫秒
+  end: number;             // 毫秒
+  confidence?: number;
+  words?: TranscriptionWord[];  // 可选的单词级别时间戳
 }
 
 // 转录结果
@@ -55,10 +61,8 @@ export interface TranscriptionResult {
 // 转录进度详情（百分比形式）
 export interface TranscriptionProgressInfo {
   percent: number;           // 总体进度百分比
-  currentChunk?: number;     // 当前转录块 (1/20)
-  totalChunks?: number;      // 总块数
-  llmBatch?: number;         // LLM 合并批次 (2/10)
-  totalLlmBatches?: number;  // LLM 总批次数
+  currentChunk?: number;     // 当前处理块（如适用）
+  totalChunks?: number;      // 总块数（如适用）
 }
 
 /**
