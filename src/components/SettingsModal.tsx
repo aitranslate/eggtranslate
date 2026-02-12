@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useTranslationConfigStore, useTranslationConfig } from '@/stores/translationConfigStore';
-import { useTranscriptionStore, useTranscriptionConfig, useModelStatus, useIsDownloading, useCacheInfo } from '@/stores/transcriptionStore';
+import { useKeytermGroups, useUpdateKeytermGroups } from '@/stores/transcriptionStore';
 import { TranslationSettings } from './SettingsModal/TranslationSettings';
 import { TranscriptionSettings } from './TranscriptionSettings';
 import { motion } from 'framer-motion';
@@ -25,22 +25,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const config = useTranslationConfig();
   const updateConfig = useTranslationConfigStore((state) => state.updateConfig);
 
-  // Transcription config and state
-  const transcriptionConfig = useTranscriptionConfig();
-  const updateTranscriptionConfig = useTranscriptionStore((state) => state.updateConfig);
-  const modelStatus = useModelStatus();
-  const isDownloading = useIsDownloading();
-  const cacheInfo = useCacheInfo();
-
-  // Get modelProgress and downloadProgress directly from store
-  const modelProgress = useTranscriptionStore((state) => state.modelProgress);
-  const downloadProgress = useTranscriptionStore((state) => state.downloadProgress);
-
-  // Get action methods
-  const downloadModel = useTranscriptionStore((state) => state.downloadModel);
-  const loadModel = useTranscriptionStore((state) => state.loadModel);
-  const refreshCacheInfo = useTranscriptionStore((state) => state.refreshCacheInfo);
-  const clearCache = useTranscriptionStore((state) => state.clearCache);
+  // Transcription config (热词分组)
+  const keytermGroups = useKeytermGroups();
+  const updateKeytermGroups = useUpdateKeytermGroups();
 
   // 测试连接相关状态
   const [isTesting, setIsTesting] = useState(false);
@@ -215,19 +202,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               </div>
             </>
           ) : (
-            <TranscriptionSettings
-              config={transcriptionConfig}
-              onConfigChange={updateTranscriptionConfig}
-              modelStatus={modelStatus}
-              modelProgress={modelProgress}
-              isDownloading={isDownloading}
-              downloadProgress={downloadProgress}
-              cacheInfo={cacheInfo}
-              onRefreshCacheInfo={refreshCacheInfo}
-              onClearCache={clearCache}
-              onDownloadModel={downloadModel}
-              onLoadModel={loadModel}
-            />
+            <TranscriptionSettings />
           )}
         </div>
       </motion.div>

@@ -35,8 +35,6 @@ export {
 
 export {
   useTranscriptionStore,
-  useTranscriptionConfig,
-  useModelStatus,
-  useIsDownloading,
-  useCacheInfo
+  useKeytermGroups,
+  useUpdateKeytermGroups
 } from './transcriptionStore';

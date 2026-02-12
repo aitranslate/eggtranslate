@@ -133,9 +133,7 @@ function checkOngoingTasks(): boolean {
   const files = useSubtitleStore.getState().files;
   const isTranscribing = files.some(file =>
     file.transcriptionStatus && (
-      file.transcriptionStatus === 'loading_model' ||
-      file.transcriptionStatus === 'decoding' ||
-      file.transcriptionStatus === 'chunking' ||
+      file.transcriptionStatus === 'uploading' ||
       file.transcriptionStatus === 'transcribing' ||
       file.transcriptionStatus === 'llm_merging'
     )
@@ -310,112 +308,42 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     const file = get().getFile(fileId);
     if (!file || file.fileType === 'srt') return;
 
-    // ✅ Phase 3: 从 DataManager 获取 fileRef（因为元数据中没有）
-    const task = dataManager.getTaskById(file.taskId);
-    // 注意：fileRef 存储在别处，这里需要特殊处理
-    // 暂时跳过 fileRef 检查，让转录流程处理
-
-    // 获取转录配置
-    const transcriptionConfig = useTranscriptionStore.getState().config;
-    const model = useTranscriptionStore.getState().getModel();
-
-    if (!model || useTranscriptionStore.getState().modelStatus !== 'loaded') {
-      toast.error('请先加载转录模型');
-      return;
-    }
-
-    // 获取翻译配置（用于 LLM 组句）
-    const translationConfig = useTranslationConfigStore.getState().config;
-    if (!useTranslationConfigStore.getState().isConfigured) {
-      toast.error('转录失败: 请先配置API密钥（用于句子分割）');
-      return;
-    }
-
     try {
-      let totalChunks = 0;
-
       // ✅ Phase 3: 从 DataManager 获取 fileRef
-      // 由于 fileRef 不在元数据中，这里暂时使用一个临时方案
-      // TODO: 重构 fileRef 的存储方式
+      const task = dataManager.getTaskById(file.taskId);
       const fileRef = (file as any).fileRef; // 临时访问
       if (!fileRef) {
         toast.error('文件引用丢失，请重新上传');
         return;
       }
 
+      get().updateTranscriptionStatus(fileId, 'uploading');
+
       const result = await runTranscriptionPipeline(
         fileRef,
-        model,
         {
-          baseURL: translationConfig.baseURL,
-          apiKey: translationConfig.apiKey,
-          model: translationConfig.model,
-          sourceLanguage: translationConfig.sourceLanguage,
-          threadCount: translationConfig.threadCount
-        },
-        {
-          onDecoding: () => {
-            get().updateTranscriptionStatus(fileId, 'decoding');
+          onUploading: () => {
+            get().updateTranscriptionStatus(fileId, 'uploading');
           },
-          onChunking: (duration) => {
-            get().updateTranscriptionStatus(fileId, 'chunking');
-          },
-          onTranscribing: (current, total, percent) => {
-            totalChunks = total;
+          onTranscribing: () => {
             get().updateTranscriptionStatus(fileId, 'transcribing');
-            get().updateTranscriptionProgress(fileId, {
-              percent,
-              currentChunk: current,
-              totalChunks: total
-            });
           },
-          onLLMMerging: () => {
-            get().updateTranscriptionStatus(fileId, 'llm_merging');
-            get().updateTranscriptionProgress(fileId, {
-              percent: TRANSCRIPTION_PROGRESS.LLM_PROGRESS_START,
-              llmBatch: 0,
-              totalLlmBatches: 0
-            });
+          onCompleted: () => {
+            get().updateTranscriptionStatus(fileId, 'completed');
           },
-          onLLMProgress: (completed, total, percent, cumulativeTokens) => {
-            // ✅ 单独更新 tokens（不再嵌套在 progress 里）
-            const previousTokens = get().getTokens(fileId);
-            const newTokens = cumulativeTokens - previousTokens;
-
-            if (newTokens > 0) {
-              get().addTokens(fileId, newTokens);
-            }
-
-            // 更新转录进度（不包括 tokens）
-            get().updateTranscriptionProgress(fileId, {
-              percent,
-              currentChunk: totalChunks,
-              totalChunks: totalChunks,
-              llmBatch: completed,
-              totalLlmBatches: total
-            });
+          onError: (error) => {
+            toast.error(`转录失败: ${error}`);
+            get().updateTranscriptionStatus(fileId, 'failed');
           }
         }
       );
 
       // 持久化转录结果
-      await dataManager.updateTaskWithTranscription(file.taskId, result.entries, result.duration, result.tokensUsed);
-
-      // 完成转录
-      get().updateTranscriptionStatus(fileId, 'completed');
-      get().updateTranscriptionProgress(fileId, {
-        percent: 100,
-        currentChunk: result.totalChunks,
-        totalChunks: result.totalChunks
-      });
-
-      // ✅ 设置最终 tokens（覆盖）
-      get().setTokens(fileId, result.tokensUsed);
+      await dataManager.updateTaskWithTranscription(file.taskId, result.entries, result.duration, 0);
 
       // 更新统计信息
       get().updateFileStatistics(fileId);
 
-      // ✅ Phase 3: 移除 forcePersist，DataManager 负责持久化
       toast.success(`转录完成！生成 ${result.entries.length} 条字幕`);
     } catch (error) {
       const appError = toAppError(error, '转录失败');
