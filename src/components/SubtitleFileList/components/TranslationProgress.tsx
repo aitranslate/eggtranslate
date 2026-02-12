@@ -64,7 +64,11 @@ export const TranslationProgress: React.FC<TranslationProgressProps> = ({
     let progressDetail: string;
     if (isTranscribing) {
       if (file.transcriptionStatus === 'transcribing') {
-        progressDetail = `转录 ${file.transcriptionProgress?.currentChunk || 0} / ${file.transcriptionProgress?.totalChunks || 0}`;
+        if (file.transcriptionProgress?.percent) {
+          progressDetail = `转录中 ${Math.floor(file.transcriptionProgress.percent)}%`;
+        } else {
+          progressDetail = '转录中...';
+        }
       } else if (file.transcriptionStatus === 'llm_merging') {
         const batch = file.transcriptionProgress?.llmBatch || 0;
         const total = file.transcriptionProgress?.totalLlmBatches || 0;
@@ -84,9 +88,23 @@ export const TranslationProgress: React.FC<TranslationProgressProps> = ({
   }, [isTranscribing, isTranslationPhase, file.transcriptionStatus, file.transcriptionProgress, translationStats]);
 
   const tokensDisplay = useMemo(() => {
-    const tokens = translationStats?.tokens ?? 0;
-    return `${tokens.toLocaleString()} tokens`;
-  }, [translationStats?.tokens]);
+    if (isTranscribing) {
+      return '';  // 转录阶段不显示 tokens
+    }
+    if (file.transcriptionStatus === 'llm_merging') {
+      const batch = file.transcriptionProgress?.llmBatch || 0;
+      const total = file.transcriptionProgress?.totalLlmBatches || 0;
+      if (batch > 0) {
+        return `组句 ${batch}/${total}`;
+      } else {
+        return '准备组句...';
+      }
+    }
+    if (file.translationStatus === 'translating') {
+      return `${translationStats?.tokens ?? 0} tokens`;
+    }
+    return '';
+  }, [isTranscribing, file.transcriptionStatus, file.translationStatus, file.transcriptionProgress, translationStats?.tokens]);
 
   return (
     <div className="flex-grow relative">
