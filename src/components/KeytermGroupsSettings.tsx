@@ -237,19 +237,6 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
         )}
       </div>
 
-      {/* 说明信息 */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-        <div className="flex items-start gap-3">
-          <FolderOpen className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-700">
-            <p className="font-medium mb-1">热词提示说明</p>
-            <p className="text-blue-600">
-              按领域分组管理热词，提高专业术语识别准确率。所有分组的词汇将一起发送给 ASR 服务。
-              支持单个添加或逗号分隔批量添加（如：apple, banana, orange）。
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
