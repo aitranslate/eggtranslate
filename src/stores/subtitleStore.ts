@@ -12,7 +12,6 @@ import dataManager from '@/services/dataManager';
 import { generateStableFileId } from '@/utils/taskIdGenerator';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { toAppError } from '@/utils/errors';
-import { TRANSCRIPTION_PROGRESS } from '@/constants/transcription';
 import toast from 'react-hot-toast';
 import localforage from 'localforage';
 
