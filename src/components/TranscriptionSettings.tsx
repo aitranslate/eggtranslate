@@ -1,5 +1,6 @@
 import React from 'react';
 import { ApiEndpointsSettings } from './ApiEndpointsSettings';
+import { SrtCharsSettings } from './SrtCharsSettings';
 import { KeytermGroupsSettings } from './KeytermGroupsSettings';
 import {
   useKeytermGroups,
@@ -24,6 +25,7 @@ export const TranscriptionSettings: React.FC = () => {
         keys={apiKeys}
         onKeysChange={setApiKeys}
       />
+      <SrtCharsSettings />
       <KeytermGroupsSettings
         groups={keytermGroups}
         onGroupsChange={updateKeytermGroups}

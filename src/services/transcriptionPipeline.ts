@@ -4,7 +4,8 @@
  */
 
 import { SubtitleEntry } from '@/types';
-import { assemblyaiService, type AssemblyAISentence } from './assemblyaiService';
+import { assemblyaiService } from './assemblyaiService';
+import type { AssemblyAISentence } from '@/utils/subtitleSegmentation';
 import { toast } from 'react-hot-toast';
 import { toAppError } from '@/utils/errors';
 
@@ -15,6 +16,7 @@ export interface ProgressCallbacks {
   onConverting?: () => void;
   onUploading?: () => void;
   onTranscribing?: () => void;
+  onSegmenting?: () => void;
   onProgress?: (percent: number) => void;
   onCompleted?: () => void;
   onError?: (error: string) => void;
@@ -36,14 +38,15 @@ export const runTranscriptionPipeline = async (
   duration: number;
 }> => {
   try {
-    // 1. 上传并转录（带进度回调）
-    const sentences = await assemblyaiService.transcribeWithSentences(
+    // 1. 上传并转录（使用智能断句）
+    const sentences = await assemblyaiService.transcribeWithSmartSegmentation(
       fileRef,
       { keyterms },
       (status, percent) => {
         callbacks.onProgress?.(percent);
         if (status === 'converting') callbacks.onConverting?.();
         else if (status === 'transcribing') callbacks.onTranscribing?.();
+        else if (status === 'segmenting') callbacks.onSegmenting?.();
         else if (status === 'completed') callbacks.onCompleted?.();
       }
     );
