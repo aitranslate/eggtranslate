@@ -1,8 +1,18 @@
 import React from 'react';
+import { ApiEndpointsSettings } from './ApiEndpointsSettings';
 import { KeytermGroupsSettings } from './KeytermGroupsSettings';
-import { useKeytermGroups, useUpdateKeytermGroups, useKeytermsEnabled, useSetKeytermsEnabled } from '@/stores/transcriptionStore';
+import {
+  useKeytermGroups,
+  useUpdateKeytermGroups,
+  useKeytermsEnabled,
+  useSetKeytermsEnabled,
+  useApiKeys,
+  useSetApiKeys
+} from '@/stores/transcriptionStore';
 
 export const TranscriptionSettings: React.FC = () => {
+  const apiKeys = useApiKeys();
+  const setApiKeys = useSetApiKeys();
   const keytermGroups = useKeytermGroups();
   const updateKeytermGroups = useUpdateKeytermGroups();
   const keytermsEnabled = useKeytermsEnabled();
@@ -10,6 +20,10 @@ export const TranscriptionSettings: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <ApiEndpointsSettings
+        keys={apiKeys}
+        onKeysChange={setApiKeys}
+      />
       <KeytermGroupsSettings
         groups={keytermGroups}
         onGroupsChange={updateKeytermGroups}

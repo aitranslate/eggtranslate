@@ -9,10 +9,12 @@ import type { KeytermGroup } from '@/types/transcription';
 import dataManager from '@/services/dataManager';
 
 interface TranscriptionStore {
+  apiKeys: string;
   keytermGroups: KeytermGroup[];
   keytermsEnabled: boolean;
   updateKeytermGroups: (groups: KeytermGroup[]) => Promise<void>;
   setKeytermsEnabled: (enabled: boolean) => void;
+  setApiKeys: (keys: string) => void;
 }
 
 const DEFAULT_GROUPS: KeytermGroup[] = [
@@ -22,6 +24,7 @@ const DEFAULT_GROUPS: KeytermGroup[] = [
 export const useTranscriptionStore = create<TranscriptionStore>()(
   persist(
     (set) => ({
+      apiKeys: '',
       keytermGroups: DEFAULT_GROUPS,
       keytermsEnabled: true,
 
@@ -33,10 +36,15 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
       setKeytermsEnabled: (enabled) => {
         set({ keytermsEnabled: enabled });
       },
+
+      setApiKeys: (keys) => {
+        set({ apiKeys: keys });
+      },
     }),
     {
       name: 'transcription-storage',
       partialize: (state) => ({
+        apiKeys: state.apiKeys,
         keytermGroups: state.keytermGroups,
         keytermsEnabled: state.keytermsEnabled
       })
@@ -48,3 +56,5 @@ export const useKeytermGroups = () => useTranscriptionStore((state) => state.key
 export const useUpdateKeytermGroups = () => useTranscriptionStore((state) => state.updateKeytermGroups);
 export const useKeytermsEnabled = () => useTranscriptionStore((state) => state.keytermsEnabled);
 export const useSetKeytermsEnabled = () => useTranscriptionStore((state) => state.setKeytermsEnabled);
+export const useApiKeys = () => useTranscriptionStore((state) => state.apiKeys);
+export const useSetApiKeys = () => useTranscriptionStore((state) => state.setApiKeys);

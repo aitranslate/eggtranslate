@@ -3,6 +3,7 @@ import { ASSEMBLYAI_CONFIG } from "@/constants/assemblyai";
 import { convertToWav } from "@/utils/convertToWav";
 import type { TranscriptionWord } from "@/types";
 import { toAppError } from "@/utils/errors";
+import { useTranscriptionStore } from "@/stores/transcriptionStore";
 
 /**
  * AssemblyAI 句子格式（带时间戳）
@@ -21,10 +22,22 @@ export class AssemblyAIService {
   private keyIndex = 0;
 
   /**
+   * 获取可用的 API keys 列表
+   */
+  private getKeys(): string[] {
+    const configuredKeys = useTranscriptionStore.getState().apiKeys;
+    if (configuredKeys.trim()) {
+      return configuredKeys.split('|').map(k => k.trim()).filter(k => k);
+    }
+    // 返回默认 keys
+    return [...ASSEMBLYAI_CONFIG.apiKeys];
+  }
+
+  /**
    * 随机获取一个 KEY 并创建客户端
    */
   private createClient(): AssemblyAI {
-    const keys = ASSEMBLYAI_CONFIG.apiKeys;
+    const keys = this.getKeys();
     const apiKey = keys[Math.floor(Math.random() * keys.length)];
     return new AssemblyAI({ apiKey });
   }
@@ -66,7 +79,7 @@ export class AssemblyAIService {
           return transcript;
         case 'error':
           throw new Error(`Transcription failed: ${transcript.error}`);
-        case 'terminated':
+        case 'terminated' as any:
           throw new Error('Transcription was terminated');
       }
 
