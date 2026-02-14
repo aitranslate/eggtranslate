@@ -321,12 +321,15 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       const { keytermGroups, keytermsEnabled } = useTranscriptionStore.getState();
       const allKeyterms = keytermsEnabled ? keytermGroups.flatMap(g => g.keyterms) : [];
 
-      get().updateTranscriptionStatus(fileId, 'uploading');
+      get().updateTranscriptionStatus(fileId, 'converting');
 
       const result = await runTranscriptionPipeline(
         fileRef,
         allKeyterms,
         {
+          onConverting: () => {
+            get().updateTranscriptionStatus(fileId, 'converting');
+          },
           onUploading: () => {
             get().updateTranscriptionStatus(fileId, 'uploading');
           },

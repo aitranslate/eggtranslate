@@ -41,7 +41,7 @@ export const TranslationProgress: React.FC<TranslationProgressProps> = ({
   isTranslating,
   translationStats = { total: 0, translated: 0, untranslated: 0, percentage: 0, tokens: 0 }
 }) => {
-  const isTranscribing = file.transcriptionStatus === 'uploading' || file.transcriptionStatus === 'transcribing';
+  const isTranscribing = file.transcriptionStatus === 'converting' || file.transcriptionStatus === 'transcribing';
 
   const progressInfo = useMemo(() => {
     if (isTranslating) {

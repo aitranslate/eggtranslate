@@ -14,6 +14,7 @@ export type FileType = 'srt' | 'audio' | 'video';
 // 转录状态（极简流程）
 export type TranscriptionStatus =
   | 'idle'          // 未开始
+  | 'converting'    // 转码中
   | 'uploading'     // 上传音频中
   | 'transcribing'  // API 转录中
   | 'completed'     // 已完成

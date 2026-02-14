@@ -12,6 +12,7 @@ import { toAppError } from '@/utils/errors';
  * 进度更新回调
  */
 export interface ProgressCallbacks {
+  onConverting?: () => void;
   onUploading?: () => void;
   onTranscribing?: () => void;
   onProgress?: (percent: number) => void;
@@ -41,8 +42,8 @@ export const runTranscriptionPipeline = async (
       { keyterms },
       (status, percent) => {
         callbacks.onProgress?.(percent);
-        if (status === 'uploading') callbacks.onUploading?.();
-        else if (status === 'processing') callbacks.onTranscribing?.();
+        if (status === 'converting') callbacks.onConverting?.();
+        else if (status === 'transcribing') callbacks.onTranscribing?.();
         else if (status === 'completed') callbacks.onCompleted?.();
       }
     );

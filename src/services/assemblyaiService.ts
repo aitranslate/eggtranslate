@@ -1,9 +1,9 @@
 import { AssemblyAI } from "assemblyai";
 import { ASSEMBLYAI_CONFIG } from "@/constants/assemblyai";
-import { convertToWav } from "@/utils/convertToWav";
 import type { TranscriptionWord } from "@/types";
 import { toAppError } from "@/utils/errors";
 import { useTranscriptionStore } from "@/stores/transcriptionStore";
+import { convertToMP3 } from "@/utils/convertToMP3";
 
 /**
  * AssemblyAI 句子格式（带时间戳）
@@ -101,13 +101,18 @@ export class AssemblyAIService {
     try {
       const client = this.createClient();
 
-      // 1. 转换为 WAV
-      const wavBlob = await convertToWav(mediaFile);
-      const wavFile = new File([wavBlob], 'audio.wav', { type: 'audio/wav' });
+      // 尝试转换为 MP3 以减小文件大小，失败则使用原文件
+      let audioFile: File;
+      try {
+        const mp3Blob = await convertToMP3(mediaFile);
+        audioFile = new File([mp3Blob], 'audio.mp3', { type: 'audio/mpeg' });
+      } catch (convertError) {
+        console.warn('[AssemblyAI] MP3 转码失败，使用原文件上传:', convertError);
+        audioFile = mediaFile;
+      }
 
-      // 2. 调用 AssemblyAI
       const transcript = await client.transcripts.transcribe({
-        audio: wavFile,
+        audio: audioFile,
         speech_models: ASSEMBLYAI_CONFIG.speechModels,
         language_detection: true,
         keyterms_prompt: options.keyterms || ASSEMBLYAI_CONFIG.defaultKeyterms
@@ -148,15 +153,20 @@ export class AssemblyAIService {
     try {
       const client = this.createClient();
 
-      // 1. 转换为 WAV
-      onProgress?.('uploading', 5);
-      const wavBlob = await convertToWav(mediaFile);
-      const wavFile = new File([wavBlob], 'audio.wav', { type: 'audio/wav' });
+      // 尝试转换为 MP3 以减小文件大小，失败则使用原文件
+      onProgress?.('converting', 5);
+      let audioFile: File;
+      try {
+        const mp3Blob = await convertToMP3(mediaFile);
+        audioFile = new File([mp3Blob], 'audio.mp3', { type: 'audio/mpeg' });
+      } catch (convertError) {
+        console.warn('[AssemblyAI] MP3 转码失败，使用原文件上传:', convertError);
+        audioFile = mediaFile;
+      }
 
-      // 2. 上传并启动转录
-      onProgress?.('uploading', 10);
+      onProgress?.('transcribing', 10);
       const transcript = await client.transcripts.transcribe({
-        audio: wavFile,
+        audio: audioFile,
         speech_models: ASSEMBLYAI_CONFIG.speechModels,
         language_detection: true,
         keyterms_prompt: options.keyterms || ASSEMBLYAI_CONFIG.defaultKeyterms
@@ -164,7 +174,7 @@ export class AssemblyAIService {
 
       // 3. 轮询状态直到完成
       while (transcript.status === 'queued' || transcript.status === 'processing') {
-        onProgress?.(transcript.status, transcript.status === 'processing' ? 50 : 10);
+        onProgress?.('transcribing', transcript.status === 'processing' ? 50 : 10);
         await new Promise(resolve => setTimeout(resolve, 1000));
         // 重新获取状态
         const updated = await client.transcripts.get(transcript.id);

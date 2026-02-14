@@ -33,6 +33,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   currentTranslatingFileId
 }) => {
   const isTranscribing = useMemo(() =>
+    file.transcriptionStatus === 'converting' ||
     file.transcriptionStatus === 'transcribing' ||
     file.transcriptionStatus === 'uploading',
     [file.transcriptionStatus]
@@ -101,20 +102,24 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
               ? 'bg-orange-100 text-orange-700'
               : 'bg-gray-100 text-gray-600'
           ) : (
-            file.transcriptionStatus === 'completed' ? (
-              translationStats.percentage === 100
-                ? 'bg-green-100 text-green-700'
-                : isTranslating && translationStats.percentage > 0
+              file.transcriptionStatus === 'converting'
+                ? 'bg-yellow-100 text-yellow-700'
+                : file.transcriptionStatus === 'transcribing'
                 ? 'bg-blue-100 text-blue-700'
-                : translationStats.percentage > 0
-                ? 'bg-orange-100 text-orange-700'
-                : 'bg-green-100 text-green-700'
-            ) : (
-              file.transcriptionStatus === 'failed'
-                ? 'bg-red-100 text-red-700'
-                : 'bg-gray-100 text-gray-600'
+                : file.transcriptionStatus === 'completed' ? (
+                  translationStats.percentage === 100
+                    ? 'bg-green-100 text-green-700'
+                    : isTranslating && translationStats.percentage > 0
+                    ? 'bg-blue-100 text-blue-700'
+                    : translationStats.percentage > 0
+                    ? 'bg-orange-100 text-orange-700'
+                    : 'bg-green-100 text-green-700'
+                ) : (
+                  file.transcriptionStatus === 'failed'
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-gray-100 text-gray-600'
+                )
             )
-          )
         }`}>
           {file.fileType === 'srt' ? (
             translationStats.percentage === 100 ? '已完成' :
@@ -126,7 +131,8 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
               isTranslating && translationStats.percentage > 0 ? '翻译中' :
               translationStats.percentage > 0 ? '翻译失败' : '转录完成'
             ) :
-            file.transcriptionStatus === 'transcribing' || file.transcriptionStatus === 'uploading' ? '转录中' :
+            file.transcriptionStatus === 'converting' ? '转码中' :
+            file.transcriptionStatus === 'transcribing' ? '转录中' :
             file.transcriptionStatus === 'failed' ? '转录失败' :
             '等待转录'
           )}
