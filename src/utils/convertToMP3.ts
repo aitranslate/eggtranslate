@@ -24,7 +24,7 @@ export async function convertToMP3(
     const downsampledData = downsampleBuffer(rawData, sourceSampleRate, targetSampleRate);
 
     // 6. 初始化编码器 (单声道, 采样率, 比特率)
-    const mp3encoder = new Mp3Encoder(1, targetSampleRate, 64);
+    const mp3encoder = new Mp3Encoder(1, targetSampleRate, 128);
     
     const bufferSize = 1152;
     const mp3Data: Uint8Array[] = [];
