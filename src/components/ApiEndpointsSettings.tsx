@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Key, Plus } from 'lucide-react';
+import { Key, Plus, HelpCircle } from 'lucide-react';
 
 interface ApiKeysSettingsProps {
   keys: string;
@@ -30,7 +30,18 @@ export const ApiEndpointsSettings: React.FC<ApiKeysSettingsProps> = ({
   return (
     <div className="space-y-3">
       <div className="flex justify-between items-center">
-        <h3 className="apple-heading-small">API KEY</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="apple-heading-small">API KEY</h3>
+          <a
+            href="https://www.assemblyai.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="没有?点击注册！"
+            className="cursor-help text-gray-400 hover:text-blue-500 transition-colors"
+          >
+            <HelpCircle className="h-4 w-4" />
+          </a>
+        </div>
         <div className="text-xs text-gray-500">
           {keyList.length > 0 ? `已配置 ${keyList.length} 个` : '请添加 API KEY'}
         </div>
