@@ -59,14 +59,23 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
   };
 
   const addKeyterm = () => {
-    if (activeGroup && newKeyterm.trim() && !activeGroup.keyterms.includes(newKeyterm.trim())) {
-      onGroupsChange(groups.map(g =>
-        g.id === activeGroupId
-          ? { ...g, keyterms: [...g.keyterms, newKeyterm.trim()] }
-          : g
-      ));
-      setNewKeyterm('');
-    }
+    if (!activeGroup || !newKeyterm.trim()) return;
+
+    // 按逗号分割，清理空格和空字符串
+    const newKeyterms = newKeyterm
+      .split(',')
+      .map(term => term.trim())
+      .filter(term => term && !activeGroup.keyterms.includes(term));
+
+    if (newKeyterms.length === 0) return;
+
+    // 批量添加新热词
+    onGroupsChange(groups.map(g =>
+      g.id === activeGroupId
+        ? { ...g, keyterms: [...g.keyterms, ...newKeyterms] }
+        : g
+    ));
+    setNewKeyterm('');
   };
 
   const removeKeyterm = (term: string) => {
@@ -213,7 +222,7 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
                 value={newKeyterm}
                 onChange={(e) => setNewKeyterm(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && addKeyterm()}
-                placeholder="添加热词..."
+                placeholder="添加热词，多个用逗号分隔"
                 className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
               />
               <button
@@ -236,6 +245,7 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
             <p className="font-medium mb-1">热词提示说明</p>
             <p className="text-blue-600">
               按领域分组管理热词，提高专业术语识别准确率。所有分组的词汇将一起发送给 ASR 服务。
+              支持单个添加或逗号分隔批量添加（如：apple, banana, orange）。
             </p>
           </div>
         </div>
