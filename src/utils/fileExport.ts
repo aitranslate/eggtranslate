@@ -60,3 +60,25 @@ export const downloadJsonFile = (data: unknown, filename: string): void => {
   const content = JSON.stringify(data, null, 2);
   downloadTextFile(content, filename, 'application/json;charset=utf-8');
 };
+
+/**
+ * 导出 ZIP 文件
+ * @param blob ZIP 文件的 Blob 数据
+ * @param filename 文件名（包含 .zip 扩展名）
+ */
+export const downloadZipFile = (blob: Blob, filename: string): void => {
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+
+    a.href = url;
+    a.download = filename;
+    a.click();
+
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    const appError = toAppError(error, 'ZIP文件导出失败');
+    console.error('[fileExport]', appError.message, appError);
+    throw appError;
+  }
+};

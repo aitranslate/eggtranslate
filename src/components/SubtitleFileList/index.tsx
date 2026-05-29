@@ -2,13 +2,12 @@ import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { downloadSubtitleFile } from '@/utils/fileExport';
-import { exportTaskSRT, exportTaskTXT, exportTaskBilingual } from '@/services/SubtitleExporter';
+import { downloadZipFile } from '@/utils/fileExport';
+import { exportTaskZip, getBaseName } from '@/services/SubtitleExporter';
 import { useSubtitleStore } from '@/stores/subtitleStore';
-import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useTerms } from '@/contexts/TermsContext';
 import { useHistory } from '@/contexts/HistoryContext';
-import { SubtitleFile, SubtitleFileMetadata } from '@/types';
+import { SubtitleFileMetadata } from '@/types';
 import dataManager from '@/services/dataManager';
 import { API_CONSTANTS } from '@/constants/api';
 import { SubtitleFileItem } from './components/SubtitleFileItem';
@@ -47,6 +46,65 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   const handleTranscribe = useCallback(async (fileId: string) => {
     await startTranscription(fileId);
   }, [startTranscription]);
+
+  const handleTranscribeAndTranslate = useCallback(async (file: SubtitleFileMetadata) => {
+    setCurrentTranslatingFileId(file.id);
+
+    try {
+      if (file.fileType === 'audio-video' && file.transcriptionStatus !== 'completed') {
+        await startTranscription(file.id);
+      }
+
+      await startTranslationFromStore(file.id);
+
+      const batchTasks = dataManager.getBatchTasks();
+      const completedTask = batchTasks.tasks.find(t => t.taskId === file.taskId);
+
+      if (!completedTask) {
+        console.log('[SubtitleFileList] 文件已删除，跳过完成提示');
+        return;
+      }
+
+      const finalTokens = completedTask.translation_progress?.tokens || 0;
+      const actualCompleted = completedTask.subtitle_entries?.filter((entry) =>
+        entry.translatedText && entry.translatedText.trim() !== ''
+      ).length || 0;
+
+      if (actualCompleted > 0) {
+        await addHistoryEntry({
+          taskId: file.taskId,
+          filename: file.name,
+          completedCount: actualCompleted,
+          totalTokens: finalTokens,
+          current_translation_task: {
+            taskId: completedTask.taskId,
+            subtitle_entries: completedTask.subtitle_entries,
+            subtitle_filename: completedTask.subtitle_filename,
+            translation_progress: completedTask.translation_progress
+          }
+        });
+      }
+
+      setTimeout(async () => {
+        try {
+          await dataManager.forcePersistAllData();
+        } catch (error) {
+          handleError(error, {
+            context: { operation: '转译完成后持久化数据' },
+            showToast: false
+          });
+        }
+      }, 200);
+
+      toast.success(`完成转译文件: ${file.name}`);
+    } catch (error) {
+      handleError(error, {
+        context: { operation: '转译', fileName: file.name }
+      });
+    } finally {
+      setCurrentTranslatingFileId(null);
+    }
+  }, [startTranscription, startTranslationFromStore, addHistoryEntry, handleError]);
 
   const handleSettingsClose = useCallback(() => {
     setIsSettingsOpen(false);
@@ -110,32 +168,36 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   const handleStartAllTranslation = useCallback(async () => {
     if (files.length === 0 || isTranslatingGloballyState) return;
 
-    const filesToTranslate = files.filter(file => {
+    const filesToProcess = files.filter(file => {
       const progress = getTranslationProgress(file.id);
       return progress.completed < progress.total;
     });
 
-    if (filesToTranslate.length === 0) {
+    if (filesToProcess.length === 0) {
       toast.success('所有文件都已翻译完成');
       return;
     }
 
     setIsTranslatingGlobally(true);
-    toast.success(`开始翻译 ${filesToTranslate.length} 个文件`);
+    toast.success(`开始处理 ${filesToProcess.length} 个文件`);
 
-    for (const file of filesToTranslate) {
+    for (const file of filesToProcess) {
       try {
-        await handleStartTranslation(file);
+        if (file.fileType === 'audio-video' && file.transcriptionStatus !== 'completed') {
+          await handleTranscribeAndTranslate(file);
+        } else {
+          await handleStartTranslation(file);
+        }
         await new Promise(resolve => setTimeout(resolve, API_CONSTANTS.BATCH_TASK_GAP_MS));
       } catch (error) {
         handleError(error, {
-          context: { operation: '批量翻译', fileName: file.name }
+          context: { operation: '批量处理', fileName: file.name }
         });
       }
     }
 
     setIsTranslatingGlobally(false);
-  }, [files, isTranslatingGloballyState, getTranslationProgress, handleStartTranslation, handleError]);
+  }, [files, isTranslatingGloballyState, getTranslationProgress, handleTranscribeAndTranslate, handleStartTranslation, handleError]);
 
   const handleClearAll = useCallback(async () => {
     if (files.length === 0) return;
@@ -174,28 +236,18 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     }
   }, [fileToDelete, removeFile, handleError]);
 
-  const handleExport = useCallback((file: SubtitleFileMetadata, format: 'srt' | 'txt' | 'bilingual') => {
-    let content = '';
-    let extension: 'srt' | 'txt' = 'txt';
-
-    switch (format) {
-      case 'srt':
-        content = exportTaskSRT(file.taskId, true);
-        extension = 'srt';
-        break;
-      case 'txt':
-        content = exportTaskTXT(file.taskId, true);
-        extension = 'txt';
-        break;
-      case 'bilingual':
-        content = exportTaskBilingual(file.taskId);
-        extension = 'srt';
-        break;
+  const handleExport = useCallback(async (file: SubtitleFileMetadata) => {
+    try {
+      const zipBlob = await exportTaskZip(file.taskId);
+      const zipName = `${getBaseName(file.name)}.zip`;
+      downloadZipFile(zipBlob, zipName);
+      toast.success('导出成功');
+    } catch (error) {
+      handleError(error, {
+        context: { operation: '导出', fileName: file.name }
+      });
     }
-
-    downloadSubtitleFile(content, file.name, extension);
-    toast.success('导出成功');
-  }, []);
+  }, [handleError]);
 
   if (files.length === 0) {
     return null;
@@ -245,6 +297,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                   onStartTranslation={handleStartTranslation}
                   onExport={handleExport}
                   onDelete={handleDeleteFile}
+                  onTranscribeAndTranslate={handleTranscribeAndTranslate}
                   onTranscribe={handleTranscribe}
                   isTranslatingGlobally={isTranslatingGloballyState}
                   currentTranslatingFileId={currentTranslatingFileId}

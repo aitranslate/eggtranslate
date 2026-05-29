@@ -8,12 +8,11 @@ import {
   FileText,
   BarChart3,
   Search,
-  RefreshCw,
   Download
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { exportTaskSRT, exportTaskTXT, exportTaskBilingual } from '@/services/SubtitleExporter';
-import { downloadSubtitleFile } from '@/utils/fileExport';
+import { exportTaskZip, getBaseName } from '@/services/SubtitleExporter';
+import { downloadZipFile } from '@/utils/fileExport';
 import { TranslationHistoryEntry } from '@/types';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -34,7 +33,6 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
   const { handleError } = useErrorHandler();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [exportingTaskId, setExportingTaskId] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
@@ -96,41 +94,16 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
     return new Date(timestamp).toLocaleString('zh-CN');
   }, []);
 
-  const onExport = useCallback(async (entry: TranslationHistoryEntry, format: 'srt' | 'txt' | 'bilingual') => {
+  const onExport = useCallback(async (entry: TranslationHistoryEntry) => {
     try {
-      setExportingTaskId(entry.taskId);
-
-      let content = '';
-      let extension: 'srt' | 'txt' = 'txt';
-
-      switch (format) {
-        case 'srt':
-          content = exportTaskSRT(entry.taskId, true);
-          extension = 'srt';
-          break;
-        case 'txt':
-          content = exportTaskTXT(entry.taskId, true);
-          extension = 'txt';
-          break;
-        case 'bilingual':
-          content = exportTaskBilingual(entry.taskId);
-          extension = 'srt';
-          break;
-      }
-
-      if (!content) {
-        toast.error('该历史记录没有可导出的字幕数据');
-        return;
-      }
-
-      downloadSubtitleFile(content, entry.filename, extension);
+      const zipBlob = await exportTaskZip(entry.taskId);
+      const zipName = `${getBaseName(entry.filename)}.zip`;
+      downloadZipFile(zipBlob, zipName);
       toast.success('导出成功');
     } catch (error) {
       handleError(error, {
         context: { operation: '导出历史记录', fileName: entry.filename }
       });
-    } finally {
-      setExportingTaskId(null);
     }
   }, [handleError]);
 
@@ -258,62 +231,14 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
                     {/* 操作按钮 */}
                     <div className="flex items-center gap-2">
                       {/* 导出按钮 */}
-                      <div className="relative">
-                        <button
-                          onClick={() => setExportingTaskId(exportingTaskId === entry.taskId ? null : entry.taskId)}
-                          disabled={!entry.current_translation_task?.subtitle_entries?.length}
-                          className="apple-button apple-button-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Download className="h-3 w-3" />
-                          <span>导出</span>
-                        </button>
-
-                        {/* 导出菜单 */}
-                        {exportingTaskId === entry.taskId && (
-                          <>
-                            <div className="absolute bottom-full mb-2 right-0 z-50">
-                              <div className="bg-white rounded-xl shadow-xl border border-gray-200 p-1 min-w-[160px]">
-                                <button
-                                  onClick={() => {
-                                    onExport(entry, 'srt');
-                                    setExportingTaskId(null);
-                                  }}
-                                  className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-3"
-                                >
-                                  <span>📄</span>
-                                  <span>SRT 格式</span>
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    onExport(entry, 'txt');
-                                    setExportingTaskId(null);
-                                  }}
-                                  className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-3"
-                                >
-                                  <span>📝</span>
-                                  <span>TXT 格式</span>
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    onExport(entry, 'bilingual');
-                                    setExportingTaskId(null);
-                                  }}
-                                  className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-3"
-                                >
-                                  <span>🔄</span>
-                                  <span>双语对照</span>
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* 点击外部区域关闭菜单的遮罩层 */}
-                            <div
-                              className="fixed inset-0 z-40"
-                              onClick={() => setExportingTaskId(null)}
-                            />
-                          </>
-                        )}
-                      </div>
+                      <button
+                        onClick={() => onExport(entry)}
+                        disabled={!entry.current_translation_task?.subtitle_entries?.length}
+                        className="apple-button apple-button-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Download className="h-3 w-3" />
+                        <span>导出</span>
+                      </button>
 
                       {/* 删除按钮 */}
                       <button

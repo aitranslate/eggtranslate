@@ -2,7 +2,6 @@ import React from 'react';
 import { TranslationConfig } from '@/types';
 import { LanguageSelector } from './LanguageSelector';
 import { ApiTestForm } from './ApiTestForm';
-import { HelpCircle } from 'lucide-react';
 
 interface TranslationSettingsProps {
   config: TranslationConfig;
@@ -21,15 +20,6 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <h3 className="apple-heading-small">API 配置</h3>
-          <a
-            href="https://longcat.chat/platform"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="没有?点击注册！"
-            className="cursor-help text-gray-400 hover:text-blue-500 transition-colors"
-          >
-            <HelpCircle className="h-4 w-4" />
-          </a>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

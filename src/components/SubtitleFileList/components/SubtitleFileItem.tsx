@@ -14,8 +14,9 @@ interface SubtitleFileItemProps {
   index: number;
   onEdit: (file: SubtitleFileMetadata) => void;
   onStartTranslation: (file: SubtitleFileMetadata) => Promise<void>;
-  onExport: (file: SubtitleFileMetadata, format: 'srt' | 'txt' | 'bilingual') => void;
+  onExport: (file: SubtitleFileMetadata) => void;
   onDelete: (file: SubtitleFileMetadata) => Promise<void>;
+  onTranscribeAndTranslate: (file: SubtitleFileMetadata) => Promise<void>;
   onTranscribe: (fileId: string) => Promise<void>;
   isTranslatingGlobally: boolean;
   currentTranslatingFileId: string | null;
@@ -28,6 +29,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   onStartTranslation,
   onExport,
   onDelete,
+  onTranscribeAndTranslate,
   onTranscribe,
   isTranslatingGlobally,
   currentTranslatingFileId
@@ -60,8 +62,8 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
     };
   }, [file.entryCount, file.translatedCount, file.tokensUsed]);
 
-  const handleExport = useCallback((format: 'srt' | 'txt' | 'bilingual') => {
-    onExport(file, format);
+  const handleExport = useCallback(() => {
+    onExport(file);
   }, [file, onExport]);
 
   const handleDelete = useCallback(() => {
@@ -152,6 +154,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
             translationStats={translationStats}
             isTranslatingGlobally={isTranslatingGlobally}
             currentTranslatingFileId={currentTranslatingFileId}
+            onTranscribeAndTranslate={() => onTranscribeAndTranslate(file)}
             onTranscribe={() => onTranscribe(file.id)}
             onStartTranslation={() => onStartTranslation(file)}
             onEdit={() => onEdit(file)}

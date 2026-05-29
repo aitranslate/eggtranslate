@@ -71,3 +71,16 @@ export const toBilingual = (entries: SubtitleEntry[]): string => {
 
   return parser.toSrt(bilingualEntries);
 };
+
+export const toSrcTrans = (entries: SubtitleEntry[]): string => {
+  const bilingualEntries: SRTParserInput[] = entries.map(entry => ({
+    id: entry.id.toString(),
+    startTime: entry.startTime,
+    endTime: entry.endTime,
+    text: `${entry.text}\n${entry.translatedText || ''}`,
+    startSeconds: 0,
+    endSeconds: 0
+  }));
+
+  return parser.toSrt(bilingualEntries);
+};

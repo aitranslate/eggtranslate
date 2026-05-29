@@ -13,9 +13,7 @@ export const guideSections: GuideSection[] = [
     content: `1️⃣ 配置翻译服务（设置 → 翻译设置）
 2️⃣ 上传音视频/SRT文件
 3️⃣ 点击"开始翻译"
-4️⃣ 导出结果
-
-推荐 LongCat（免费）：https://longcat.chat/platform`,
+4️⃣ 导出结果`,
   },
   {
     id: 'transcribe',
