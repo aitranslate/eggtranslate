@@ -16,8 +16,6 @@ import {
  * 封装 API 调用、KEY 轮询、错误处理
  */
 export class AssemblyAIService {
-  private keyIndex = 0;
-
   /**
    * 获取可用的 API keys 列表
    */
@@ -26,8 +24,7 @@ export class AssemblyAIService {
     if (configuredKeys.trim()) {
       return configuredKeys.split('|').map(k => k.trim()).filter(k => k);
     }
-    // 返回默认 keys
-    return [...ASSEMBLYAI_CONFIG.apiKeys];
+    return [];
   }
 
   /**
@@ -35,6 +32,9 @@ export class AssemblyAIService {
    */
   private createClient(): AssemblyAI {
     const keys = this.getKeys();
+    if (keys.length === 0) {
+      throw new Error('请先在设置中配置 AssemblyAI API Key');
+    }
     const apiKey = keys[Math.floor(Math.random() * keys.length)];
     return new AssemblyAI({ apiKey });
   }

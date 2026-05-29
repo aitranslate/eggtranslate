@@ -316,6 +316,14 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         return;
       }
 
+      // ✅ 预检 API Key
+      const { apiKeys } = useTranscriptionStore.getState();
+      if (!apiKeys.trim()) {
+        toast.error('请先在设置中配置 AssemblyAI API Key');
+        get().updateTranscriptionStatus(fileId, 'failed');
+        return;
+      }
+
       // ✅ 获取热词（所有分组的词汇合并）
       const { keytermGroups, keytermsEnabled } = useTranscriptionStore.getState();
       const allKeyterms = keytermsEnabled ? keytermGroups.flatMap(g => g.keyterms) : [];
@@ -341,8 +349,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
           onCompleted: () => {
             // 状态更新将在数据保存和统计更新后进行
           },
-          onError: (error) => {
-            toast.error(`转录失败: ${error}`);
+          onError: (_error) => {
             get().updateTranscriptionStatus(fileId, 'failed');
           }
         }

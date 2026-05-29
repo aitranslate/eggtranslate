@@ -53,6 +53,12 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     try {
       if (file.fileType === 'audio-video' && file.transcriptionStatus !== 'completed') {
         await startTranscription(file.id);
+
+        // 转录失败则中断，不继续翻译
+        const updatedFile = useSubtitleStore.getState().getFile(file.id);
+        if (!updatedFile || updatedFile.transcriptionStatus !== 'completed') {
+          return;
+        }
       }
 
       await startTranslationFromStore(file.id);

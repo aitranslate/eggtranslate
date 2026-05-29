@@ -150,9 +150,9 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
           e.stopPropagation();
           onExport();
         }}
-        disabled={(file.entryCount ?? 0) === 0 || isTranslating}
+        disabled={(file.entryCount ?? 0) === 0 || isBusy}
         className={`flex items-center justify-center w-10 h-10 rounded-full transition-all duration-200 ${
-          (file.entryCount ?? 0) === 0 || isTranslating
+          (file.entryCount ?? 0) === 0 || isBusy
             ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
             : 'bg-gray-100 hover:bg-gray-200 text-gray-700 active:scale-95'
         }`}
