@@ -21,7 +21,7 @@ export const canRetranscribe = (file: SubtitleFile | SubtitleFileMetadata): bool
   }
 
   // 音视频文件
-  if (file.fileType === 'audio-video') {
+  if (file.fileType === 'audio' || file.fileType === 'video') {
     // 只有未完成或失败时才允许重新转录
     return file.transcriptionStatus !== 'completed';
   }

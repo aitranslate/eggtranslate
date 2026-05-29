@@ -1,5 +1,5 @@
 import localforage from 'localforage';
-import { SubtitleEntry, SingleTask, BatchTasks, TranslationStatus } from '@/types';
+import { SubtitleEntry, SingleTask, BatchTasks, TranslationStatus, FileType } from '@/types';
 import { toAppError } from '@/utils/errors';
 
 /**
@@ -39,7 +39,7 @@ class TaskManager {
     index: number,
     generateTaskId: () => string,
     options?: {
-      fileType?: 'srt' | 'audio-video';
+      fileType?: FileType;
       fileSize?: number;
       duration?: number;
     }

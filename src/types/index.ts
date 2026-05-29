@@ -1,6 +1,9 @@
 // 翻译状态类型
 export type TranslationStatus = 'pending' | 'completed';
 
+// 文件类型（从 transcription.ts 导出）
+export type { FileType } from './transcription';
+
 // 字幕条目类型
 export interface SubtitleEntry {
   id: number;
@@ -73,7 +76,7 @@ export interface SingleTask {
   size?: number;  // Legacy: File size in bytes - use fileSize in new code
 
   // NEW: Audio-video transcription cache fields
-  fileType?: 'srt' | 'audio-video';   // Unified file type
+  fileType?: FileType;   // Unified file type
   fileSize?: number;                  // File size in bytes
   duration?: number;                  // Audio duration in seconds
 }

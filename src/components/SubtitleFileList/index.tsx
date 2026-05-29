@@ -51,7 +51,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     setCurrentTranslatingFileId(file.id);
 
     try {
-      if (file.fileType === 'audio-video' && file.transcriptionStatus !== 'completed') {
+      if ((file.fileType === 'audio' || file.fileType === 'video') && file.transcriptionStatus !== 'completed') {
         await startTranscription(file.id);
 
         // 转录失败则中断，不继续翻译
@@ -189,7 +189,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
 
     for (const file of filesToProcess) {
       try {
-        if (file.fileType === 'audio-video' && file.transcriptionStatus !== 'completed') {
+        if ((file.fileType === 'audio' || file.fileType === 'video') && file.transcriptionStatus !== 'completed') {
           await handleTranscribeAndTranslate(file);
         } else {
           await handleStartTranslation(file);

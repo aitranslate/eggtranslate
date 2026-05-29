@@ -88,7 +88,10 @@ export const MainApp: React.FC = () => {
       {/* Apple 风格导航栏 */}
       <nav className="apple-navbar">
         <div className="apple-navbar-content">
-          <h1 className="apple-heading-small">蛋蛋字幕翻译</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="apple-heading-small">蛋蛋字幕翻译</h1>
+            <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 rounded-full">v1.0.0</span>
+          </div>
 
           <div className="flex items-center gap-6">
             <button

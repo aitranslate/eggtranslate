@@ -59,7 +59,7 @@ const DEFAULT_CONFIG: TranslationConfig = {
   apiKey: '',
   model: 'gpt-4o-mini',
   sourceLanguage: 'en',
-  targetLanguage: 'zh',
+  targetLanguage: '简体中文',
   batchSize: 20,
   threadCount: 4,
   contextBefore: 5,

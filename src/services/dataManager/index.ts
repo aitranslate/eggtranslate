@@ -7,6 +7,7 @@ import {
   CurrentTranslationTask,
   SingleTask,
   BatchTasks,
+  FileType,
 } from '@/types';
 import TaskManager from './modules/TaskManager';
 import TermsManager from './modules/TermsManager';
@@ -143,7 +144,7 @@ class DataManager {
     entries: SubtitleEntry[],
     index: number,
     options?: {
-      fileType?: 'srt' | 'audio-video';
+      fileType?: FileType;
       fileSize?: number;
       duration?: number;
     }

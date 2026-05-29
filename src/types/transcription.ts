@@ -75,7 +75,7 @@ export interface SubtitleFileMetadata {
   id: string;
   taskId: string;                      // 链接到 DataManager 的 taskId
   name: string;
-  fileType: 'srt' | 'audio-video';
+  fileType: FileType;
   fileSize: number;
   lastModified: number;
   duration?: number;
@@ -106,7 +106,7 @@ export interface SubtitleFile {
   currentTaskId: string;
   taskId?: string;                    // 兼容 SubtitleFileMetadata
   type?: FileType;                    // Legacy: 'srt' | 'audio' | 'video' - TODO: migrate to fileType
-  fileType?: 'srt' | 'audio-video';   // Unified type: use this field in new code
+  fileType?: FileType;   // Unified type: use this field in new code
   fileSize?: number;                  // Unified size (bytes): use this field in new code
   fileRef?: File;                     // 原始文件引用（用于音视频转录）
   duration?: number;                  // 音视频时长（秒）

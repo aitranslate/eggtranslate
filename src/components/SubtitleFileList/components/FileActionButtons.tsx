@@ -93,7 +93,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
           isBusy
             ? '处理中...'
             : !canRetranscribe(file)
-            ? file.transcriptionStatus === 'completed' && file.fileType === 'audio-video'
+            ? file.transcriptionStatus === 'completed' && (file.fileType === 'audio' || file.fileType === 'video')
               ? '音频数据未缓存，需重新上传'
               : 'SRT文件无需转录'
             : '转录'

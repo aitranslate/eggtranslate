@@ -59,7 +59,7 @@ export async function loadFromFile(
     // ✅ 音视频文件：也立即创建任务（空条目），转录完成后更新
     const index = options.existingFilesCount;
     const taskId = await dataManager.createNewTask(file.name, [], index, {
-      fileType: 'audio-video',
+      fileType: fileType,
       fileSize: file.size
     });
     const fileId = generateStableFileId(taskId);
@@ -69,7 +69,7 @@ export async function loadFromFile(
       id: fileId,
       taskId,
       name: file.name,
-      fileType: 'audio-video',
+      fileType: fileType,
       fileSize: file.size,
       lastModified: file.lastModified,
       entryCount: 0,
