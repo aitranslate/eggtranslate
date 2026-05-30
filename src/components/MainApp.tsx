@@ -17,7 +17,7 @@ import { GuideModal } from './GuideModal';
 import { useFiles } from '@/stores/subtitleStore';
 import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
 import { useHistory } from '@/contexts/HistoryContext';
-import { SubtitleFile, SubtitleFileMetadata } from '@/types';
+import { SubtitleFileMetadata } from '@/types';
 import { useTerms } from '@/contexts/TermsContext';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 

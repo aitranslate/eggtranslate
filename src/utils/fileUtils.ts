@@ -2,7 +2,7 @@
  * 文件工具函数
  */
 
-import type { SubtitleFile, SubtitleFileMetadata } from '@/types';
+import type { SubtitleFileMetadata } from '@/types';
 
 /**
  * 判断文件是否可以重新转录
@@ -14,7 +14,7 @@ import type { SubtitleFile, SubtitleFileMetadata } from '@/types';
  * @param file - 字幕文件对象
  * @returns 是否可以重新转录
  */
-export const canRetranscribe = (file: SubtitleFile | SubtitleFileMetadata): boolean => {
+export const canRetranscribe = (file: SubtitleFileMetadata): boolean => {
   // SRT 文件：不需要转录
   if (file.fileType === 'srt') {
     return false;
@@ -22,12 +22,7 @@ export const canRetranscribe = (file: SubtitleFile | SubtitleFileMetadata): bool
 
   // 音视频文件
   if (file.fileType === 'audio' || file.fileType === 'video') {
-    // SubtitleFileMetadata 使用 phases
-    if ('phases' in file && file.phases) {
-      return file.phases.transcribing.status !== 'completed' && file.phases.transcribing.status !== 'active';
-    }
-    // Legacy SubtitleFile 使用 transcriptionStatus
-    return file.transcriptionStatus !== 'completed';
+    return file.phases.transcribing.status !== 'completed' && file.phases.transcribing.status !== 'active';
   }
 
   // 默认：允许转录

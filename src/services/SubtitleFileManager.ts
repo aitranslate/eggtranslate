@@ -4,15 +4,11 @@
  */
 
 import { SubtitleEntry, FileType, SubtitleFileMetadata, SingleTask, FilePhases, PhaseProgress, WorkflowType } from '@/types';
-import type { SubtitleFile } from '@/types/transcription';
 import { parseSRT } from '@/utils/srtParser';
 import { detectFileType } from '@/utils/fileFormat';
 import localforage from 'localforage';
 import { generateTaskId, generateStableFileId } from '@/utils/taskIdGenerator';
 import type { BatchTasks } from '@/types';
-
-// 重新导出类型，保持向后兼容
-export type { SubtitleFile };
 
 export interface LoadFileOptions {
   existingFilesCount: number;
@@ -122,8 +118,8 @@ export async function loadFromFile(
 /**
  * 删除文件
  */
-export async function removeFile(file: SubtitleFileMetadata | SubtitleFile): Promise<void> {
-  const taskId = 'taskId' in file ? file.taskId : file.currentTaskId;
+export async function removeFile(file: SubtitleFileMetadata): Promise<void> {
+  const taskId = file.taskId;
   const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
   if (batchTasks) {
     batchTasks.tasks = batchTasks.tasks.filter(t => t.taskId !== taskId);
@@ -141,37 +137,6 @@ export async function restoreFiles(): Promise<SubtitleFileMetadata[]> {
   }
 
   return batchTasks.tasks.map(task => convertTaskToMetadata(task));
-}
-
-/**
- * 从 localforage 恢复完整文件列表（包含 entries）
- * @deprecated 使用 restoreFiles() 获取元数据，通过 subtitleStore.getFileEntries() 获取完整数据
- */
-export async function restoreFilesWithEntries(): Promise<SubtitleFile[]> {
-  const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
-  if (!batchTasks || batchTasks.tasks.length === 0) {
-    return [];
-  }
-
-  return batchTasks.tasks.map((task) => {
-    const entries = task.subtitle_entries || [];
-    return {
-      id: generateStableFileId(task.taskId),
-      name: task.subtitle_filename,
-      size: task.fileSize || 0,
-      lastModified: Date.now(),
-      entries,
-      filename: task.subtitle_filename,
-      currentTaskId: task.taskId,
-      type: task.fileType === 'srt' ? 'srt' : undefined,
-      fileType: task.fileType,
-      fileSize: task.fileSize,
-      duration: task.duration,
-      transcriptionStatus: (task.subtitle_entries && task.subtitle_entries.length > 0) ? 'completed' : 'idle' as const,
-      entryCount: entries.length,
-      translatedCount: entries.filter(e => e.translatedText).length
-    };
-  });
 }
 
 /**

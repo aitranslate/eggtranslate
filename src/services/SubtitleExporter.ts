@@ -5,40 +5,8 @@
 
 import JSZip from 'jszip';
 import { toSRT, toTXT, toBilingual, toSrcTrans } from '@/utils/srtParser';
-import type { SubtitleEntry, BatchTasks } from '@/types';
+import type { BatchTasks } from '@/types';
 import localforage from 'localforage';
-
-/**
- * 导出为 SRT 格式
- * @param entries 字幕条目
- * @param useTranslation 是否使用翻译文本
- * @returns SRT 格式字符串
- * @deprecated 使用 exportTaskSRT(taskId) 代替
- */
-export function exportSRT(entries: SubtitleEntry[], useTranslation = true): string {
-  return toSRT(entries, useTranslation);
-}
-
-/**
- * 导出为 TXT 格式
- * @param entries 字幕条目
- * @param useTranslation 是否使用翻译文本
- * @returns TXT 格式字符串
- * @deprecated 使用 exportTaskTXT(taskId) 代替
- */
-export function exportTXT(entries: SubtitleEntry[], useTranslation = true): string {
-  return toTXT(entries, useTranslation);
-}
-
-/**
- * 导出为双语格式
- * @param entries 字幕条目
- * @returns 双语格式字符串
- * @deprecated 使用 exportTaskBilingual(taskId) 代替
- */
-export function exportBilingual(entries: SubtitleEntry[]): string {
-  return toBilingual(entries);
-}
 
 /**
  * 基于 taskId 导出为 SRT 格式
@@ -82,19 +50,6 @@ export async function exportTaskBilingual(taskId: string): Promise<string> {
     return '';
   }
   return toBilingual(task.subtitle_entries);
-}
-
-/**
- * 计算翻译进度
- * @param entries 字幕条目
- * @returns 翻译进度统计
- */
-export function getTranslationProgress(entries: SubtitleEntry[]): {
-  completed: number;
-  total: number;
-} {
-  const completed = entries.filter(entry => entry.translatedText).length;
-  return { completed, total: entries.length };
 }
 
 /**

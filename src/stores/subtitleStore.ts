@@ -6,7 +6,7 @@
 
 import { create } from 'zustand';
 import { SubtitleEntry, SubtitleFileMetadata, Term, TranslationStatus, FilePhases, PhaseProgress, WorkflowType } from '@/types';
-import { loadFromFile as loadFromFileOriginal, removeFile as removeFileData, clearAllData as clearAllFileData, restoreFiles, type SubtitleFile as SubtitleFileType, convertTaskToMetadata } from '@/services/SubtitleFileManager';
+import { loadFromFile as loadFromFileOriginal, removeFile as removeFileData, clearAllData as clearAllFileData, restoreFiles, convertTaskToMetadata } from '@/services/SubtitleFileManager';
 import { runTranscriptionPipeline } from '@/services/transcriptionPipeline';
 import { executeTranslation } from '@/services/TranslationOrchestrator';
 import { llmSourceSplit, llmAlignTranslation } from '@/services/llmSplitAlign';

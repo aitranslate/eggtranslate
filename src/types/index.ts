@@ -77,10 +77,6 @@ export interface SingleTask {
 
   index: number; // 在列表中的位置
 
-  // Legacy file size (for backward compatibility with SubtitleFile)
-  size?: number;  // Legacy: File size in bytes - use fileSize in new code
-
-  // NEW: Audio-video transcription cache fields
   fileType?: FileType;   // Unified file type
   fileSize?: number;                  // File size in bytes
   duration?: number;                  // Audio duration in seconds
