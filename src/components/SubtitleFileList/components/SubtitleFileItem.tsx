@@ -47,11 +47,31 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   const cardStatus = useMemo(() => {
     if (hasFailedPhase) return 'failed';
     if (isBusy) return 'active';
-    const entryCount = file.entryCount ?? 0;
-    const translatedCount = file.translatedCount ?? 0;
-    if (entryCount > 0 && translatedCount >= entryCount) return 'completed';
+
+    const { workflow, translating, splitting, transcribing } = file.phases;
+
+    // 仅转录工作流：转录完成就是全部完成
+    if (workflow === 'transcribe' && transcribing.status === 'completed') {
+      return 'completed';
+    }
+
+    // 仅翻译工作流（SRT 文件）：翻译完成就是全部完成
+    if (workflow === 'translate' && translating.status === 'completed') {
+      return 'completed';
+    }
+
+    // 全流程工作流
+    if (workflow === 'full') {
+      if (translating.status === 'active' || splitting.status === 'active') {
+        return 'active';
+      }
+      if (transcribing.status === 'completed' && translating.status === 'completed' && splitting.status === 'completed') {
+        return 'completed';
+      }
+    }
+
     return 'idle';
-  }, [isBusy, hasFailedPhase, file.entryCount, file.translatedCount]);
+  }, [isBusy, hasFailedPhase, file.phases]);
 
   const badgeClass = cardStatus === 'active'
     ? 'bg-blue-50 text-blue-600'

@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { KeytermGroup, SubtitleLengthPreset } from '@/types/transcription';
-import dataManager from '@/services/dataManager';
+import localforage from 'localforage';
 
 interface TranscriptionStore {
   apiKeys: string;
@@ -32,11 +32,11 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
       keytermGroups: DEFAULT_GROUPS,
       keytermsEnabled: true,
       subtitleLengthPreset: 'standard',
-      aiSegmentationEnabled: false,
+      aiSegmentationEnabled: true,
 
       updateKeytermGroups: async (groups) => {
         set({ keytermGroups: groups });
-        await dataManager.saveTranscriptionConfig({ keytermGroups: groups });
+        await localforage.setItem('transcription_config', { keytermGroups: groups });
       },
 
       setKeytermsEnabled: (enabled) => {

@@ -1,6 +1,6 @@
 import { TranslationConfig } from '@/types';
 import { jsonrepair } from 'jsonrepair';
-import dataManager from '@/services/dataManager';
+import localforage from 'localforage';
 import { generateSharedPrompt, generateDirectPrompt } from '@/utils/translationPrompts';
 import { callLLM } from '@/utils/llmApi';
 import { DEFAULT_TRANSLATION_CONFIG } from '@/constants/translationDefaults';
@@ -29,7 +29,7 @@ class TranslationService {
    */
   async initialize(): Promise<void> {
     try {
-      const savedConfig = dataManager.getConfig();
+      const savedConfig = await localforage.getItem<TranslationConfig>('translation_config');
       if (savedConfig) {
         this.config = savedConfig;
       }
@@ -52,7 +52,7 @@ class TranslationService {
   async updateConfig(newConfig: Partial<TranslationConfig>): Promise<void> {
     this.config = { ...this.config, ...newConfig };
     try {
-      await dataManager.saveConfig(this.config);
+      await localforage.setItem('translation_config', this.config);
     } catch (error) {
       const appError = toAppError(error, '保存翻译配置失败');
       console.error('[TranslationService]', appError.message, appError);
@@ -185,22 +185,35 @@ class TranslationService {
   ): Promise<void> {
     try {
       if (taskId) {
-        const task = dataManager.getTaskById(taskId);
-        const currentTokens = task?.translation_progress?.tokens || 0;
+        const batchTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
+        const task = batchTasks?.tasks?.find((t: any) => t.taskId === taskId);
+        const currentTokens = task?.phases?.translating?.tokens || 0;
 
-        const updateObj: Parameters<typeof dataManager.updateTaskTranslationProgressInMemory>[1] = {
+        const updateObj = {
           completed: current,
           total: total,
           status: phase === 'completed' ? 'completed' : 'translating',
         };
 
-        // ✅ 只在完成时设置 tokens（中间过程由 Store 管理）
+        // 只在完成时设置 tokens
         if (phase === 'completed') {
-          // Store 已经累加了所有 tokens，这里只是最终确认
           updateObj.tokens = currentTokens;
         }
 
-        dataManager.updateTaskTranslationProgressInMemory(taskId, updateObj);
+        // Update task in localforage
+        if (batchTasks?.tasks) {
+          const taskIndex = batchTasks.tasks.findIndex((t: any) => t.taskId === taskId);
+          if (taskIndex !== -1) {
+            batchTasks.tasks[taskIndex].phases = {
+              ...batchTasks.tasks[taskIndex].phases,
+              translating: {
+                ...batchTasks.tasks[taskIndex].phases?.translating,
+                ...updateObj
+              }
+            };
+            await localforage.setItem('batch_tasks', batchTasks);
+          }
+        }
       }
     } catch (error) {
       const appError = toAppError(error, '更新翻译进度失败');
@@ -214,13 +227,25 @@ class TranslationService {
    */
   async resetProgress(): Promise<void> {
     try {
-      const currentTask = dataManager.getCurrentTask();
+      const batchTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
+      const currentTask = batchTasks?.tasks?.find((t: any) => t.isCurrent);
+
       if (currentTask) {
-        await dataManager.updateTaskTranslationProgress(currentTask.taskId, {
-          completed: 0,
-          tokens: 0,
-          status: 'idle'
-        });
+        // Update in localforage
+        if (batchTasks?.tasks) {
+          const taskIndex = batchTasks.tasks.findIndex((t: any) => t.taskId === currentTask.taskId);
+          if (taskIndex !== -1) {
+            batchTasks.tasks[taskIndex].phases = {
+              ...batchTasks.tasks[taskIndex].phases,
+              translating: {
+                completed: 0,
+                tokens: 0,
+                status: 'idle'
+              }
+            };
+            await localforage.setItem('batch_tasks', batchTasks);
+          }
+        }
       }
     } catch (error) {
       const appError = toAppError(error, '重置翻译进度失败');
@@ -234,23 +259,37 @@ class TranslationService {
    */
   async completeTranslation(taskId: string): Promise<void> {
     try {
-      const task = dataManager.getTaskById(taskId);
+      const batchTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
+      const task = batchTasks?.tasks?.find((t: any) => t.taskId === taskId);
+
       if (task) {
-        const taskTokens = task.translation_progress?.tokens || 0;
+        const taskTokens = task.phases?.translating?.tokens || 0;
 
-        // 先在内存中更新
-        dataManager.updateTaskTranslationProgressInMemory(taskId, {
-          status: 'completed',
-          tokens: taskTokens
-        });
+        // Update in localforage
+        if (batchTasks?.tasks) {
+          const taskIndex = batchTasks.tasks.findIndex((t: any) => t.taskId === taskId);
+          if (taskIndex !== -1) {
+            batchTasks.tasks[taskIndex].phases = {
+              ...batchTasks.tasks[taskIndex].phases,
+              translating: {
+                ...batchTasks.tasks[taskIndex].phases?.translating,
+                status: 'completed',
+                tokens: taskTokens
+              }
+            };
+            await localforage.setItem('batch_tasks', batchTasks);
+          }
+        }
 
-        // 延迟持久化
+        // 延迟再次保存确保数据落盘
         setTimeout(async () => {
           try {
-            await dataManager.updateTaskTranslationProgress(taskId, {
-              status: 'completed',
-              tokens: taskTokens
-            });
+            const freshTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
+            const taskIdx = freshTasks?.tasks?.findIndex((t: any) => t.taskId === taskId);
+            if (taskIdx !== -1 && freshTasks?.tasks) {
+              freshTasks.tasks[taskIdx].phases.translating.status = 'completed';
+              await localforage.setItem('batch_tasks', freshTasks);
+            }
             console.log('翻译任务持久化完成:', taskId);
           } catch (error) {
             const appError = toAppError(error, '延迟持久化失败');
@@ -270,7 +309,16 @@ class TranslationService {
    */
   async clearTask(): Promise<void> {
     try {
-      await dataManager.clearCurrentTask();
+      const batchTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
+      if (batchTasks?.tasks) {
+        // Remove current task marker
+        batchTasks.tasks.forEach((t: any) => {
+          if (t.isCurrent) {
+            t.isCurrent = false;
+          }
+        });
+        await localforage.setItem('batch_tasks', batchTasks);
+      }
     } catch (error) {
       const appError = toAppError(error, '清空任务失败');
       console.error('[TranslationService]', appError.message, appError);

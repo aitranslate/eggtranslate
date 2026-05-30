@@ -52,7 +52,7 @@ export const runTranscriptionPipeline = async (
       }
     );
 
-    toast('转录完成，共 ' + sentences.length + ' 个句子');
+    // onCompleted callback will show toast
 
     // 2. 生成字幕条目
     const entries: SubtitleEntry[] = [];

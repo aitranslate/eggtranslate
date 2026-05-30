@@ -1,33 +1,33 @@
 /**
  * 字幕文件管理 Store
  * 替代原 SubtitleContext，使用 Zustand 管理状态
+ * 直接读写 localforage，不再依赖 dataManager
  */
 
 import { create } from 'zustand';
-import { SubtitleFile, SubtitleEntry, SubtitleFileMetadata, Term, TranslationStatus } from '@/types';
-import { loadFromFile, removeFile as removeFileData, clearAllData as clearAllFileData, restoreFiles, restoreFilesWithEntries, type SubtitleFile as SubtitleFileType } from '@/services/SubtitleFileManager';
+import { SubtitleEntry, SubtitleFileMetadata, Term, TranslationStatus, FilePhases, PhaseProgress, WorkflowType } from '@/types';
+import { loadFromFile as loadFromFileOriginal, removeFile as removeFileData, clearAllData as clearAllFileData, restoreFiles, type SubtitleFile as SubtitleFileType, convertTaskToMetadata } from '@/services/SubtitleFileManager';
 import { runTranscriptionPipeline } from '@/services/transcriptionPipeline';
 import { executeTranslation } from '@/services/TranslationOrchestrator';
 import { llmSourceSplit, llmAlignTranslation } from '@/services/llmSplitAlign';
-import dataManager from '@/services/dataManager';
 import { generateStableFileId } from '@/utils/taskIdGenerator';
 import { mapSourcePartsToBoundaries, boundariesToRanges } from '@/utils/sourceSplitBoundaries';
 import { formatTime, parseTime } from '@/utils/timeUtils';
 import { countUnits } from '@/utils/textUnitCounter';
-import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { toAppError } from '@/utils/errors';
-import type { ProgressPhase, PhaseState, FilePhases } from '@/types/progress';
+import type { ProgressPhase } from '@/types';
+import { markDirty, flushAll } from '@/services/PhasePersistence';
 import toast from 'react-hot-toast';
 import localforage from 'localforage';
+import type { BatchTasks, SingleTask } from '@/types';
 
 // ============================================
 // 循环导入解决
 // ============================================
 
-// 注意：这些 store 必须在使用前导入，避免运行时 undefined
-// TypeScript 的类型检查允许延迟导入，但运行时需要实际可用的引用
 import { useTranscriptionStore } from './transcriptionStore';
 import { useTranslationConfigStore } from './translationConfigStore';
+import { useTermsStore } from './termsStore';
 
 // ============================================
 // 类型定义
@@ -35,7 +35,7 @@ import { useTranslationConfigStore } from './translationConfigStore';
 
 interface SubtitleStore {
   // State
-  files: SubtitleFileMetadata[];  // ✅ Phase 3: 改为轻量级元数据数组
+  files: SubtitleFileMetadata[];  // 轻量级元数据数组
   selectedFileId: string | null;
 
   // Actions - 文件操作
@@ -58,46 +58,40 @@ interface SubtitleStore {
   updateTranslationProgress: (fileId: string, completed: number, total: number) => void;
 
   // Actions - 阶段状态管理
-  updatePhase: (fileId: string, phase: ProgressPhase, update: Partial<PhaseState>) => void;
+  updatePhase: (fileId: string, phase: ProgressPhase, update: Partial<PhaseProgress>) => void;
+  setWorkflow: (fileId: string, workflow: WorkflowType) => void;
 
   // ============================================
-  // Tokens 管理（新增）
+  // 持久化管理
   // ============================================
 
   /**
-   * 添加 tokens（转录或翻译）
-   * @param fileId - 文件 ID
-   * @param tokens - 新增的 tokens（会累加到现有值）
+   * 强制将所有脏相位立即写入 localforage
+   * 用于应用关闭时
    */
+  flushPhasesToPersistence: () => Promise<void>;
+
+  // ============================================
+  // Tokens 管理
+  // ============================================
+
   addTokens: (fileId: string, tokens: number) => void;
-
-  /**
-   * 设置 tokens（用于从 DataManager 恢复）
-   * @param fileId - 文件 ID
-   * @param tokens - 总 tokens（覆盖现有值）
-   */
   setTokens: (fileId: string, tokens: number) => void;
-
-  /**
-   * 获取文件的 tokens
-   */
   getTokens: (fileId: string) => number;
 
   // ============================================
-  // 元数据管理方法（Phase 1-2）
+  // 元数据管理方法
   // ============================================
 
   /**
-   * 从 DataManager 延迟加载文件的完整字幕条目
-   * 用于编辑器等需要完整数据的场景
+   * 从 localforage 延迟加载文件的完整字幕条目
    */
-  getFileEntries: (fileId: string) => SubtitleEntry[];
+  getFileEntries: (fileId: string) => Promise<SubtitleEntry[]>;
 
   /**
-   * 从 DataManager 更新文件的统计信息
-   * 用于翻译/转录完成后更新缓存的统计数据
+   * 更新文件的统计信息
    */
-  updateFileStatistics: (fileId: string) => void;
+  updateFileStatistics: (fileId: string) => Promise<void>;
 
   // Getters
   getFile: (fileId: string) => SubtitleFileMetadata | undefined;
@@ -106,30 +100,22 @@ interface SubtitleStore {
 }
 
 // ============================================
-// Phase 3: 持久化由 DataManager 统一管理
+// 页面关闭前检查进行中的任务
 // ============================================
 
-// 页面关闭前强制持久化所有数据并检查是否有进行中的任务
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', (event) => {
-    // 检查是否有进行中的任务
     const hasOngoingTasks = checkOngoingTasks();
 
     if (hasOngoingTasks) {
-      // 触发浏览器确认对话框
       event.preventDefault();
-      // Chrome 需要设置 returnValue
       event.returnValue = '';
     }
 
-    // 无论如何都强制持久化数据
-    dataManager.forcePersistAllData().catch(console.error);
+    flushAll().catch(console.error);
   });
 }
 
-/**
- * 检查是否有进行中的任务（转录或翻译）
- */
 function checkOngoingTasks(): boolean {
   const files = useSubtitleStore.getState().files;
   return files.some(file =>
@@ -153,23 +139,10 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   // 文件操作
   // ========================================
 
-  /**
-   * 从 IndexedDB 加载文件列表
-   */
   loadFiles: async () => {
     try {
       const files = await restoreFiles();
-
-      // ✅ 从 DataManager 恢复 tokensUsed
-      const filesWithTokens = files.map(file => {
-        const task = dataManager.getTaskById(file.taskId);
-        return {
-          ...file,
-          tokensUsed: task?.translation_progress?.tokens || 0
-        };
-      });
-
-      set({ files: filesWithTokens });
+      set({ files });
     } catch (error) {
       const appError = toAppError(error, '加载文件失败');
       console.error('[subtitleStore]', appError.message, appError);
@@ -177,17 +150,12 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     }
   },
 
-  /**
-   * 添加新文件
-   */
   addFile: async (file: File) => {
     try {
-      const newFile = await loadFromFile(file, { existingFilesCount: get().files.length });
-      // ✅ Phase 3: newFile 现在是 SubtitleFileMetadata
+      const newFile = await loadFromFileOriginal(file, { existingFilesCount: get().files.length });
       set((state) => ({
         files: [...state.files, newFile]
       }));
-      // ✅ Phase 3: 移除 schedulePersist，DataManager 负责持久化
       return newFile.id;
     } catch (error) {
       const appError = toAppError(error, '文件加载失败');
@@ -197,14 +165,10 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     }
   },
 
-  /**
-   * 删除文件
-   */
   removeFile: async (fileId: string) => {
     const file = get().getFile(fileId);
     if (!file) return;
 
-    // 检查是否正在翻译此文件，如果是则停止翻译
     const translationStore = useTranslationConfigStore.getState();
     if (translationStore.isTranslating && translationStore.currentTaskId === file.taskId) {
       translationStore.stopTranslation();
@@ -216,9 +180,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         selectedFileId: state.selectedFileId === fileId ? null : state.selectedFileId
       }));
 
-      // ✅ Phase 3: removeFileData 现在接受 SubtitleFileMetadata
       await removeFileData(file);
-      // ✅ Phase 3: 移除 schedulePersist，DataManager 负责持久化
       toast.success('文件已删除');
     } catch (error) {
       const appError = toAppError(error, '删除文件失败');
@@ -227,16 +189,10 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     }
   },
 
-  /**
-   * 选择文件
-   */
   selectFile: (fileId: string) => {
     set({ selectedFileId: fileId });
   },
 
-  /**
-   * 清空所有数据
-   */
   clearAll: async () => {
     try {
       set({ files: [], selectedFileId: null });
@@ -253,79 +209,114 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   // 字幕操作
   // ========================================
 
-  /**
-   * 更新单条字幕
-   */
   updateEntry: async (fileId: string, entryId: number, text: string, translatedText?: string, status?: TranslationStatus, startTime?: string, endTime?: string, words?: SubtitleEntry['words']) => {
     const file = get().getFile(fileId);
     if (!file) return;
 
-    // 更新 DataManager 内存（传递 status、时间戳和单词时间戳）
-    dataManager.updateTaskSubtitleEntryInMemory(file.taskId, entryId, text, translatedText, status, startTime, endTime, words);
+    // 直接更新 localforage
+    const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+    if (!batchTasks) return;
 
-    // ✅ Phase 3: 更新统计信息，而不是 entries 数组
+    const taskIndex = batchTasks.tasks.findIndex(t => t.taskId === file.taskId);
+    if (taskIndex === -1) return;
+
+    const task = batchTasks.tasks[taskIndex];
+    const entries = task.subtitle_entries || [];
+    const entryIndex = entries.findIndex(e => e.id === entryId);
+
+    if (entryIndex !== -1) {
+      entries[entryIndex] = {
+        ...entries[entryIndex],
+        text,
+        translatedText: translatedText ?? entries[entryIndex].translatedText,
+        translationStatus: status ?? entries[entryIndex].translationStatus,
+        startTime: startTime ?? entries[entryIndex].startTime,
+        endTime: endTime ?? entries[entryIndex].endTime,
+        words: words ?? entries[entryIndex].words,
+      };
+      batchTasks.tasks[taskIndex] = { ...task, subtitle_entries: entries };
+      await localforage.setItem('batch_tasks', batchTasks);
+    }
+
     get().updateFileStatistics(fileId);
-
-    // ✅ Phase 3: 移除 schedulePersist，DataManager 负责持久化
   },
 
-  /**
-   * 删除单条字幕
-   */
   deleteEntry: async (fileId: string, entryId: number) => {
     const file = get().getFile(fileId);
     if (!file) return;
 
-    dataManager.deleteTaskSubtitleEntryInMemory(file.taskId, entryId);
+    const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+    if (!batchTasks) return;
+
+    const taskIndex = batchTasks.tasks.findIndex(t => t.taskId === file.taskId);
+    if (taskIndex === -1) return;
+
+    const task = batchTasks.tasks[taskIndex];
+    const entries = task.subtitle_entries || [];
+    const filteredEntries = entries.filter(e => e.id !== entryId);
+
+    batchTasks.tasks[taskIndex] = { ...task, subtitle_entries: filteredEntries };
+    await localforage.setItem('batch_tasks', batchTasks);
+
     get().updateFileStatistics(fileId);
   },
 
-  /**
-   * 批量更新字幕
-   */
   batchUpdateEntries: async (fileId: string, updates: Array<{id: number, text: string, translatedText?: string}>) => {
     const file = get().getFile(fileId);
     if (!file) return;
 
-    await dataManager.batchUpdateTaskSubtitleEntries(file.taskId, updates);
+    const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+    if (!batchTasks) return;
 
-    // ✅ Phase 3: 更新统计信息，而不是 entries 数组
+    const taskIndex = batchTasks.tasks.findIndex(t => t.taskId === file.taskId);
+    if (taskIndex === -1) return;
+
+    const task = batchTasks.tasks[taskIndex];
+    const entries = task.subtitle_entries || [];
+
+    for (const update of updates) {
+      const entryIndex = entries.findIndex(e => e.id === update.id);
+      if (entryIndex !== -1) {
+        entries[entryIndex] = {
+          ...entries[entryIndex],
+          text: update.text,
+          translatedText: update.translatedText ?? entries[entryIndex].translatedText,
+        };
+      }
+    }
+
+    batchTasks.tasks[taskIndex] = { ...task, subtitle_entries: entries };
+    await localforage.setItem('batch_tasks', batchTasks);
+
     get().updateFileStatistics(fileId);
-
-    // ✅ Phase 3: 移除 schedulePersist，DataManager 负责持久化
   },
 
   // ========================================
   // 转录操作
   // ========================================
 
-  /**
-   * 开始转录
-   */
   startTranscription: async (fileId: string) => {
     const file = get().getFile(fileId);
     if (!file || file.fileType === 'srt') return;
 
     try {
-      // ✅ Phase 3: 从 DataManager 获取 fileRef
-      const task = dataManager.getTaskById(file.taskId);
-      const fileRef = (file as any).fileRef; // 临时访问
+      const fileRef = (file as any).fileRef;
       if (!fileRef) {
         toast.error('文件引用丢失，请重新上传');
         return;
       }
 
-      // ✅ 预检 API Key
       const { apiKeys } = useTranscriptionStore.getState();
       if (!apiKeys.trim()) {
         toast.error('请先在设置中配置 AssemblyAI API Key');
         return;
       }
 
-      // ✅ 获取热词（所有分组的词汇合并）
       const { keytermGroups, keytermsEnabled } = useTranscriptionStore.getState();
       const allKeyterms = keytermsEnabled ? keytermGroups.flatMap(g => g.keyterms) : [];
 
+      // 设置仅转录工作流
+      get().setWorkflow(fileId, 'transcribe');
       get().updatePhase(fileId, 'converting', { status: 'active', progress: -1, tokens: 0 });
 
       const result = await runTranscriptionPipeline(
@@ -345,11 +336,8 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
           onProgress: (percent) => {
             get().updatePhase(fileId, 'transcribing', { progress: percent });
           },
-          onCompleted: () => {
-            // 状态更新将在数据保存和统计更新后进行
-          },
+          onCompleted: () => {},
           onError: (_error) => {
-            // 标记当前活跃阶段为失败
             const phases = get().getFile(fileId)?.phases;
             if (phases?.converting.status === 'active') {
               get().updatePhase(fileId, 'converting', { status: 'failed', progress: 0 });
@@ -361,13 +349,25 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         }
       );
 
-      // 持久化转录结果
-      await dataManager.updateTaskWithTranscription(file.taskId, result.entries, result.duration, 0);
+      // 直接写入 localforage
+      const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks') || { tasks: [] };
+      const taskIndex = batchTasks.tasks.findIndex(t => t.taskId === file.taskId);
+      if (taskIndex !== -1) {
+        batchTasks.tasks[taskIndex] = {
+          ...batchTasks.tasks[taskIndex],
+          subtitle_entries: result.entries,
+          duration: result.duration,
+          phases: {
+            ...batchTasks.tasks[taskIndex].phases,
+            converting: { status: 'completed', progress: 100, tokens: 0 },
+            transcribing: { status: 'completed', progress: 100, tokens: 0 },
+          }
+        };
+        await localforage.setItem('batch_tasks', batchTasks);
+      }
 
-      // 更新统计信息
       get().updateFileStatistics(fileId);
 
-      // 转录完成
       get().updatePhase(fileId, 'converting', { status: 'completed', progress: 100 });
       get().updatePhase(fileId, 'transcribing', { status: 'completed', progress: 100 });
 
@@ -377,7 +377,6 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       console.error('[subtitleStore]', appError.message, appError);
       toast.error(`转录失败: ${appError.message}`);
 
-      // 标记当前活跃阶段为失败
       const phases = get().getFile(fileId)?.phases;
       if (phases?.converting.status === 'active') {
         get().updatePhase(fileId, 'converting', { status: 'failed', progress: 0 });
@@ -388,10 +387,10 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     }
   },
 
-  /**
-   * 更新指定阶段的状态
-   */
-  updatePhase: (fileId: string, phase: ProgressPhase, update: Partial<PhaseState>) => {
+  updatePhase: (fileId: string, phase: ProgressPhase, update: Partial<PhaseProgress>) => {
+    const file = get().getFile(fileId);
+    if (!file) return;
+
     set((state) => ({
       files: state.files.map(f => {
         if (f.id !== fileId) return f;
@@ -404,15 +403,44 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         };
       })
     }));
+
+    const updatedFile = get().getFile(fileId);
+    if (updatedFile) {
+      markDirty(file.taskId, phase, updatedFile.phases);
+    }
+  },
+
+  setWorkflow: (fileId: string, workflow: WorkflowType) => {
+    const file = get().getFile(fileId);
+    if (!file) return;
+
+    set((state) => ({
+      files: state.files.map(f => {
+        if (f.id !== fileId) return f;
+        return {
+          ...f,
+          phases: {
+            ...f.phases,
+            workflow
+          }
+        };
+      })
+    }));
+
+    const updatedFile = get().getFile(fileId);
+    if (updatedFile) {
+      markDirty(file.taskId, 'transcribing', updatedFile.phases);
+    }
+  },
+
+  flushPhasesToPersistence: async () => {
+    await flushAll();
   },
 
   // ========================================
   // 翻译操作
   // ========================================
 
-  /**
-   * 开始翻译
-   */
   startTranslation: async (fileId: string) => {
     const file = get().getFile(fileId);
     if (!file) return;
@@ -425,15 +453,14 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     }
 
     try {
-      // 设置全局翻译状态
       const controller = await translationConfigStore.startTranslation(file.taskId);
 
-      // 标记翻译阶段开始
       get().updatePhase(fileId, 'translating', { status: 'active', progress: 0, tokens: 0 });
       get().updatePhase(fileId, 'splitting', { status: 'upcoming', progress: 0, tokens: 0 });
 
-      // ✅ Phase 3: 从 DataManager 获取完整 entries
-      const task = dataManager.getTaskById(file.taskId);
+      // 从 localforage 获取完整 entries
+      const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+      const task = batchTasks?.tasks.find(t => t.taskId === file.taskId);
       const entries = task?.subtitle_entries || [];
 
       await executeTranslation(
@@ -455,36 +482,29 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
             await get().updateEntry(fileId, id, text, translatedText, status);
           },
           updateProgress: async (current: number, total: number, phase: 'direct' | 'splitting' | 'completed', status: string, taskId: string, newTokens?: number) => {
-            // 调用 TranslationService.updateProgress（它会累加 tokens 并更新 DataManager）
             await translationConfigStore.updateProgress(current, total, phase, status, taskId, newTokens);
 
-            // ✅ 同步更新 Store 的 tokens 和阶段进度
             if (newTokens !== undefined && newTokens > 0) {
               get().addTokens(fileId, newTokens);
             }
 
-            // 更新翻译阶段进度
             if (phase === 'direct' && total > 0) {
               const percent = Math.round((current / total) * 100);
               get().updatePhase(fileId, 'translating', { progress: percent });
             }
           },
           getRelevantTerms: (batchText: string, before: string, after: string): Term[] => {
-            // 从 dataManager 获取术语
-            const allTerms = dataManager.getTerms();
+            const allTerms = useTermsStore.getState().terms;
             if (allTerms.length === 0) return [];
 
-            // 合并所有文本
             const fullText = `${before} ${batchText} ${after}`;
             const cleanedFullText = fullText.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
-            // 预处理术语
             const processedTerms = allTerms.map((term: Term) => ({
               ...term,
               cleanedOriginal: term.original.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
             }));
 
-            // 筛选出在清洗后文本中出现的术语
             return processedTerms
               .filter(term => term.cleanedOriginal && cleanedFullText.includes(term.cleanedOriginal))
               .map(({ original, translation, notes }) => ({ original, translation, notes }));
@@ -500,22 +520,28 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         }
       );
 
-      // 检查是否被中止（删除文件时）
       if (controller.signal.aborted) {
         console.log('[subtitleStore] 翻译已中止（文件已删除）');
         return;
       }
 
-      // 完成翻译
-      await dataManager.completeTask(file.taskId, translationConfigStore.tokensUsed || 0);
+      // 完成翻译 - 直接写 localforage
+      const finalBatchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+      const finalTaskIndex = finalBatchTasks?.tasks.findIndex(t => t.taskId === file.taskId);
+      if (finalTaskIndex !== -1 && finalBatchTasks) {
+        finalBatchTasks.tasks[finalTaskIndex] = {
+          ...finalBatchTasks.tasks[finalTaskIndex],
+          phases: {
+            ...finalBatchTasks.tasks[finalTaskIndex].phases,
+            translating: { status: 'completed', progress: 100, tokens: translationConfigStore.tokensUsed || 0 }
+          }
+        };
+        await localforage.setItem('batch_tasks', finalBatchTasks);
+      }
 
-      // ✅ 同步 DataManager 中的 tokens（翻译完成后需要同步，因为 TranslationService 也会更新）
       get().updateFileStatistics(fileId);
-
-      // 标记翻译阶段完成
       get().updatePhase(fileId, 'translating', { status: 'completed', progress: 100 });
 
-      // Step 5.1+5.2: LLM 断句对齐（翻译后处理超长字幕）
       const aiSegmentationEnabled = useTranscriptionStore.getState().aiSegmentationEnabled;
       if (!aiSegmentationEnabled) {
         console.log('[subtitleStore] AI 断句对齐已关闭，跳过');
@@ -526,12 +552,10 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       let splitSucceeded = false;
       try {
         const preset = useTranscriptionStore.getState().subtitleLengthPreset;
-        let postSplitEntries = dataManager.getTaskById(file.taskId)?.subtitle_entries || [];
+        let postSplitEntries = (await localforage.getItem<BatchTasks>('batch_tasks'))?.tasks.find(t => t.taskId === file.taskId)?.subtitle_entries || [];
 
-        // 清理旧的拆分条目：先合并回父条目，再删除（避免丢失原始文本）
         const compositeEntries = postSplitEntries.filter(e => e.id > 999999);
         if (compositeEntries.length > 0) {
-          // 按父条目 ID 分组
           const groups = new Map<number, SubtitleEntry[]>();
           for (const ce of compositeEntries) {
             const parentId = Math.floor(ce.id / 1000000);
@@ -539,36 +563,24 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
             group.push(ce);
             groups.set(parentId, group);
           }
-          // 合并回父条目（重建 text、translatedText、words、startTime、endTime）
           for (const [parentId, parts] of groups) {
             const parent = postSplitEntries.find(e => e.id === parentId);
             if (parent) {
-              // 按 splitId 排序确保拼接顺序正确
               parts.sort((a, b) => (a.id % 1000000) - (b.id % 1000000));
               const allParts = [parent, ...parts];
               const mergedText = allParts.map(p => p.text).join(' ');
               const mergedTranslation = allParts.map(p => p.translatedText || '').join(' ');
-              // 重建 words 数组：合并所有 parts 的 words
               const mergedWords = allParts.flatMap(p => p.words || []);
-              // 恢复原始时间范围（第一段的 start ~ 最后一段的 end）
-              const restoredStartTime = parent.words?.length
-                ? parent.startTime
-                : parent.startTime;
-              const restoredEndTime = parts.length > 0
-                ? parts[parts.length - 1].endTime
-                : parent.endTime;
-              dataManager.updateTaskSubtitleEntryInMemory(
-                file.taskId, parentId, mergedText, mergedTranslation,
-                undefined, restoredStartTime, restoredEndTime,
-                mergedWords.length > 0 ? mergedWords : undefined
-              );
+              const restoredStartTime = parent.startTime;
+              const restoredEndTime = parts.length > 0 ? parts[parts.length - 1].endTime : parent.endTime;
+
+              await get().updateEntry(fileId, parentId, mergedText, mergedTranslation, undefined, restoredStartTime, restoredEndTime, mergedWords.length > 0 ? mergedWords : undefined);
             }
           }
-          // 删除所有复合条目
           for (const ce of compositeEntries) {
-            dataManager.deleteTaskSubtitleEntryInMemory(file.taskId, ce.id);
+            await get().deleteEntry(fileId, ce.id);
           }
-          postSplitEntries = dataManager.getTaskById(file.taskId)?.subtitle_entries || [];
+          postSplitEntries = (await localforage.getItem<BatchTasks>('batch_tasks'))?.tasks.find(t => t.taskId === file.taskId)?.subtitle_entries || [];
         }
 
         const fullSourceText = postSplitEntries.map(e => e.text).join('\n');
@@ -576,11 +588,9 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
 
         console.log('[subtitleStore] 开始 LLM 断句对齐...');
 
-        // 进入断句阶段
         get().updatePhase(fileId, 'splitting', { status: 'active', progress: 0, tokens: 0 });
         await translationConfigStore.updateProgress(0, postSplitEntries.length, 'splitting', '断句对齐中...', file.taskId);
 
-        // Step 5.1: LLM 原文拆分
         let lastSplitTokens = 0;
         const splitResults = await llmSourceSplit({
           entries: postSplitEntries,
@@ -594,8 +604,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
             const percent = total > 0 ? Math.round((current / total) * 50) : 0;
             get().updatePhase(fileId, 'splitting', { progress: percent });
             translationConfigStore.updateProgress(current, total, 'splitting', `断句拆分中 ${current}/${total}`, file.taskId).catch(err => console.warn('[subtitleStore] updateProgress failed:', err));
-            // tokensUsed 是累计值，只需累加增量
-            const delta = tokensUsed - (lastSplitTokens);
+            const delta = tokensUsed - lastSplitTokens;
             lastSplitTokens = tokensUsed;
             if (delta > 0) {
               get().addTokens(fileId, delta);
@@ -606,11 +615,9 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         if (splitResults.length > 0) {
           console.log(`[subtitleStore] ${splitResults.length} 条字幕需要拆分对齐`);
 
-          // Step 5.2: 对拆分结果进行译文对齐（并发 LLM 调用，顺序写入数据）
           const alignThreadCount = config.threadCount;
           let alignCompleted = 0;
 
-          // 准备对齐任务
           const alignTasks = splitResults
             .map(split => {
               const entry = postSplitEntries.find(e => e.id === split.entryId);
@@ -619,7 +626,6 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
             })
             .filter((t): t is { split: typeof splitResults[0]; entry: SubtitleEntry } => t !== null);
 
-          // 按 threadCount 分组并发调用 LLM 对齐
           type AlignResult = {
             entryId: number;
             entry: SubtitleEntry;
@@ -677,10 +683,8 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
             }
           }
 
-          // 顺序写入数据（避免并发插入导致顺序错乱）
-          // 初始化计数器：跳过已有的拆分条目 ID，避免重翻译时 ID 碰撞
           let splitIdCounter = 0;
-          const existingEntries = dataManager.getTaskById(file.taskId)?.subtitle_entries || [];
+          const existingEntries = (await localforage.getItem<BatchTasks>('batch_tasks'))?.tasks.find(t => t.taskId === file.taskId)?.subtitle_entries || [];
           for (const e of existingEntries) {
             if (e.id > 999999) {
               splitIdCounter = Math.max(splitIdCounter, e.id % 1000000);
@@ -691,24 +695,19 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
             const words = entry.words;
 
             if (words && words.length > 0) {
-              // 有单词时间戳：通过文本匹配推导精确时间
               const boundaries = mapSourcePartsToBoundaries(result.sourceParts, words, config.sourceLanguage);
               const ranges = boundariesToRanges(boundaries, words.length);
 
-              // 更新原条目（第一段），截断 words 到第一段范围
               const firstStart = words[ranges[0][0]].start;
               const firstEnd = words[ranges[0][1]].end;
               const firstWords = words.slice(ranges[0][0], ranges[0][1] + 1);
-              await get().updateEntry(fileId, result.entryId,
-                result.sourceParts[0], result.alignments[0]?.text || '',
-                undefined, formatTime(firstStart), formatTime(firstEnd), firstWords);
+              await get().updateEntry(fileId, result.entryId, result.sourceParts[0], result.alignments[0]?.text || '', undefined, formatTime(firstStart), formatTime(firstEnd), firstWords);
 
-              // 插入后续段（倒序插入保持位置正确）
               for (let i = ranges.length - 1; i >= 1; i--) {
                 const ws = words[ranges[i][0]];
                 const we = words[ranges[i][1]];
                 splitIdCounter++;
-                dataManager.addSubtitleEntryAfterInMemory(file.taskId, result.entryId, {
+                const newEntry: SubtitleEntry = {
                   id: result.entryId * 1000000 + splitIdCounter,
                   startTime: formatTime(ws.start),
                   endTime: formatTime(we.end),
@@ -716,46 +715,49 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
                   translatedText: result.alignments[i]?.text || '',
                   translationStatus: 'completed',
                   words: words.slice(ranges[i][0], ranges[i][1] + 1),
-                });
+                };
+                const bt = await localforage.getItem<BatchTasks>('batch_tasks');
+                const ti = bt?.tasks.findIndex(t => t.taskId === file.taskId);
+                if (bt && ti !== -1 && ti !== undefined) {
+                  bt.tasks[ti].subtitle_entries.push(newEntry);
+                  await localforage.setItem('batch_tasks', bt);
+                }
               }
             } else {
-              // 无单词时间戳（SRT 导入）：按文本比例插值
               const totalDuration = parseTime(entry.endTime) - parseTime(entry.startTime);
               const unitCounts = result.sourceParts.map(p => countUnits(p, config.sourceLanguage));
               const totalUnits = unitCounts.reduce((a, b) => a + b, 0);
 
-              // 预计算所有段时间戳
               const partTimestamps: { start: number; end: number }[] = [];
               let offset = parseTime(entry.startTime);
               for (let i = 0; i < result.sourceParts.length; i++) {
-                const duration = totalUnits > 0
-                  ? (unitCounts[i] / totalUnits) * totalDuration
-                  : totalDuration / result.sourceParts.length;
+                const duration = totalUnits > 0 ? (unitCounts[i] / totalUnits) * totalDuration : totalDuration / result.sourceParts.length;
                 partTimestamps.push({ start: offset, end: offset + duration });
                 offset += duration;
               }
 
-              // 更新原条目（第一段）
-              await get().updateEntry(fileId, result.entryId,
-                result.sourceParts[0], result.alignments[0]?.text || '',
-                undefined, formatTime(partTimestamps[0].start), formatTime(partTimestamps[0].end));
+              await get().updateEntry(fileId, result.entryId, result.sourceParts[0], result.alignments[0]?.text || '', undefined, formatTime(partTimestamps[0].start), formatTime(partTimestamps[0].end));
 
-              // 插入后续段（倒序插入保持位置正确）
               for (let i = result.sourceParts.length - 1; i >= 1; i--) {
                 splitIdCounter++;
-                dataManager.addSubtitleEntryAfterInMemory(file.taskId, result.entryId, {
+                const newEntry: SubtitleEntry = {
                   id: result.entryId * 1000000 + splitIdCounter,
                   startTime: formatTime(partTimestamps[i].start),
                   endTime: formatTime(partTimestamps[i].end),
                   text: result.sourceParts[i],
                   translatedText: result.alignments[i]?.text || '',
                   translationStatus: 'completed',
-                });
+                };
+                const bt = await localforage.getItem<BatchTasks>('batch_tasks');
+                const ti = bt?.tasks.findIndex(t => t.taskId === file.taskId);
+                if (bt && ti !== -1 && ti !== undefined) {
+                  bt.tasks[ti].subtitle_entries.push(newEntry);
+                  await localforage.setItem('batch_tasks', bt);
+                }
               }
             }
           }
 
-          // Update statistics after split/align（触发 Zustand 通知 UI 刷新）
           get().updateFileStatistics(fileId);
           get().updatePhase(fileId, 'splitting', { status: 'completed', progress: 100 });
           splitSucceeded = true;
@@ -770,7 +772,6 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         get().updatePhase(fileId, 'splitting', { status: 'failed', progress: 0 });
       }
 
-      // ✅ Phase 3: 移除 forcePersist，DataManager 负责持久化
       if (splitSucceeded) {
         toast.success(`${file.name} 翻译完成`);
       } else {
@@ -781,7 +782,6 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       console.error('[subtitleStore]', appError.message, appError);
       toast.error(`翻译失败: ${appError.message}`);
 
-      // 标记当前活跃阶段为失败
       const phases = get().getFile(fileId)?.phases;
       if (phases?.translating.status === 'active') {
         get().updatePhase(fileId, 'translating', { status: 'failed', progress: 0 });
@@ -794,21 +794,11 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     }
   },
 
-  /**
-   * 更新翻译进度
-   */
   updateTranslationProgress: (fileId: string, completed: number, total: number) => {
-    // ✅ Phase 3: 不再直接更新 entries 数组
-    // 进度通过 DataManager 更新，需要时通过 getFileEntries 获取
-    // 这里只更新统计信息的缓存
     set((state) => ({
       files: state.files.map(f =>
         f.id === fileId
-          ? {
-              ...f,
-              translatedCount: completed,
-              entryCount: total
-            }
+          ? { ...f, translatedCount: completed, entryCount: total }
           : f
       )
     }));
@@ -818,49 +808,43 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   // Tokens 管理
   // ========================================
 
-  /**
-   * 添加 tokens（转录或翻译）
-   */
   addTokens: (fileId: string, tokens: number) => {
     if (tokens <= 0) return;
 
-    // 先获取当前 file（此时是旧值）
     const file = get().getFile(fileId);
+    const newTokens = (file?.tokensUsed || 0) + tokens;
 
-    // 同步到 DataManager（使用旧值计算）
+    // 直接更新 localforage
     if (file) {
-      dataManager.updateTaskTranslationProgressInMemory(
-        file.taskId,
-        { tokens: file.tokensUsed + tokens }
-      );
-    }
+      useSubtitleStore.getState().setTokens(fileId, newTokens);
 
-    // 再更新 Store
-    set((state) => ({
-      files: state.files.map(f =>
-        f.id === fileId
-          ? { ...f, tokensUsed: f.tokensUsed + tokens }
-          : f
-      )
-    }));
+      // 更新 localforage 中的 phases
+      const batchTasks = localforage.getItem<BatchTasks>('batch_tasks');
+      batchTasks.then(bt => {
+        if (!bt) return;
+        const taskIndex = bt.tasks.findIndex(t => t.taskId === file.taskId);
+        if (taskIndex !== -1) {
+          bt.tasks[taskIndex] = {
+            ...bt.tasks[taskIndex],
+            phases: {
+              ...bt.tasks[taskIndex].phases,
+              translating: { ...bt.tasks[taskIndex].phases.translating, tokens: newTokens }
+            }
+          };
+          localforage.setItem('batch_tasks', bt);
+        }
+      });
+    }
   },
 
-  /**
-   * 设置 tokens（用于从 DataManager 恢复）
-   */
   setTokens: (fileId: string, tokens: number) => {
     set((state) => ({
       files: state.files.map(f =>
-        f.id === fileId
-          ? { ...f, tokensUsed: tokens }
-          : f
+        f.id === fileId ? { ...f, tokensUsed: tokens } : f
       )
     }));
   },
 
-  /**
-   * 获取文件的 tokens
-   */
   getTokens: (fileId: string) => {
     return get().getFile(fileId)?.tokensUsed || 0;
   },
@@ -869,80 +853,55 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   // Getters
   // ========================================
 
-  /**
-   * 获取单个文件
-   */
   getFile: (fileId: string) => {
     return get().files.find(f => f.id === fileId);
   },
 
-  /**
-   * 获取所有文件
-   */
   getAllFiles: () => {
     return get().files;
   },
 
-  /**
-   * 获取翻译进度
-   */
   getTranslationProgress: (fileId: string) => {
     const file = get().getFile(fileId);
     if (!file) return { completed: 0, total: 0 };
-
-    // ✅ Phase 3: 使用缓存的统计信息
-    return {
-      completed: file.translatedCount || 0,
-      total: file.entryCount || 0
-    };
+    return { completed: file.translatedCount || 0, total: file.entryCount || 0 };
   },
 
   // ========================================
-  // 元数据管理方法实现（Phase 1-3）
+  // 元数据管理方法
   // ========================================
 
-  /**
-   * 从 DataManager 延迟加载文件的完整字幕条目
-   * 用于编辑器等需要完整数据的场景
-   */
   getFileEntries: (fileId: string) => {
     const file = get().getFile(fileId);
-    if (!file) return [];
+    if (!file) return Promise.resolve([]);
 
-    // 从 DataManager 获取完整的 subtitle_entries
-    const task = dataManager.getTaskById(file.taskId);
-    return task?.subtitle_entries || [];
+    return (async () => {
+      const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+      const task = batchTasks?.tasks.find(t => t.taskId === file.taskId);
+      return task?.subtitle_entries || [];
+    })();
   },
 
-  /**
-   * 从 DataManager 更新文件的统计信息
-   * 用于翻译/转录完成后更新缓存的统计数据
-   */
   updateFileStatistics: (fileId: string) => {
     const file = get().getFile(fileId);
-    if (!file) return;
+    if (!file) return Promise.resolve();
 
-    // 从 DataManager 获取最新数据
-    const task = dataManager.getTaskById(file.taskId);
-    if (!task) return;
+    (async () => {
+      const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+      const task = batchTasks?.tasks.find(t => t.taskId === file.taskId);
+      if (!task) return;
 
-    // 重新计算统计信息（从 DataManager 的最新数据）
-    const entryCount = task.subtitle_entries?.length || 0;
-    const translatedCount = task.subtitle_entries?.filter(e => e.translatedText).length || 0;
+      const entryCount = task.subtitle_entries?.length || 0;
+      const translatedCount = task.subtitle_entries?.filter(e => e.translatedText).length || 0;
 
-    // 更新 Store 中的元数据，递增 entriesVersion 通知 UI entries 已变更
-    set((state) => ({
-      files: state.files.map(f =>
-        f.id === fileId
-          ? {
-              ...f,
-              entryCount,
-              translatedCount,
-              entriesVersion: (f.entriesVersion ?? 0) + 1
-            }
-          : f
-      )
-    }));
+      set((state) => ({
+        files: state.files.map(f =>
+          f.id === fileId
+            ? { ...f, entryCount, translatedCount, entriesVersion: (f.entriesVersion ?? 0) + 1 }
+            : f
+        )
+      }));
+    })();
   }
 }));
 
@@ -950,23 +909,14 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
 // 导出辅助 hooks
 // ============================================
 
-/**
- * 获取文件列表
- */
 export const useFiles = () => useSubtitleStore((state) => state.files);
 
-/**
- * 获取选中文件
- */
 export const useSelectedFile = () => {
   const selectedFileId = useSubtitleStore((state) => state.selectedFileId);
   const files = useSubtitleStore((state) => state.files);
   return selectedFileId ? files.find(f => f.id === selectedFileId) : null;
 };
 
-/**
- * 获取单个文件
- */
 export const useFile = (fileId: string) => {
   return useSubtitleStore((state) => state.files.find(f => f.id === fileId));
 };

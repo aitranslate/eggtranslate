@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useCallback, useMemo } from 'react';
 import { Term } from '@/types';
-import dataManager from '@/services/dataManager';
+import { useTermsStore } from '@/stores/termsStore';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 interface TermsState {
@@ -72,23 +72,23 @@ export const TermsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addTerm = useCallback(async (original: string, translation: string, notes?: string) => {
     const newTerm = { original, translation, notes };
     dispatch({ type: 'ADD_TERM', payload: newTerm });
-    await dataManager.addTerm(newTerm);
+    await useTermsStore.getState().addTerm(newTerm);
   }, []);
 
   const removeTerm = useCallback(async (index: number) => {
     dispatch({ type: 'REMOVE_TERM', payload: index });
-    await dataManager.removeTerm(index);
+    await useTermsStore.getState().deleteTerm(index);
   }, []);
 
   const updateTerm = useCallback(async (index: number, original: string, translation: string, notes?: string) => {
     const updatedTerm = { original, translation, notes };
     dispatch({ type: 'UPDATE_TERM', payload: { index, term: updatedTerm } });
-    await dataManager.updateTerm(index, original, translation);
+    await useTermsStore.getState().updateTerm(index, updatedTerm);
   }, []);
 
   const clearTerms = useCallback(async () => {
     dispatch({ type: 'CLEAR_TERMS' });
-    await dataManager.clearTerms();
+    await useTermsStore.getState().clearTerms();
   }, []);
 
   const importTerms = useCallback(async (termsText: string) => {
@@ -112,7 +112,7 @@ export const TermsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       dispatch({ type: 'SET_TERMS', payload: newTerms });
-      await dataManager.saveTerms(newTerms);
+      await useTermsStore.getState().saveTerms(newTerms);
     } catch (error) {
       handleError(error, {
         context: { operation: '导入术语' },
@@ -179,7 +179,8 @@ export const TermsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   React.useEffect(() => {
     const loadSavedData = async () => {
       try {
-        const savedTerms = dataManager.getTerms();
+        await useTermsStore.getState().loadTerms();
+        const savedTerms = useTermsStore.getState().terms;
         if (savedTerms && savedTerms.length > 0) {
           dispatch({ type: 'SET_TERMS', payload: savedTerms });
         }

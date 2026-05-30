@@ -4,7 +4,7 @@
  */
 
 import type { SubtitleEntry, TranslationStatus } from '@/types';
-import dataManager from '@/services/dataManager';
+import localforage from 'localforage';
 import toast from 'react-hot-toast';
 import { API_CONSTANTS } from '@/constants/api';
 import { toAppError } from '@/utils/errors';
@@ -186,7 +186,26 @@ export async function processBatch(
     }
 
     if (batchUpdates.length > 0) {
-      await dataManager.batchUpdateTaskSubtitleEntries(taskId, batchUpdates);
+      // Persist updates to localforage
+      const batchTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
+      if (batchTasks?.tasks) {
+        const taskIndex = batchTasks.tasks.findIndex((t: any) => t.taskId === taskId);
+        if (taskIndex !== -1) {
+          const task = batchTasks.tasks[taskIndex];
+          // Apply updates to entries
+          const updatedEntries = task.subtitle_entries.map((entry: SubtitleEntry) => {
+            const update = batchUpdates.find(u => u.id === entry.id);
+            return update ? {
+              ...entry,
+              text: update.text,
+              translatedText: update.translatedText ?? entry.translatedText,
+              translationStatus: update.status ?? entry.translationStatus
+            } : entry;
+          });
+          batchTasks.tasks[taskIndex].subtitle_entries = updatedEntries;
+          await localforage.setItem('batch_tasks', batchTasks);
+        }
+      }
 
       for (const update of batchUpdates) {
         await callbacks.updateEntry(
@@ -305,11 +324,11 @@ export async function saveTranslationHistory(
   try {
     await new Promise(resolve => setTimeout(resolve, API_CONSTANTS.HISTORY_SAVE_DELAY_MS));
 
-    const batchTasks = dataManager.getBatchTasks();
-    const currentTask = batchTasks.tasks.find(t => t.taskId === taskId);
+    const batchTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
+    const currentTask = batchTasks?.tasks?.find(t => t.taskId === taskId);
 
     if (currentTask) {
-      const finalTokens = currentTask.translation_progress?.tokens || tokensUsed || 0;
+      const finalTokens = currentTask.phases?.translating?.tokens || tokensUsed || 0;
       const actualCompleted =
         currentTask.subtitle_entries?.filter(
           (entry: SubtitleEntry) => entry.translationStatus === 'completed'
@@ -325,7 +344,12 @@ export async function saveTranslationHistory(
             taskId: currentTask.taskId,
             subtitle_entries: currentTask.subtitle_entries,
             subtitle_filename: currentTask.subtitle_filename,
-            translation_progress: currentTask.translation_progress
+            translation_progress: {
+              completed: actualCompleted,
+              total: currentTask.subtitle_entries.length,
+              tokens: finalTokens,
+              status: 'completed' as const
+            }
           }
         });
       }

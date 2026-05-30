@@ -38,3 +38,15 @@ export {
   useKeytermGroups,
   useUpdateKeytermGroups
 } from './transcriptionStore';
+
+// ============================================
+// TermsStore
+// ============================================
+
+export { useTermsStore } from './termsStore';
+
+// ============================================
+// HistoryStore
+// ============================================
+
+export { useHistoryStore } from './historyStore';

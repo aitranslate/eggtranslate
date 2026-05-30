@@ -19,7 +19,6 @@ import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
 import { useHistory } from '@/contexts/HistoryContext';
 import { SubtitleFile, SubtitleFileMetadata } from '@/types';
 import { useTerms } from '@/contexts/TermsContext';
-import dataManager from '@/services/dataManager';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 // 滚动动画观察器 Hook
@@ -68,19 +67,10 @@ export const MainApp: React.FC = () => {
   }, []);
 
   const handleCloseEditModal = useCallback(async () => {
-    try {
-      await dataManager.forcePersistAllData();
-      console.log('数据已持久化到localforage');
-    } catch (error) {
-      handleError(error, {
-        context: { operation: '数据持久化' },
-        showToast: false
-      });
-    } finally {
-      setIsEditingModalOpen(false);
-      setEditingFileId(null);
-    }
-  }, [handleError]);
+    // Stores auto-persist, no need for manual forcePersistAllData
+    setIsEditingModalOpen(false);
+    setEditingFileId(null);
+  }, []);
 
   return (
     <div className="apple-style min-h-screen w-full">

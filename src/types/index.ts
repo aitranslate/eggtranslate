@@ -71,13 +71,10 @@ export interface SingleTask {
   taskId: string;
   subtitle_entries: SubtitleEntry[];
   subtitle_filename: string;
-  translation_progress: {
-    completed: number;
-    total: number;
-    tokens: number;
-    status: 'idle' | 'translating' | 'completed';
-    current_index?: number;
-  };
+
+  // REPLACED: translation_progress → phases.translating
+  phases: FilePhases;  // all 4 phase states
+
   index: number; // 在列表中的位置
 
   // Legacy file size (for backward compatibility with SubtitleFile)
@@ -116,6 +113,33 @@ export interface TranslationHistoryEntry {
   totalTokens: number; // 总消耗Token数
   timestamp: number; // 完成时间戳
   current_translation_task: CurrentTranslationTask; // 保存完整任务数据
+}
+
+// ============================================
+// PhaseProgress: 新结构（current/total）
+// 用于 Task 3 迁移，暂与旧结构共存
+// ============================================
+
+// PhaseProgress: 阶段进度数据结构
+// 与 src/types/progress.ts 的 PhaseState 保持一致
+export interface PhaseProgress {
+  status: 'upcoming' | 'active' | 'completed' | 'failed';
+  progress: number;  // 0-100, -1 = indeterminate
+  tokens: number;
+}
+
+// ProgressPhase: 阶段名称类型
+export type ProgressPhase = 'converting' | 'transcribing' | 'translating' | 'splitting';
+
+// FilePhases: 工作流类型
+export type WorkflowType = 'transcribe' | 'translate' | 'full';
+
+export interface FilePhases {
+  workflow: WorkflowType;  // 工作流类型
+  converting: PhaseProgress;
+  transcribing: PhaseProgress;
+  translating: PhaseProgress;
+  splitting: PhaseProgress;
 }
 
 // 导出转录相关类型

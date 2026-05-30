@@ -5,8 +5,8 @@
 
 import JSZip from 'jszip';
 import { toSRT, toTXT, toBilingual, toSrcTrans } from '@/utils/srtParser';
-import type { SubtitleEntry } from '@/types';
-import dataManager from './dataManager';
+import type { SubtitleEntry, BatchTasks } from '@/types';
+import localforage from 'localforage';
 
 /**
  * 导出为 SRT 格式
@@ -46,8 +46,9 @@ export function exportBilingual(entries: SubtitleEntry[]): string {
  * @param useTranslation 是否使用翻译文本
  * @returns SRT 格式字符串
  */
-export function exportTaskSRT(taskId: string, useTranslation = true): string {
-  const task = dataManager.getTaskById(taskId);
+export async function exportTaskSRT(taskId: string, useTranslation = true): Promise<string> {
+  const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+  const task = batchTasks?.tasks.find(t => t.taskId === taskId);
   if (!task || !task.subtitle_entries) {
     return '';
   }
@@ -60,8 +61,9 @@ export function exportTaskSRT(taskId: string, useTranslation = true): string {
  * @param useTranslation 是否使用翻译文本
  * @returns TXT 格式字符串
  */
-export function exportTaskTXT(taskId: string, useTranslation = true): string {
-  const task = dataManager.getTaskById(taskId);
+export async function exportTaskTXT(taskId: string, useTranslation = true): Promise<string> {
+  const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+  const task = batchTasks?.tasks.find(t => t.taskId === taskId);
   if (!task || !task.subtitle_entries) {
     return '';
   }
@@ -73,8 +75,9 @@ export function exportTaskTXT(taskId: string, useTranslation = true): string {
  * @param taskId 任务 ID
  * @returns 双语格式字符串
  */
-export function exportTaskBilingual(taskId: string): string {
-  const task = dataManager.getTaskById(taskId);
+export async function exportTaskBilingual(taskId: string): Promise<string> {
+  const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+  const task = batchTasks?.tasks.find(t => t.taskId === taskId);
   if (!task || !task.subtitle_entries) {
     return '';
   }
@@ -102,7 +105,8 @@ export function getTranslationProgress(entries: SubtitleEntry[]): {
  * @returns ZIP 文件的 Blob
  */
 export async function exportTaskZip(taskId: string): Promise<Blob> {
-  const task = dataManager.getTaskById(taskId);
+  const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+  const task = batchTasks?.tasks.find(t => t.taskId === taskId);
   if (!task || !task.subtitle_entries) {
     throw new Error('任务数据不存在');
   }

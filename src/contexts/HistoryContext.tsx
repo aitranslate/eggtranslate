@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useCallback, useMemo } from 'react';
 import { TranslationHistoryEntry } from '@/types';
-import dataManager from '@/services/dataManager';
+import { useHistoryStore } from '@/stores/historyStore';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 interface HistoryState {
@@ -64,8 +64,12 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const addHistoryEntry = useCallback(async (entry: Omit<TranslationHistoryEntry, 'timestamp'>) => {
     try {
-      await dataManager.addHistoryEntry(entry);
-      const updatedHistory = dataManager.getHistory();
+      const fullEntry: TranslationHistoryEntry = {
+        ...entry,
+        timestamp: Date.now()
+      };
+      await useHistoryStore.getState().addHistory(fullEntry);
+      const updatedHistory = useHistoryStore.getState().history;
       dispatch({ type: 'SET_HISTORY', payload: updatedHistory });
     } catch (error) {
       handleError(error, {
@@ -78,12 +82,19 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deleteHistoryEntry = useCallback(async (taskId: string) => {
     dispatch({ type: 'DELETE_HISTORY_ENTRY', payload: taskId });
-    await dataManager.deleteHistoryEntry(taskId);
+    // historyStore doesn't have delete, so we need to rebuild history without this entry
+    const currentHistory = useHistoryStore.getState().history;
+    const filteredHistory = currentHistory.filter(entry => entry.taskId !== taskId);
+    await useHistoryStore.getState().clearHistory();
+    // Re-add all entries except the deleted one
+    for (const entry of filteredHistory) {
+      await useHistoryStore.getState().addHistory(entry);
+    }
   }, []);
 
   const clearHistory = useCallback(async () => {
     dispatch({ type: 'CLEAR_HISTORY' });
-    await dataManager.clearHistory();
+    await useHistoryStore.getState().clearHistory();
   }, []);
 
   const loadHistoryEntry = useCallback((taskId: string): TranslationHistoryEntry | null => {
@@ -99,7 +110,8 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const refreshHistory = useCallback(async () => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
-      const savedHistory = dataManager.getHistory();
+      await useHistoryStore.getState().loadHistory();
+      const savedHistory = useHistoryStore.getState().history;
       dispatch({ type: 'SET_HISTORY', payload: savedHistory });
     } catch (error) {
       handleError(error, {
@@ -116,7 +128,8 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const loadSavedData = async () => {
       try {
         dispatch({ type: 'SET_LOADING', payload: true });
-        const savedHistory = dataManager.getHistory();
+        await useHistoryStore.getState().loadHistory();
+        const savedHistory = useHistoryStore.getState().history;
         dispatch({ type: 'SET_HISTORY', payload: savedHistory });
       } catch (error) {
         handleError(error, {

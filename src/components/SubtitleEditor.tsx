@@ -1,11 +1,10 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Edit3, Save, X, Search, Filter, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { SubtitleFile, SubtitleEntry } from '@/types';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useSubtitleStore } from '@/stores/subtitleStore';
-import dataManager from '@/services/dataManager';
 
 interface SubtitleEditorProps {
   isOpen: boolean;
@@ -22,9 +21,21 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   // 订阅 entriesVersion：当 entries 数据变更时触发重新读取
   const entriesVersion = useSubtitleStore((state) => state.getFile(fileId)?.entriesVersion ?? 0);
   const getFileEntries = useSubtitleStore((state) => state.getFileEntries);
-  const entries = getFileEntries(fileId);
   const updateEntry = useSubtitleStore((state) => state.updateEntry);
   const deleteEntry = useSubtitleStore((state) => state.deleteEntry);
+
+  // Handle async entries loading
+  const [entries, setEntries] = useState<SubtitleEntry[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getFileEntries(fileId).then(loadedEntries => {
+      if (!cancelled) {
+        setEntries(loadedEntries);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [fileId, getFileEntries, entriesVersion]);
 
   const { handleError } = useErrorHandler();
 

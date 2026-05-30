@@ -3,13 +3,13 @@
  * 负责文件加载、更新、删除等CRUD操作
  */
 
-import { SubtitleEntry, FileType, SubtitleFileMetadata, SingleTask } from '@/types';
+import { SubtitleEntry, FileType, SubtitleFileMetadata, SingleTask, FilePhases, PhaseProgress, WorkflowType } from '@/types';
 import type { SubtitleFile } from '@/types/transcription';
-import type { FilePhases, PhaseState } from '@/types/progress';
 import { parseSRT } from '@/utils/srtParser';
 import { detectFileType } from '@/utils/fileFormat';
-import dataManager from '@/services/dataManager';
+import localforage from 'localforage';
 import { generateTaskId, generateStableFileId } from '@/utils/taskIdGenerator';
+import type { BatchTasks } from '@/types';
 
 // 重新导出类型，保持向后兼容
 export type { SubtitleFile };
@@ -18,16 +18,18 @@ export interface LoadFileOptions {
   existingFilesCount: number;
 }
 
-const UPCOMING: PhaseState = { status: 'upcoming', progress: 0, tokens: 0 };
-const COMPLETED: PhaseState = { status: 'completed', progress: 100, tokens: 0 };
+const UPCOMING: PhaseProgress = { status: 'upcoming', progress: 0, tokens: 0 };
+const COMPLETED: PhaseProgress = { status: 'completed', progress: 100, tokens: 0 };
 
 /**
  * 创建初始阶段状态
  * @param isSrt - 是否为 SRT 文件（无需转录）
  * @param isTranslated - 是否已完成翻译（从历史任务恢复时）
+ * @param workflow - 工作流类型
  */
-function createInitialPhases(isSrt: boolean, isTranslated: boolean): FilePhases {
+function createInitialPhases(isSrt: boolean, isTranslated: boolean, workflow: WorkflowType = 'transcribe'): FilePhases {
   return {
+    workflow,
     converting: { ...UPCOMING },
     transcribing: isSrt ? { ...COMPLETED } : { ...UPCOMING },
     translating: isTranslated ? { ...COMPLETED } : { ...UPCOMING },
@@ -37,7 +39,7 @@ function createInitialPhases(isSrt: boolean, isTranslated: boolean): FilePhases 
 
 /**
  * 从 File 对象加载字幕文件
- * Phase 3: 返回 SubtitleFileMetadata（元数据）
+ * 返回 SubtitleFileMetadata（元数据）
  *
  * 注意：音视频文件需要保留 fileRef，所以返回类型是联合
  */
@@ -46,21 +48,30 @@ export async function loadFromFile(
   options: LoadFileOptions
 ): Promise<SubtitleFileMetadata & { fileRef?: File }> {
   const fileType = detectFileType(file.name);
+  const index = options.existingFilesCount;
+  const taskId = generateTaskId();
 
   if (fileType === 'srt') {
     // SRT 文件：读取文本内容
     const content = await file.text();
     const entries = parseSRT(content);
 
-    // 创建批处理任务
-    const index = options.existingFilesCount;
-    const taskId = await dataManager.createNewTask(file.name, entries, index, {
+    // 直接写入 localforage
+    const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks') || { tasks: [] };
+    const newTask: SingleTask = {
+      taskId,
+      subtitle_entries: entries,
+      subtitle_filename: file.name,
+      phases: createInitialPhases(true, false),
+      index,
       fileType: 'srt',
-      fileSize: file.size
-    });
+      fileSize: file.size,
+    };
+    batchTasks.tasks.push(newTask);
+    await localforage.setItem('batch_tasks', batchTasks);
+
     const fileId = generateStableFileId(taskId);
 
-    // ✅ Phase 3: 返回元数据
     return {
       id: fileId,
       taskId,
@@ -75,20 +86,27 @@ export async function loadFromFile(
       entriesVersion: 0
     };
   } else {
-    // ✅ 音视频文件：也立即创建任务（空条目），转录完成后更新
-    const index = options.existingFilesCount;
-    const taskId = await dataManager.createNewTask(file.name, [], index, {
-      fileType: fileType,
-      fileSize: file.size
-    });
+    // 音视频文件：也立即创建任务（空条目），转录完成后更新
+    const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks') || { tasks: [] };
+    const newTask: SingleTask = {
+      taskId,
+      subtitle_entries: [],
+      subtitle_filename: file.name,
+      phases: createInitialPhases(false, false),
+      index,
+      fileType,
+      fileSize: file.size,
+    };
+    batchTasks.tasks.push(newTask);
+    await localforage.setItem('batch_tasks', batchTasks);
+
     const fileId = generateStableFileId(taskId);
 
-    // ✅ Phase 3: 返回元数据（fileRef 作为额外属性保留）
     return {
       id: fileId,
       taskId,
       name: file.name,
-      fileType: fileType,
+      fileType,
       fileSize: file.size,
       lastModified: file.lastModified,
       entryCount: 0,
@@ -102,59 +120,35 @@ export async function loadFromFile(
 }
 
 /**
- * 更新字幕条目（内存更新，不持久化）
- * @deprecated 直接使用 dataManager.updateTaskSubtitleEntryInMemory
- */
-export function updateEntryInMemory(
-  files: SubtitleFile[],
-  fileId: string,
-  entryId: number,
-  text: string,
-  translatedText?: string
-): SubtitleFile | null {
-  const file = files.find(f => f.id === fileId);
-  if (!file) return null;
-
-  // 更新内存中的数据
-  dataManager.updateTaskSubtitleEntryInMemory(
-    file.taskId,
-    entryId,
-    text,
-    translatedText
-  );
-
-  return file;
-}
-
-/**
  * 删除文件
- * Phase 3: 接收 SubtitleFileMetadata（但需要 taskId）
  */
 export async function removeFile(file: SubtitleFileMetadata | SubtitleFile): Promise<void> {
   const taskId = 'taskId' in file ? file.taskId : file.currentTaskId;
-  await dataManager.removeTask(taskId);
+  const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+  if (batchTasks) {
+    batchTasks.tasks = batchTasks.tasks.filter(t => t.taskId !== taskId);
+    await localforage.setItem('batch_tasks', batchTasks);
+  }
 }
 
 /**
- * 从 dataManager 恢复文件列表（返回元数据，不包含完整 entries）
- * Phase 3: 改为返回轻量级元数据数组
+ * 从 localforage 恢复文件列表（返回元数据，不包含完整 entries）
  */
 export async function restoreFiles(): Promise<SubtitleFileMetadata[]> {
-  const batchTasks = dataManager.getBatchTasks();
+  const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
   if (!batchTasks || batchTasks.tasks.length === 0) {
     return [];
   }
 
-  // ✅ Phase 3: 使用 convertTaskToMetadata 转换为轻量级元数据
   return batchTasks.tasks.map(task => convertTaskToMetadata(task));
 }
 
 /**
- * 从 dataManager 恢复完整文件列表（包含 entries）
+ * 从 localforage 恢复完整文件列表（包含 entries）
  * @deprecated 使用 restoreFiles() 获取元数据，通过 subtitleStore.getFileEntries() 获取完整数据
  */
 export async function restoreFilesWithEntries(): Promise<SubtitleFile[]> {
-  const batchTasks = dataManager.getBatchTasks();
+  const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
   if (!batchTasks || batchTasks.tasks.length === 0) {
     return [];
   }
@@ -184,30 +178,25 @@ export async function restoreFilesWithEntries(): Promise<SubtitleFile[]> {
  * 清空所有数据
  */
 export async function clearAllData(): Promise<void> {
-  await dataManager.clearBatchTasks();
+  await localforage.setItem('batch_tasks', { tasks: [] });
 }
 
 // ============================================
-// 辅助方法：Phase 1 - 元数据转换
+// 辅助方法：元数据转换
 // ============================================
 
 /**
- * 将 DataManager 的 SingleTask 转换为轻量级的 SubtitleFileMetadata
- * 用于 Phase 3：只存储元数据，不存储完整的 entries 数组
- *
- * @param task - DataManager 中的 SingleTask 对象
- * @returns 轻量级的 SubtitleFileMetadata
+ * 将 SingleTask 转换为轻量级的 SubtitleFileMetadata
+ * 只存储元数据，不存储完整的 entries 数组
  */
 export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
   const fileId = generateStableFileId(task.taskId);
   const entries = task.subtitle_entries || [];
 
-  // 计算统计信息
   const entryCount = entries.length;
   const translatedCount = entries.filter(e => e.translatedText).length;
   const isSrt = (task.fileType || 'srt') === 'srt';
-  // 用 tokens 判断翻译是否已发生（比 translatedCount 更可靠，刷新后 entries 可能为空）
-  const isTranslated = (task.translation_progress?.tokens || 0) > 0;
+  const isTranslated = (task.phases?.translating?.tokens || 0) > 0;
 
   return {
     id: fileId,
@@ -219,8 +208,8 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
     duration: task.duration,
     entryCount,
     translatedCount,
-    phases: createInitialPhases(isSrt, isTranslated),
-    tokensUsed: task.translation_progress?.tokens || 0,
+    phases: task.phases || createInitialPhases(isSrt, isTranslated),
+    tokensUsed: task.phases?.translating?.tokens || 0,
     entriesVersion: 0
   };
 }
