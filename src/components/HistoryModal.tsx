@@ -233,7 +233,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
                       {/* 导出按钮 */}
                       <button
                         onClick={() => onExport(entry)}
-                        disabled={!entry.current_translation_task?.subtitle_entries?.length}
+                        disabled={!entry.subtitle_entries?.length}
                         className="apple-button apple-button-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Download className="h-3 w-3" />

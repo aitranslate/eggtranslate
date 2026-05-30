@@ -69,17 +69,8 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
         filename: file.name,
         completedCount: actualCompleted,
         totalTokens: finalTokens,
-        current_translation_task: {
-          taskId: completedTask.taskId,
-          subtitle_entries: completedTask.subtitle_entries,
-          subtitle_filename: completedTask.subtitle_filename,
-          translation_progress: {
-            completed: actualCompleted,
-            total: completedTask.subtitle_entries.length,
-            tokens: finalTokens,
-            status: 'completed' as const
-          }
-        }
+        phases: completedTask.phases,
+        subtitle_entries: completedTask.subtitle_entries
       });
     }
     // Note: Data is already persisted by the stores, no need for forcePersistAllData
@@ -132,8 +123,10 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     if (files.length === 0 || isTranslatingGloballyState) return;
 
     const filesToProcess = files.filter(file => {
+      // total === 0 表示还没有加载字幕条目，需要处理
+      // completed < total 表示进度未完成，需要处理
       const progress = getTranslationProgress(file.id);
-      return progress.completed < progress.total;
+      return progress.total === 0 || progress.completed < progress.total;
     });
 
     if (filesToProcess.length === 0) {

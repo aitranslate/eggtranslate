@@ -3,6 +3,7 @@ import { Check, X } from 'lucide-react';
 import { useMemo } from 'react';
 import { useSubtitleStore } from '@/stores/subtitleStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
+import { shouldLineBeActive } from '@/utils/badgeHelper';
 import type { ProgressPhase, PhaseProgress, FilePhases } from '@/types';
 
 interface StepperProgressProps {
@@ -63,11 +64,12 @@ const getPercentage = (phase: PhaseProgress): number => {
 
 /** Connecting line between two phase nodes */
 const ConnectingLine: React.FC<{
-  isCompleted: boolean;
-  isActive: boolean;
-  progress: number;
-}> = ({ isCompleted, isActive, progress }) => {
-  const clampedProgress = Math.max(0, Math.min(100, progress));
+  prevStatus: string;
+  nextStatus: string;
+}> = ({ prevStatus, nextStatus }) => {
+  const isActive = shouldLineBeActive(prevStatus, nextStatus);
+  const isCompleted = prevStatus === 'completed' && nextStatus === 'completed';
+
   return (
     <div
       style={{
@@ -98,7 +100,7 @@ const ConnectingLine: React.FC<{
           }}
           initial={{ width: '0%' }}
           animate={{
-            width: isCompleted ? '100%' : isActive ? `${clampedProgress}%` : '0%',
+            width: isActive ? '100%' : '0%',
           }}
           transition={{ duration: 0.6, ease: 'easeOut' }}
         />
@@ -111,8 +113,8 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId }) => {
   const file = useSubtitleStore(state => state.files.find(f => f.id === fileId));
   const aiSegmentationEnabled = useTranscriptionStore(state => state.aiSegmentationEnabled);
 
-  // 决定显示哪些阶段节点（SRT 跳过转录阶段）
-  const visiblePhases = useMemo(() => {
+  // 决定显示哪些阶段节点（根据文件类型过滤）
+  const displayPhases = useMemo(() => {
     if (file?.fileType === 'srt') {
       return ALL_PHASES.filter(p => p !== 'converting' && p !== 'transcribing');
     }
@@ -120,12 +122,12 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId }) => {
   }, [file?.fileType]);
 
   // 根据 aiSegmentationEnabled 过滤 splitting
-  const displayPhases = useMemo(() => {
+  const visiblePhases = useMemo(() => {
     if (!aiSegmentationEnabled) {
-      return visiblePhases.filter(p => p !== 'splitting');
+      return displayPhases.filter(p => p !== 'splitting');
     }
-    return visiblePhases;
-  }, [visiblePhases, aiSegmentationEnabled]);
+    return displayPhases;
+  }, [displayPhases, aiSegmentationEnabled]);
 
   if (!file) return null;
 
@@ -248,9 +250,8 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId }) => {
               {/* Connecting line (between nodes) */}
               {!isLast && (
                 <ConnectingLine
-                  isCompleted={isCompleted}
-                  isActive={isActive}
-                  progress={percentage}
+                  prevStatus={phaseState.status}
+                  nextStatus={displayPhases[i + 1] ? phases[displayPhases[i + 1]].status : 'upcoming'}
                 />
               )}
             </div>

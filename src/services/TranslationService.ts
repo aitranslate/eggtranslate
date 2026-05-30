@@ -195,9 +195,9 @@ class TranslationService {
           status: phase === 'completed' ? 'completed' : 'translating',
         };
 
-        // 只在完成时设置 tokens
-        if (phase === 'completed') {
-          updateObj.tokens = currentTokens;
+        // 累加 tokens（newTokens 来自翻译批次增量）
+        if (newTokens !== undefined && newTokens > 0) {
+          updateObj.tokens = currentTokens + newTokens;
         }
 
         // Update task in localforage

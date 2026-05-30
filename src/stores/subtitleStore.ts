@@ -352,6 +352,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       // 直接写入 localforage
       const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks') || { tasks: [] };
       const taskIndex = batchTasks.tasks.findIndex(t => t.taskId === file.taskId);
+      subtitleStore.ts:760 [subtitleStore] LLM 断句对齐完成
       if (taskIndex !== -1) {
         batchTasks.tasks[taskIndex] = {
           ...batchTasks.tasks[taskIndex],
@@ -370,6 +371,13 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
 
       get().updatePhase(fileId, 'converting', { status: 'completed', progress: 100 });
       get().updatePhase(fileId, 'transcribing', { status: 'completed', progress: 100 });
+
+      // 更新 file.duration
+      set((state) => ({
+        files: state.files.map(f =>
+          f.id === fileId ? { ...f, duration: result.duration } : f
+        )
+      }));
 
       toast.success(`转录完成！生成 ${result.entries.length} 条字幕`);
     } catch (error) {
@@ -484,10 +492,6 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
           updateProgress: async (current: number, total: number, phase: 'direct' | 'splitting' | 'completed', status: string, taskId: string, newTokens?: number) => {
             await translationConfigStore.updateProgress(current, total, phase, status, taskId, newTokens);
 
-            if (newTokens !== undefined && newTokens > 0) {
-              get().addTokens(fileId, newTokens);
-            }
-
             if (phase === 'direct' && total > 0) {
               const percent = Math.round((current / total) * 100);
               get().updatePhase(fileId, 'translating', { progress: percent });
@@ -540,6 +544,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       }
 
       get().updateFileStatistics(fileId);
+      get().setTokens(fileId, useTranslationConfigStore.getState().tokensUsed || 0);
       get().updatePhase(fileId, 'translating', { status: 'completed', progress: 100 });
 
       const aiSegmentationEnabled = useTranscriptionStore.getState().aiSegmentationEnabled;
@@ -591,7 +596,6 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         get().updatePhase(fileId, 'splitting', { status: 'active', progress: 0, tokens: 0 });
         await translationConfigStore.updateProgress(0, postSplitEntries.length, 'splitting', '断句对齐中...', file.taskId);
 
-        let lastSplitTokens = 0;
         const splitResults = await llmSourceSplit({
           entries: postSplitEntries,
           sourceLang: config.sourceLanguage,
@@ -604,11 +608,6 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
             const percent = total > 0 ? Math.round((current / total) * 50) : 0;
             get().updatePhase(fileId, 'splitting', { progress: percent });
             translationConfigStore.updateProgress(current, total, 'splitting', `断句拆分中 ${current}/${total}`, file.taskId).catch(err => console.warn('[subtitleStore] updateProgress failed:', err));
-            const delta = tokensUsed - lastSplitTokens;
-            lastSplitTokens = tokensUsed;
-            if (delta > 0) {
-              get().addTokens(fileId, delta);
-            }
           },
         });
 
@@ -651,10 +650,6 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
                     theme: '',
                     terminology: [],
                   });
-
-                  if (alignTokens > 0) {
-                    get().addTokens(fileId, alignTokens);
-                  }
 
                   if (alignments.length === split.sourceParts.length) {
                     return { entryId: entry.id, entry, sourceParts: split.sourceParts, alignments, tokensUsed: alignTokens };

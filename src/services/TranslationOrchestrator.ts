@@ -340,17 +340,8 @@ export async function saveTranslationHistory(
           filename,
           completedCount: actualCompleted,
           totalTokens: finalTokens,
-          current_translation_task: {
-            taskId: currentTask.taskId,
-            subtitle_entries: currentTask.subtitle_entries,
-            subtitle_filename: currentTask.subtitle_filename,
-            translation_progress: {
-              completed: actualCompleted,
-              total: currentTask.subtitle_entries.length,
-              tokens: finalTokens,
-              status: 'completed' as const
-            }
-          }
+          phases: currentTask.phases,
+          subtitle_entries: currentTask.subtitle_entries
         });
       }
     }

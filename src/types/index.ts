@@ -91,28 +91,16 @@ export interface BatchTasks {
   tasks: SingleTask[];
 }
 
-// 当前翻译任务状态类型
-export interface CurrentTranslationTask {
-  taskId: string;
-  subtitle_entries: SubtitleEntry[];
-  subtitle_filename: string;
-  translation_progress: {
-    completed: number;
-    total: number;
-    tokens: number;
-    status: 'idle' | 'translating' | 'completed';
-    current_index?: number;
-  };
-}
-
-// 增强的翻译历史记录类型
+// 翻译历史记录
 export interface TranslationHistoryEntry {
-  taskId: string; // 唯一标识符
+  taskId: string;
   filename: string;
-  completedCount: number; // 完成的字幕数
-  totalTokens: number; // 总消耗Token数
-  timestamp: number; // 完成时间戳
-  current_translation_task: CurrentTranslationTask; // 保存完整任务数据
+  completedCount: number;
+  totalTokens: number;
+  timestamp: number;
+  // phases 直接内联，避免冗余嵌套
+  phases: FilePhases;
+  subtitle_entries: SubtitleEntry[];
 }
 
 // ============================================
@@ -130,6 +118,9 @@ export interface PhaseProgress {
 
 // ProgressPhase: 阶段名称类型
 export type ProgressPhase = 'converting' | 'transcribing' | 'translating' | 'splitting';
+
+// ALL_PHASES: 所有阶段列表
+export const ALL_PHASES: ProgressPhase[] = ['converting', 'transcribing', 'translating', 'splitting'];
 
 // FilePhases: 工作流类型
 export type WorkflowType = 'transcribe' | 'translate' | 'full';

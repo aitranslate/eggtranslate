@@ -62,7 +62,7 @@ export async function loadFromFile(
       taskId,
       subtitle_entries: entries,
       subtitle_filename: file.name,
-      phases: createInitialPhases(true, false),
+      phases: createInitialPhases(true, false, 'translate'),
       index,
       fileType: 'srt',
       fileSize: file.size,
@@ -81,7 +81,7 @@ export async function loadFromFile(
       lastModified: file.lastModified,
       entryCount: entries.length,
       translatedCount: entries.filter(e => e.translatedText).length,
-      phases: createInitialPhases(true, false),
+      phases: createInitialPhases(true, false, 'translate'),
       tokensUsed: 0,
       entriesVersion: 0
     };

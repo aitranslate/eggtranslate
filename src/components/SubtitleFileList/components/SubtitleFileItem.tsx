@@ -1,6 +1,8 @@
 import { useCallback, useMemo, memo } from 'react';
 import { motion } from 'framer-motion';
-import { SubtitleFileMetadata } from '@/types';
+import { SubtitleFileMetadata, ALL_PHASES, type ProgressPhase } from '@/types';
+import { useTranscriptionStore } from '@/stores/transcriptionStore';
+import { getCardBadge } from '@/utils/badgeHelper';
 import { FileIcon } from './FileIcon';
 import { StepperProgress } from './StepperProgress';
 import { FileActionButtons } from './FileActionButtons';
@@ -35,59 +37,30 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
     file.phases.transcribing.status === 'active';
   const isBusy = isTranscribing || (currentTranslatingFileId === file.id);
 
-  // Derive card-level status from phases
-  const hasFailedPhase = useMemo(() =>
-    file.phases.converting.status === 'failed' ||
-    file.phases.transcribing.status === 'failed' ||
-    file.phases.translating.status === 'failed' ||
-    file.phases.splitting.status === 'failed',
-    [file.phases]
-  );
+  // 获取 aiSegmentationEnabled 配置
+  const aiSegmentationEnabled = useTranscriptionStore(state => state.aiSegmentationEnabled);
 
-  const cardStatus = useMemo(() => {
-    if (hasFailedPhase) return 'failed';
-    if (isBusy) return 'active';
-
-    const { workflow, translating, splitting, transcribing } = file.phases;
-
-    // 仅转录工作流：转录完成就是全部完成
-    if (workflow === 'transcribe' && transcribing.status === 'completed') {
-      return 'completed';
+  // 计算 displayPhases（与 StepperProgress 一致）
+  const displayPhases = useMemo(() => {
+    const basePhases = file.fileType === 'srt'
+      ? ALL_PHASES.filter(p => p !== 'converting' && p !== 'transcribing')
+      : ALL_PHASES;
+    if (file.fileType === 'srt') {
+      return aiSegmentationEnabled ? basePhases : basePhases.filter(p => p !== 'splitting');
     }
+    return aiSegmentationEnabled ? basePhases : basePhases.filter(p => p !== 'splitting');
+  }, [file.fileType, aiSegmentationEnabled]);
 
-    // 仅翻译工作流（SRT 文件）：翻译完成就是全部完成
-    if (workflow === 'translate' && translating.status === 'completed') {
-      return 'completed';
-    }
-
-    // 全流程工作流
-    if (workflow === 'full') {
-      if (translating.status === 'active' || splitting.status === 'active') {
-        return 'active';
-      }
-      if (transcribing.status === 'completed' && translating.status === 'completed' && splitting.status === 'completed') {
-        return 'completed';
-      }
-    }
-
-    return 'idle';
-  }, [isBusy, hasFailedPhase, file.phases]);
-
-  const badgeClass = cardStatus === 'active'
-    ? 'bg-blue-50 text-blue-600'
-    : cardStatus === 'completed'
+  // 使用 getCardBadge 计算 badge 信息
+  const badgeInfo = getCardBadge(file.phases, displayPhases);
+  const badgeClass = badgeInfo.color === 'green'
     ? 'bg-green-50 text-green-600'
-    : cardStatus === 'failed'
+    : badgeInfo.color === 'blue'
+    ? 'bg-blue-50 text-blue-600'
+    : badgeInfo.color === 'red'
     ? 'bg-red-50 text-red-600'
     : 'border border-gray-200 text-gray-500 bg-transparent';
-
-  const badgeText = cardStatus === 'active'
-    ? '处理中'
-    : cardStatus === 'completed'
-    ? '已完成'
-    : cardStatus === 'failed'
-    ? '失败'
-    : '未开始';
+  const badgeText = badgeInfo.text;
 
   // Token count
   const tokens = file.tokensUsed || 0;
