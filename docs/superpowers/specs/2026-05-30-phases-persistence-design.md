@@ -54,17 +54,8 @@ export interface SingleTask {
   subtitle_entries: SubtitleEntry[];
   subtitle_filename: string;
   
-  // 新增：四个阶段进度，统一结构，直接持久化
+  // 四个阶段进度，统一结构，直接持久化
   phases: FilePhases;
-  
-  // 移除：translation_progress（被 phases.translating 替代）
-  // 旧字段暂时保留，完成后移除
-  translation_progress?: {
-    completed: number;
-    total: number;
-    tokens: number;
-    status: string;
-  };
   
   // 其他元数据
   fileType?: FileType;
@@ -211,41 +202,37 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
 }
 ```
 
-**异常情况：** 如果 `phases.translating.status === 'active'` 但 `current >= total`，说明上次被中断但实际已完成，修正为 `completed`。
-
 ---
 
 ## 文件修改清单
 
 ### 1. `src/types/index.ts`
-- `PhaseProgress` 新增 `current/total` 字段（替代旧 ProgressPhase）
-- `FilePhases` 用 `PhaseProgress` 替代旧的 `PhaseState`
-- `SingleTask` 新增 `phases: FilePhases`
+- 删除 `translation_progress` 字段（被 `phases.translating` 替代）
+- `PhaseProgress` / `FilePhases` 合并到此文件
 
-### 2. `src/types/progress.ts`
-- 旧 `PhaseState` 类型标记为 `@deprecated`，保留用于向后兼容
-- 后续统一迁移到 `PhaseProgress`
+### 2. `src/types/progress.ts` → 删除
+- 所有类型合并到 `src/types/index.ts`
 
 ### 3. `src/services/dataManager/modules/PhasePersistence.ts`（新增）
 - `markDirty(taskId, phase)` — 标记脏
 - `flushTask(taskId)` — 批量写入
 - `flushAll()` — 应用关闭时调用
 
-### 3. `src/services/dataManager/modules/TaskManager.ts`
+### 4. `src/services/dataManager/modules/TaskManager.ts`
 - `updateTaskPhases(taskId, phases)` — 更新指定阶段到 localforage
 - `createNewTask` 时初始化 `phases`
 
-### 4. `src/stores/subtitleStore.ts`
+### 5. `src/stores/subtitleStore.ts`
 - `updatePhase` 改为更新 Zustand + 标记 dirty（不直接写 localforage）
 - `startTranscription`/`startTranslation` 流程不变（只在内存更新 phases）
 - 新增 `flushPhasesToPersistence()` — 应用关闭时调用
 
-### 5. `src/components/SubtitleFileList/components/StepperProgress.tsx`
+### 6. `src/components/SubtitleFileList/components/StepperProgress.tsx`
 - 进度计算：`progress = phaseState.total > 0 ? Math.round((phaseState.current / phaseState.total) * 100) : 0`
 - 不确定进度（total=0 或 -1）时显示 spinner
 - `isIndeterminate` 改为：`phaseState.total === 0 && phaseState.status === 'active'`
 
-### 6. `src/components/SubtitleFileList/components/SubtitleFileItem.tsx`
+### 7. `src/components/SubtitleFileList/components/SubtitleFileItem.tsx`
 - `cardStatus` 逻辑不变（依赖 `phases` 状态）
 
 ---
@@ -263,11 +250,8 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
 
 ## 迁移计划
 
-**阶段一（本次实施）：**
-- `SingleTask` 新增 `phases` 字段
-- DataManager 增加 `markDirty`/`flushTask`
-- `convertTaskToMetadata` 从 `phases` 恢复
+本地开发阶段，直接迁移，不保留旧字段。
 
-**阶段二（后续）：**
-- 移除 `translation_progress` 字段（被 `phases.translating` 替代）
-- 移除 `SubtitleFileMetadata` 中冗余的 `entryCount`/`translatedCount`（可从 `phases` 推导）
+- `translation_progress` 字段直接移除（被 `phases.translating` 替代）
+- 旧 `PhaseState`/`PhaseStatus` 类型删除
+- `convertTaskToMetadata` 直接从 `task.phases` 恢复，无 fallback 逻辑
