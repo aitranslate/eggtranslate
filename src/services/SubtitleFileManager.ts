@@ -206,7 +206,8 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
   const entryCount = entries.length;
   const translatedCount = entries.filter(e => e.translatedText).length;
   const isSrt = (task.fileType || 'srt') === 'srt';
-  const isTranslated = entryCount > 0 && translatedCount >= entryCount;
+  // 用 tokens 判断翻译是否已发生（比 translatedCount 更可靠，刷新后 entries 可能为空）
+  const isTranslated = (task.translation_progress?.tokens || 0) > 0;
 
   return {
     id: fileId,
