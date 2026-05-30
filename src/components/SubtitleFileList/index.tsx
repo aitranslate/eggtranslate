@@ -13,6 +13,7 @@ import { API_CONSTANTS } from '@/constants/api';
 import { SubtitleFileItem } from './components/SubtitleFileItem';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { SettingsModal } from '../SettingsModal';
+import { useTranslationPhase, useTranslationStatus } from '@/stores/translationConfigStore';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 interface SubtitleFileListProps {
@@ -34,7 +35,8 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   const { getRelevantTerms } = useTerms();
   const { addHistoryEntry } = useHistory();
   const { handleError } = useErrorHandler();
-  const startTranslationFromStore = useSubtitleStore((state) => state.startTranslation);
+  const translationPhase = useTranslationPhase();
+  const translationStatus = useTranslationStatus();
 
   const [isTranslatingGloballyState, setIsTranslatingGlobally] = useState(false);
   const [currentTranslatingFileId, setCurrentTranslatingFileId] = useState<string | null>(null);
@@ -46,6 +48,63 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   const handleTranscribe = useCallback(async (fileId: string) => {
     await startTranscription(fileId);
   }, [startTranscription]);
+
+  const executeTranslation = useCallback(async (file: SubtitleFileMetadata) => {
+    await startTranslation(file.id);
+
+    const batchTasks = dataManager.getBatchTasks();
+    const completedTask = batchTasks.tasks.find(t => t.taskId === file.taskId);
+
+    if (!completedTask) {
+      console.log('[SubtitleFileList] 文件已删除，跳过完成提示');
+      return;
+    }
+
+    const finalTokens = completedTask.translation_progress?.tokens || 0;
+    const actualCompleted = completedTask.subtitle_entries?.filter((entry) =>
+      entry.translatedText && entry.translatedText.trim() !== ''
+    ).length || 0;
+
+    if (actualCompleted > 0) {
+      await addHistoryEntry({
+        taskId: file.taskId,
+        filename: file.name,
+        completedCount: actualCompleted,
+        totalTokens: finalTokens,
+        current_translation_task: {
+          taskId: completedTask.taskId,
+          subtitle_entries: completedTask.subtitle_entries,
+          subtitle_filename: completedTask.subtitle_filename,
+          translation_progress: completedTask.translation_progress
+        }
+      });
+    }
+
+    setTimeout(async () => {
+      try {
+        await dataManager.forcePersistAllData();
+      } catch (error) {
+        handleError(error, {
+          context: { operation: '翻译完成后持久化数据' },
+          showToast: false
+        });
+      }
+    }, 200);
+  }, [startTranslation, addHistoryEntry, handleError]);
+
+  const handleStartTranslation = useCallback(async (file: SubtitleFileMetadata) => {
+    setCurrentTranslatingFileId(file.id);
+
+    try {
+      await executeTranslation(file);
+    } catch (error) {
+      handleError(error, {
+        context: { operation: '翻译', fileName: file.name }
+      });
+    } finally {
+      setCurrentTranslatingFileId(null);
+    }
+  }, [executeTranslation, handleError]);
 
   const handleTranscribeAndTranslate = useCallback(async (file: SubtitleFileMetadata) => {
     setCurrentTranslatingFileId(file.id);
@@ -61,48 +120,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
         }
       }
 
-      await startTranslationFromStore(file.id);
-
-      const batchTasks = dataManager.getBatchTasks();
-      const completedTask = batchTasks.tasks.find(t => t.taskId === file.taskId);
-
-      if (!completedTask) {
-        console.log('[SubtitleFileList] 文件已删除，跳过完成提示');
-        return;
-      }
-
-      const finalTokens = completedTask.translation_progress?.tokens || 0;
-      const actualCompleted = completedTask.subtitle_entries?.filter((entry) =>
-        entry.translatedText && entry.translatedText.trim() !== ''
-      ).length || 0;
-
-      if (actualCompleted > 0) {
-        await addHistoryEntry({
-          taskId: file.taskId,
-          filename: file.name,
-          completedCount: actualCompleted,
-          totalTokens: finalTokens,
-          current_translation_task: {
-            taskId: completedTask.taskId,
-            subtitle_entries: completedTask.subtitle_entries,
-            subtitle_filename: completedTask.subtitle_filename,
-            translation_progress: completedTask.translation_progress
-          }
-        });
-      }
-
-      setTimeout(async () => {
-        try {
-          await dataManager.forcePersistAllData();
-        } catch (error) {
-          handleError(error, {
-            context: { operation: '转译完成后持久化数据' },
-            showToast: false
-          });
-        }
-      }, 200);
-
-      toast.success(`完成转译文件: ${file.name}`);
+      await executeTranslation(file);
     } catch (error) {
       handleError(error, {
         context: { operation: '转译', fileName: file.name }
@@ -110,66 +128,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     } finally {
       setCurrentTranslatingFileId(null);
     }
-  }, [startTranscription, startTranslationFromStore, addHistoryEntry, handleError]);
-
-  const handleSettingsClose = useCallback(() => {
-    setIsSettingsOpen(false);
-  }, []);
-
-  const handleStartTranslation = useCallback(async (file: SubtitleFileMetadata) => {
-    setCurrentTranslatingFileId(file.id);
-
-    try {
-      await startTranslationFromStore(file.id);
-
-      const batchTasks = dataManager.getBatchTasks();
-      const completedTask = batchTasks.tasks.find(t => t.taskId === file.taskId);
-
-      if (!completedTask) {
-        console.log('[SubtitleFileList] 文件已删除，跳过完成提示');
-        return;
-      }
-
-      const finalTokens = completedTask.translation_progress?.tokens || 0;
-      const actualCompleted = completedTask.subtitle_entries?.filter((entry) =>
-        entry.translatedText && entry.translatedText.trim() !== ''
-      ).length || 0;
-
-      if (actualCompleted > 0) {
-        await addHistoryEntry({
-          taskId: file.taskId,
-          filename: file.name,
-          completedCount: actualCompleted,
-          totalTokens: finalTokens,
-          current_translation_task: {
-            taskId: completedTask.taskId,
-            subtitle_entries: completedTask.subtitle_entries,
-            subtitle_filename: completedTask.subtitle_filename,
-            translation_progress: completedTask.translation_progress
-          }
-        });
-      }
-
-      setTimeout(async () => {
-        try {
-          await dataManager.forcePersistAllData();
-        } catch (error) {
-          handleError(error, {
-            context: { operation: '翻译完成后持久化数据' },
-            showToast: false
-          });
-        }
-      }, 200);
-
-      toast.success(`完成翻译文件: ${file.name}`);
-    } catch (error) {
-      handleError(error, {
-        context: { operation: '翻译', fileName: file.name }
-      });
-    } finally {
-      setCurrentTranslatingFileId(null);
-    }
-  }, [startTranslationFromStore, addHistoryEntry, handleError]);
+  }, [startTranscription, executeTranslation, handleError]);
 
   const handleStartAllTranslation = useCallback(async () => {
     if (files.length === 0 || isTranslatingGloballyState) return;
@@ -204,6 +163,10 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
 
     setIsTranslatingGlobally(false);
   }, [files, isTranslatingGloballyState, getTranslationProgress, handleTranscribeAndTranslate, handleStartTranslation, handleError]);
+
+  const handleSettingsClose = useCallback(() => {
+    setIsSettingsOpen(false);
+  }, []);
 
   const handleClearAll = useCallback(async () => {
     if (files.length === 0) return;
@@ -307,6 +270,8 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                   onTranscribe={handleTranscribe}
                   isTranslatingGlobally={isTranslatingGloballyState}
                   currentTranslatingFileId={currentTranslatingFileId}
+                  translationPhase={translationPhase}
+                  translationStatus={translationStatus}
                 />
               ))}
             </AnimatePresence>

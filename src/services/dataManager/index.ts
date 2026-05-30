@@ -152,12 +152,16 @@ class DataManager {
     return this.taskManager.createNewTask(filename, entries, index, () => this.generateTaskId(), options);
   }
 
-  async updateTaskSubtitleEntry(taskId: string, entryId: number, text: string, translatedText?: string, status?: 'pending' | 'completed'): Promise<void> {
-    return this.taskManager.updateTaskSubtitleEntry(taskId, entryId, text, translatedText, status);
+  async updateTaskSubtitleEntry(taskId: string, entryId: number, text: string, translatedText?: string, status?: 'pending' | 'completed', startTime?: string, endTime?: string): Promise<void> {
+    return this.taskManager.updateTaskSubtitleEntry(taskId, entryId, text, translatedText, status, startTime, endTime);
   }
 
-  updateTaskSubtitleEntryInMemory(taskId: string, entryId: number, text: string, translatedText?: string, status?: 'pending' | 'completed'): void {
-    return this.taskManager.updateTaskSubtitleEntryInMemory(taskId, entryId, text, translatedText, status);
+  updateTaskSubtitleEntryInMemory(taskId: string, entryId: number, text: string, translatedText?: string, status?: 'pending' | 'completed', startTime?: string, endTime?: string, words?: SubtitleEntry['words']): void {
+    return this.taskManager.updateTaskSubtitleEntryInMemory(taskId, entryId, text, translatedText, status, startTime, endTime, words);
+  }
+
+  addSubtitleEntryAfterInMemory(taskId: string, afterEntryId: number, newEntry: SubtitleEntry): void {
+    return this.taskManager.addSubtitleEntryAfterInMemory(taskId, afterEntryId, newEntry);
   }
 
   deleteTaskSubtitleEntryInMemory(taskId: string, entryId: number): void {

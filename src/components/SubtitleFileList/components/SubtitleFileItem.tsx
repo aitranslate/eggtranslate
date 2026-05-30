@@ -8,7 +8,6 @@ import { TranslationProgress } from './TranslationProgress';
 import { FileActionButtons } from './FileActionButtons';
 import { formatFileSize } from '../utils/fileHelpers';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-
 interface SubtitleFileItemProps {
   file: SubtitleFileMetadata;
   index: number;
@@ -20,6 +19,8 @@ interface SubtitleFileItemProps {
   onTranscribe: (fileId: string) => Promise<void>;
   isTranslatingGlobally: boolean;
   currentTranslatingFileId: string | null;
+  translationPhase: 'direct' | 'splitting' | 'completed';
+  translationStatus: string;
 }
 
 export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
@@ -32,7 +33,9 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   onTranscribeAndTranslate,
   onTranscribe,
   isTranslatingGlobally,
-  currentTranslatingFileId
+  currentTranslatingFileId,
+  translationPhase,
+  translationStatus
 }) => {
   const isTranscribing = useMemo(() =>
     file.transcriptionStatus === 'converting' ||
@@ -96,8 +99,12 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
 
         <div className={`px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
           file.fileType === 'srt' ? (
-            translationStats.percentage === 100
+            translationStats.percentage === 100 && (file.splitProgress ?? 100) === 100
               ? 'bg-green-100 text-green-700'
+              : isTranslating && translationPhase === 'splitting'
+              ? 'bg-cyan-100 text-cyan-700'
+              : isTranslating && translationStats.percentage === 100
+              ? 'bg-purple-100 text-purple-700'
               : isTranslating && translationStats.percentage > 0
               ? 'bg-blue-100 text-blue-700'
               : translationStats.percentage > 0
@@ -109,8 +116,12 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
                 : file.transcriptionStatus === 'transcribing'
                 ? 'bg-blue-100 text-blue-700'
                 : file.transcriptionStatus === 'completed' ? (
-                  translationStats.percentage === 100
+                  translationStats.percentage === 100 && (file.splitProgress ?? 100) === 100
                     ? 'bg-green-100 text-green-700'
+                    : isTranslating && translationPhase === 'splitting'
+                    ? 'bg-cyan-100 text-cyan-700'
+                    : isTranslating && translationStats.percentage === 100
+                    ? 'bg-purple-100 text-purple-700'
                     : isTranslating && translationStats.percentage > 0
                     ? 'bg-blue-100 text-blue-700'
                     : translationStats.percentage > 0
@@ -124,12 +135,16 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
             )
         }`}>
           {file.fileType === 'srt' ? (
-            translationStats.percentage === 100 ? '已完成' :
+            translationStats.percentage === 100 && (file.splitProgress ?? 100) === 100 ? '已完成' :
+            isTranslating && translationPhase === 'splitting' ? '断句中' :
+            isTranslating && translationStats.percentage === 100 ? '翻译完成' :
             isTranslating && translationStats.percentage > 0 ? '翻译中' :
             translationStats.percentage > 0 ? '翻译失败' : '等待翻译'
           ) : (
             file.transcriptionStatus === 'completed' ? (
-              translationStats.percentage === 100 ? '已完成' :
+              translationStats.percentage === 100 && (file.splitProgress ?? 100) === 100 ? '已完成' :
+              isTranslating && translationPhase === 'splitting' ? '断句中' :
+              isTranslating && translationStats.percentage === 100 ? '翻译完成' :
               isTranslating && translationStats.percentage > 0 ? '翻译中' :
               translationStats.percentage > 0 ? '翻译失败' : '转录完成'
             ) :
@@ -145,7 +160,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
       <div className="mb-4">
         <div className="flex items-center gap-4">
           {/* 进度显示 */}
-          <TranslationProgress file={file} isTranslating={isTranslating} translationStats={translationStats} />
+          <TranslationProgress file={file} isTranslating={isTranslating} translationStats={translationStats} translationPhase={translationPhase} translationStatus={translationStatus} />
 
           {/* 操作按钮 */}
           <FileActionButtons
@@ -197,6 +212,22 @@ export const SubtitleFileItemMemo = memo(SubtitleFileItem, (prevProps, nextProps
   const prevTranslated = prevProps.file.translatedCount ?? 0;
   const nextTranslated = nextProps.file.translatedCount ?? 0;
   if (prevTranslated !== nextTranslated) {
+    return false;
+  }
+
+  if ((prevProps.file.splitProgress ?? 100) !== (nextProps.file.splitProgress ?? 100)) {
+    return false;
+  }
+
+  if ((prevProps.file.tokensUsed || 0) !== (nextProps.file.tokensUsed || 0)) {
+    return false;
+  }
+
+  if (prevProps.translationPhase !== nextProps.translationPhase) {
+    return false;
+  }
+
+  if (prevProps.translationStatus !== nextProps.translationStatus) {
     return false;
   }
 

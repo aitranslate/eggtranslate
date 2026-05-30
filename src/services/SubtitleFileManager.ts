@@ -53,7 +53,8 @@ export async function loadFromFile(
       entryCount: entries.length,
       translatedCount: entries.filter(e => e.translatedText).length,
       transcriptionStatus: 'completed',
-      tokensUsed: 0  // ✅ 添加初始值
+      tokensUsed: 0,
+      entriesVersion: 0
     };
   } else {
     // ✅ 音视频文件：也立即创建任务（空条目），转录完成后更新
@@ -75,7 +76,8 @@ export async function loadFromFile(
       entryCount: 0,
       translatedCount: 0,
       transcriptionStatus: 'idle',
-      tokensUsed: 0,  // ✅ 添加初始值
+      tokensUsed: 0,
+      entriesVersion: 0,
       fileRef: file // 保留原始文件引用用于后续转录
     };
   }
@@ -212,6 +214,7 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
     translatedCount,
     transcriptionStatus,
     transcriptionProgress,
-    tokensUsed: task.translation_progress?.tokens || 0  // ✅ 新增：从 translation_progress 读取 tokens
+    tokensUsed: task.translation_progress?.tokens || 0,
+    entriesVersion: 0
   };
 }

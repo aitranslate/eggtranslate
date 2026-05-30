@@ -178,7 +178,7 @@ class TranslationService {
   async updateProgress(
     current: number,
     total: number,
-    phase: 'direct' | 'completed',
+    phase: 'direct' | 'splitting' | 'completed',
     status: string,
     taskId?: string,
     newTokens?: number

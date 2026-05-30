@@ -90,6 +90,12 @@ export interface SubtitleFileMetadata {
 
   // 全局 tokens（转录 + 翻译）
   tokensUsed: number;
+
+  // 断句对齐进度（0-100）
+  splitProgress?: number;
+
+  // entries 数据版本号（DataManager entries 变更时递增，用于触发 UI 刷新）
+  entriesVersion: number;
 }
 
 /**
@@ -118,4 +124,36 @@ export interface SubtitleFile {
   entryCount?: number;                // 字幕条目总数（缓存）
   translatedCount?: number;           // 已翻译数量（缓存）
   tokensUsed?: number;                // Token 使用量（缓存）
+}
+
+// 断句模式
+export type SegmentationMode = 'transcribe' | 'transcribe_translate';
+
+// 字幕长度预设
+export type SubtitleLengthPreset = 'short' | 'standard' | 'loose';
+
+// 单词 token（规范化后）
+export interface NormalizedWordToken {
+  text: string;
+  start: number; // 秒
+  end: number;   // 秒
+}
+
+// 语义断句结果
+export interface SemanticSegment {
+  text: string;
+  start: number; // 秒
+  end: number;   // 秒
+  wordStart: number; // 起始词索引
+  wordEnd: number;   // 结束词索引
+}
+
+// LLM 拆分结果
+export interface LLMSourceSplitResult {
+  sourceParts: string[];
+}
+
+// LLM 对齐结果
+export interface LLMAlignResult {
+  translations: { id: number; text: string }[];
 }

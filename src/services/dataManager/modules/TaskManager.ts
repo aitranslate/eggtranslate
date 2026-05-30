@@ -84,7 +84,9 @@ class TaskManager {
     entryId: number,
     text: string,
     translatedText?: string,
-    status?: TranslationStatus
+    status?: TranslationStatus,
+    startTime?: string,
+    endTime?: string
   ): Promise<void> {
     try {
       const task = this.memoryStore.batch_tasks.tasks.find(t => t.taskId === taskId);
@@ -97,7 +99,9 @@ class TaskManager {
               ...entry,
               text,
               translatedText: translatedText ?? entry.translatedText,
-              ...(status !== undefined && { translationStatus: status })
+              ...(status !== undefined && { translationStatus: status }),
+              ...(startTime !== undefined && { startTime }),
+              ...(endTime !== undefined && { endTime })
             }
           : entry
       );
@@ -141,7 +145,10 @@ class TaskManager {
     entryId: number,
     text: string,
     translatedText?: string,
-    status?: TranslationStatus
+    status?: TranslationStatus,
+    startTime?: string,
+    endTime?: string,
+    words?: SubtitleEntry['words']
   ): void {
     try {
       const task = this.memoryStore.batch_tasks.tasks.find(t => t.taskId === taskId);
@@ -154,7 +161,10 @@ class TaskManager {
               ...entry,
               text,
               translatedText: translatedText ?? entry.translatedText,
-              ...(status !== undefined && { translationStatus: status })
+              ...(status !== undefined && { translationStatus: status }),
+              ...(startTime !== undefined && { startTime }),
+              ...(endTime !== undefined && { endTime }),
+              ...(words !== undefined && { words })
             }
           : entry
       );
@@ -182,6 +192,35 @@ class TaskManager {
       }
     } catch (error) {
       const appError = toAppError(error, '更新内存中的字幕条目失败');
+      console.error('[TaskManager]', appError.message, appError);
+    }
+  }
+
+  /**
+   * 在指定条目之后插入新字幕条目（仅在内存中更新，不持久化）
+   */
+  addSubtitleEntryAfterInMemory(taskId: string, afterEntryId: number, newEntry: SubtitleEntry): void {
+    try {
+      const task = this.memoryStore.batch_tasks.tasks.find(t => t.taskId === taskId);
+      if (!task) return;
+
+      const insertIndex = task.subtitle_entries.findIndex(e => e.id === afterEntryId);
+      if (insertIndex === -1) return;
+
+      task.subtitle_entries.splice(insertIndex + 1, 0, newEntry);
+
+      // 重新计算完成数量
+      const completed = task.subtitle_entries.filter(entry =>
+        entry.translatedText && entry.translatedText.trim() !== ''
+      ).length;
+
+      task.translation_progress = {
+        ...task.translation_progress,
+        completed,
+        total: task.subtitle_entries.length
+      };
+    } catch (error) {
+      const appError = toAppError(error, '插入内存中的字幕条目失败');
       console.error('[TaskManager]', appError.message, appError);
     }
   }

@@ -19,6 +19,8 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   fileId
 }) => {
   const file = useSubtitleStore((state) => state.getFile(fileId));
+  // 订阅 entriesVersion：当 entries 数据变更时触发重新读取
+  const entriesVersion = useSubtitleStore((state) => state.getFile(fileId)?.entriesVersion ?? 0);
   const getFileEntries = useSubtitleStore((state) => state.getFileEntries);
   const entries = getFileEntries(fileId);
   const updateEntry = useSubtitleStore((state) => state.updateEntry);
@@ -34,7 +36,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
 
   const fileEntries = useMemo(() => {
     return entries || [];
-  }, [entries]);
+  }, [entries, entriesVersion]);
 
   const filteredEntries = useMemo(() => {
     let filtered = fileEntries || [];
@@ -221,7 +223,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
             {/* Subtitle List */}
             <div className="space-y-3">
               <AnimatePresence>
-                {filteredEntries.map((entry) => (
+                {filteredEntries.map((entry, index) => (
                   <motion.div
                     key={entry.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -231,7 +233,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div className="text-sm text-gray-500">
-                        #{entry.id} | {entry.startTime} {'-->'} {entry.endTime}
+                        #{index + 1} | {entry.startTime} {'-->'} {entry.endTime}
                       </div>
                       <div className="flex items-center gap-1">
                         <button

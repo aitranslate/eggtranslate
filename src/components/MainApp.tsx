@@ -93,7 +93,7 @@ export const MainApp: React.FC = () => {
             <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 rounded-full">v1.0.0</span>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className={`flex items-center gap-6 ${isEditingModalOpen ? 'pointer-events-none opacity-50' : ''}`}>
             <button
               onClick={() => setIsTermsOpen(true)}
               className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors"

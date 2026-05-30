@@ -4,6 +4,13 @@ export type TranslationStatus = 'pending' | 'completed';
 // 文件类型（从 transcription.ts 导出）
 export type { FileType } from './transcription';
 
+// 单词级时间戳
+export interface SubtitleWord {
+  text: string;
+  start: number; // 秒
+  end: number;   // 秒
+}
+
 // 字幕条目类型
 export interface SubtitleEntry {
   id: number;
@@ -12,6 +19,7 @@ export interface SubtitleEntry {
   text: string;
   translatedText: string;
   translationStatus: TranslationStatus;
+  words?: SubtitleWord[];  // 单词级时间戳（转录产生，SRT 导入为空）
 }
 
 // LLM API 基础配置类型
@@ -36,7 +44,7 @@ export interface TranslationConfig extends LLMConfig {
 export interface TranslationProgress {
   current: number;
   total: number;
-  phase: 'direct' | 'completed';
+  phase: 'direct' | 'splitting' | 'completed';
   status: string;
   taskId?: string; // 当前任务ID
 }

@@ -89,13 +89,20 @@ export const ProgressDisplay: React.FC<ProgressDisplayProps> = ({ className, ent
         <div className="flex items-center justify-between">
           {/* 左下角：状态显示 */}
           <div className="flex items-center space-x-2">
-            {isTranslating && (
+            {isTranslating && progress.phase !== 'splitting' && (
               <div className="flex items-center space-x-2">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-400"></div>
                 <span className="text-sm text-purple-200">翻译中...</span>
               </div>
             )}
-            
+
+            {isTranslating && progress.phase === 'splitting' && (
+              <div className="flex items-center space-x-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-cyan-400"></div>
+                <span className="text-sm text-cyan-200">{progress.status || '断句对齐中...'}</span>
+              </div>
+            )}
+
             {progress.phase === 'completed' && (
               <div className="flex items-center space-x-2">
                 <div className="rounded-full h-4 w-4 bg-green-400"></div>
@@ -103,16 +110,18 @@ export const ProgressDisplay: React.FC<ProgressDisplayProps> = ({ className, ent
               </div>
             )}
           </div>
-          
+
           {/* 右下角：阶段指示器 */}
           <div className={`
             px-3 py-1 rounded-full text-xs font-medium
-            ${progress.phase === 'direct' 
-              ? 'bg-purple-500/30 text-purple-200' 
+            ${progress.phase === 'direct'
+              ? 'bg-purple-500/30 text-purple-200'
+              : progress.phase === 'splitting'
+              ? 'bg-cyan-500/30 text-cyan-200'
               : 'bg-green-500/30 text-green-200'
             }
           `}>
-            {progress.phase === 'direct' ? '翻译阶段' : '已完成'}
+            {progress.phase === 'direct' ? '翻译阶段' : progress.phase === 'splitting' ? '断句阶段' : '已完成'}
           </div>
         </div>
 

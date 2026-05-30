@@ -51,6 +51,7 @@ export const ApiEndpointsSettings: React.FC<ApiKeysSettingsProps> = ({
       <div className="flex gap-2">
         <input
           type="password"
+          autoComplete="off"
           value={localValue}
           onChange={(e) => setLocalValue(e.target.value)}
           onKeyDown={(e) => {

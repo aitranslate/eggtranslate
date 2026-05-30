@@ -8,6 +8,7 @@ import { assemblyaiService } from './assemblyaiService';
 import type { AssemblyAISentence } from '@/utils/subtitleSegmentation';
 import { toast } from 'react-hot-toast';
 import { toAppError } from '@/utils/errors';
+import { formatTime } from '@/utils/timeUtils';
 
 /**
  * 进度更新回调
@@ -64,7 +65,8 @@ export const runTranscriptionPipeline = async (
         endTime: formatTime(sentence.end / 1000),
         text: sentence.text,
         translatedText: '',
-        translationStatus: 'pending'
+        translationStatus: 'pending',
+        words: sentence.words
       });
     }
 
@@ -84,15 +86,3 @@ export const runTranscriptionPipeline = async (
   }
 };
 
-/**
- * 格式化时间为 SRT 格式 (00:00:00,000)
- */
-function formatTime(seconds: number): string {
-  const totalSeconds = Math.floor(seconds);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const secs = totalSeconds % 60;
-  const milliseconds = Math.round((seconds % 1) * 1000);
-
-  return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0') + ',' + String(milliseconds).toString().padStart(3, '0');
-}

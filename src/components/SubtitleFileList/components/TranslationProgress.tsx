@@ -6,6 +6,8 @@ import { useMemo } from 'react';
 interface TranslationProgressProps {
   file: SubtitleFileMetadata;
   isTranslating: boolean;
+  translationPhase: 'direct' | 'splitting' | 'completed';
+  translationStatus: string;
   translationStats?: {
     total: number;
     translated: number;
@@ -39,17 +41,50 @@ const FlowingGradientBar: React.FC = () => {
 export const TranslationProgress: React.FC<TranslationProgressProps> = ({
   file,
   isTranslating,
-  translationStats = { total: 0, translated: 0, untranslated: 0, percentage: 0, tokens: 0 }
+  translationStats = { total: 0, translated: 0, untranslated: 0, percentage: 0, tokens: 0 },
+  translationPhase,
+  translationStatus
 }) => {
   const isTranscribing = file.transcriptionStatus === 'converting' || file.transcriptionStatus === 'transcribing';
 
   const progressInfo = useMemo(() => {
+    // 断句对齐阶段：使用文件级 splitProgress
+    if (isTranslating && translationPhase === 'splitting') {
+      return {
+        title: '断句对齐中',
+        percent: file.splitProgress ?? 0,
+        detail: translationStatus || 'LLM 断句对齐...',
+        color: 'from-cyan-500 to-teal-500'
+      };
+    }
+
+    // 翻译完成但断句未开始/未结束
+    if (isTranslating && translationStats.percentage === 100) {
+      return {
+        title: '翻译完成',
+        percent: 100,
+        detail: `${translationStats.translated}/${translationStats.total} 条`,
+        color: 'from-blue-500 to-purple-500'
+      };
+    }
+
+    // 翻译中
     if (isTranslating) {
       return {
         title: '翻译中',
         percent: translationStats.percentage,
         detail: `${translationStats.translated}/${translationStats.total} 条`,
         color: 'from-blue-500 to-purple-500'
+      };
+    }
+
+    // 全部完成
+    if (translationStats.percentage === 100 && (file.splitProgress ?? 100) === 100) {
+      return {
+        title: '已完成',
+        percent: 100,
+        detail: `${translationStats.total} 条字幕`,
+        color: 'from-emerald-500 to-green-500'
       };
     }
 
@@ -70,7 +105,7 @@ export const TranslationProgress: React.FC<TranslationProgressProps> = ({
           color: 'from-gray-400 to-gray-500'
         };
     }
-  }, [isTranslating, translationStats, file.transcriptionStatus, file.entryCount]);
+  }, [isTranslating, translationPhase, translationStatus, translationStats, file.transcriptionStatus, file.entryCount, file.splitProgress]);
 
   if (isTranscribing) {
     return (

@@ -41,8 +41,8 @@ export const parseSRT = (srtContent: string): SubtitleEntry[] => {
 };
 
 export const toSRT = (entries: SubtitleEntry[], useTranslation: boolean = true): string => {
-  const srtEntries: SRTParserInput[] = entries.map(entry => ({
-    id: entry.id.toString(),
+  const srtEntries: SRTParserInput[] = entries.map((entry, index) => ({
+    id: (index + 1).toString(),
     startTime: entry.startTime,
     endTime: entry.endTime,
     text: useTranslation && entry.translatedText ? entry.translatedText : entry.text,
@@ -60,8 +60,8 @@ export const toTXT = (entries: SubtitleEntry[], useTranslation: boolean = true):
 };
 
 export const toBilingual = (entries: SubtitleEntry[]): string => {
-  const bilingualEntries: SRTParserInput[] = entries.map(entry => ({
-    id: entry.id.toString(),
+  const bilingualEntries: SRTParserInput[] = entries.map((entry, index) => ({
+    id: (index + 1).toString(),
     startTime: entry.startTime,
     endTime: entry.endTime,
     text: `${entry.translatedText || ''}\n${entry.text}`,
@@ -73,8 +73,8 @@ export const toBilingual = (entries: SubtitleEntry[]): string => {
 };
 
 export const toSrcTrans = (entries: SubtitleEntry[]): string => {
-  const bilingualEntries: SRTParserInput[] = entries.map(entry => ({
-    id: entry.id.toString(),
+  const bilingualEntries: SRTParserInput[] = entries.map((entry, index) => ({
+    id: (index + 1).toString(),
     startTime: entry.startTime,
     endTime: entry.endTime,
     text: `${entry.text}\n${entry.translatedText || ''}`,

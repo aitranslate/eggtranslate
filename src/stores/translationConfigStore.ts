@@ -42,7 +42,7 @@ interface TranslationConfigStore {
   updateProgress: (
     current: number,
     total: number,
-    phase: 'direct' | 'completed',
+    phase: 'direct' | 'splitting' | 'completed',
     status: string,
     taskId: string,
     newTokens?: number
@@ -214,7 +214,7 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
       updateProgress: async (
         current: number,
         total: number,
-        phase: 'direct' | 'completed',
+        phase: 'direct' | 'splitting' | 'completed',
         status: string,
         taskId: string,
         newTokens?: number
@@ -279,6 +279,16 @@ export const useIsTranslating = () => useTranslationConfigStore((state) => state
  * 获取翻译进度
  */
 export const useTranslationProgress = () => useTranslationConfigStore((state) => state.progress);
+
+/**
+ * 获取翻译阶段（原始值，避免对象引用导致 memo 失效）
+ */
+export const useTranslationPhase = () => useTranslationConfigStore((state) => state.progress.phase);
+
+/**
+ * 获取翻译状态文本（原始值）
+ */
+export const useTranslationStatus = () => useTranslationConfigStore((state) => state.progress.status);
 
 /**
  * 获取已使用 tokens

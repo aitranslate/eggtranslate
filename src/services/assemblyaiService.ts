@@ -4,12 +4,8 @@ import type { TranscriptionWord } from "@/types";
 import { toAppError } from "@/utils/errors";
 import { useTranscriptionStore } from "@/stores/transcriptionStore";
 import { convertToMP3 } from "@/utils/convertToMP3";
-import {
-  detectLanguageType,
-  segmentText,
-  getSuggestedMaxLength,
-  type AssemblyAISentence
-} from "@/utils/subtitleSegmentation";
+import { type AssemblyAISentence } from "@/utils/subtitleSegmentation";
+import { semanticSegment } from "@/utils/semanticSegmentation";
 
 /**
  * AssemblyAI 转录服务
@@ -143,17 +139,8 @@ export class AssemblyAIService {
 
       console.log('[AssemblyAI] 转录完成，开始智能断句...');
 
-      // 4. 检测语言类型
+      // 4. 转换单词级别时间戳为标准格式
       const languageCode = transcript.language_code || 'en';
-      const languageType = detectLanguageType(languageCode);
-      console.log('[AssemblyAI] 检测到的语言类型:', languageType, '语言代码:', languageCode);
-
-      // 5. 从 Store 读取用户设置的长度限制
-      const userMaxLength = useTranscriptionStore.getState().srtCharsPerCaption;
-      const maxLength = userMaxLength || getSuggestedMaxLength(languageType);
-      console.log('[AssemblyAI] 字幕长度限制:', maxLength, '用户设置:', userMaxLength, '建议值:', getSuggestedMaxLength(languageType));
-
-      // 6. 转换单词级别时间戳为标准格式
       const words = transcript.words.map(w => ({
         text: w.text,
         start: w.start / 1000,  // 毫秒 -> 秒
@@ -161,23 +148,23 @@ export class AssemblyAIService {
         confidence: w.confidence
       }));
 
-      // 7. 使用智能断句工具
+      // 5. 语义断句（不限长度，保证语义完整）
       onProgress?.('segmenting', 80);
-      const sentences = segmentText(
-        transcript.text,
-        words,
-        languageCode,  // Pass language code instead of type
-        maxLength
-      );
+      const segments = semanticSegment(words, 'transcribe_translate');
 
-      console.log('[AssemblyAI] 智能断句完成，共', sentences.length, '个句子');
+      console.log('[AssemblyAI] 语义断句完成，共', segments.length, '个句子，语言代码:', languageCode);
 
       onProgress?.('completed', 100);
 
-      return sentences.map(s => ({
+      return segments.map(s => ({
         text: s.text,
         start: Math.round(s.start * 1000),
-        end: Math.round(s.end * 1000)
+        end: Math.round(s.end * 1000),
+        words: words.slice(s.wordStart, s.wordEnd + 1).map(w => ({
+          text: w.text,
+          start: w.start,
+          end: w.end
+        }))
       }));
 
     } catch (error) {

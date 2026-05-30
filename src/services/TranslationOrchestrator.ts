@@ -42,7 +42,7 @@ export interface TranslationCallbacks {
   updateProgress: (
     current: number,
     total: number,
-    phase: 'direct' | 'completed',
+    phase: 'direct' | 'splitting' | 'completed',
     status: string,
     taskId: string,
     newTokens?: number  // 新增参数：用于传递本次翻译使用的 tokens
