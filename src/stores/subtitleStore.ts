@@ -352,7 +352,6 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       // 直接写入 localforage
       const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks') || { tasks: [] };
       const taskIndex = batchTasks.tasks.findIndex(t => t.taskId === file.taskId);
-      subtitleStore.ts:760 [subtitleStore] LLM 断句对齐完成
       if (taskIndex !== -1) {
         batchTasks.tasks[taskIndex] = {
           ...batchTasks.tasks[taskIndex],
