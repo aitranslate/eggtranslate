@@ -1,31 +1,16 @@
-import { SubtitleFile } from '@/types';
-import type { FileType } from '@/types/transcription';
 import { formatFileSize as formatFileSizeUtil } from '@/utils/fileFormat';
 
 // 重新导出，保持组件使用方便
 export const formatFileSize = formatFileSizeUtil;
 
 /**
- * 获取状态文本
+ * 秒 → 显示用时长 "HH:MM:SS"
  */
-export const getStatusText = (file: SubtitleFile): string => {
-  if (file.fileType === 'srt') {
-    return 'SRT 字幕';
-  }
-
-  // 音视频文件（极简转录流程）
-  switch (file.transcriptionStatus) {
-    case 'idle':
-      return '等待转录';
-    case 'uploading':
-      return '上传中';
-    case 'transcribing':
-      return '转录中';
-    case 'completed':
-      return '转录完成';
-    case 'failed':
-      return '转录失败';
-    default:
-      return '等待转录';
-  }
-};
+export function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  return String(h).padStart(2, '0') + ':' +
+         String(m).padStart(2, '0') + ':' +
+         String(s).padStart(2, '0');
+}

@@ -1,13 +1,11 @@
-import { useState, useCallback, useMemo, memo } from 'react';
+import { useCallback, useMemo, memo } from 'react';
 import { motion } from 'framer-motion';
-import toast from 'react-hot-toast';
-import { SubtitleFile, SubtitleFileMetadata } from '@/types';
-import dataManager from '@/services/dataManager';
+import { SubtitleFileMetadata } from '@/types';
 import { FileIcon } from './FileIcon';
-import { TranslationProgress } from './TranslationProgress';
+import { StepperProgress } from './StepperProgress';
 import { FileActionButtons } from './FileActionButtons';
-import { formatFileSize } from '../utils/fileHelpers';
-import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { formatFileSize, formatDuration } from '../utils/fileHelpers';
+
 interface SubtitleFileItemProps {
   file: SubtitleFileMetadata;
   index: number;
@@ -19,8 +17,6 @@ interface SubtitleFileItemProps {
   onTranscribe: (fileId: string) => Promise<void>;
   isTranslatingGlobally: boolean;
   currentTranslatingFileId: string | null;
-  translationPhase: 'direct' | 'splitting' | 'completed';
-  translationStatus: string;
 }
 
 export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
@@ -34,210 +30,137 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   onTranscribe,
   isTranslatingGlobally,
   currentTranslatingFileId,
-  translationPhase,
-  translationStatus
 }) => {
-  const isTranscribing = useMemo(() =>
-    file.transcriptionStatus === 'converting' ||
-    file.transcriptionStatus === 'transcribing' ||
-    file.transcriptionStatus === 'uploading',
-    [file.transcriptionStatus]
+  const isTranscribing = file.phases.converting.status === 'active' ||
+    file.phases.transcribing.status === 'active';
+  const isBusy = isTranscribing || (currentTranslatingFileId === file.id);
+
+  // Derive card-level status from phases
+  const hasFailedPhase = useMemo(() =>
+    file.phases.converting.status === 'failed' ||
+    file.phases.transcribing.status === 'failed' ||
+    file.phases.translating.status === 'failed' ||
+    file.phases.splitting.status === 'failed',
+    [file.phases]
   );
 
-  const isTranslating = useMemo(() =>
-    currentTranslatingFileId === file.id,
-    [currentTranslatingFileId, file.id]
-  );
-
-  const { handleError } = useErrorHandler();
-
-  const translationStats = useMemo(() => {
+  const cardStatus = useMemo(() => {
+    if (hasFailedPhase) return 'failed';
+    if (isBusy) return 'active';
     const entryCount = file.entryCount ?? 0;
     const translatedCount = file.translatedCount ?? 0;
-    const tokens = file.tokensUsed || 0;
+    if (entryCount > 0 && translatedCount >= entryCount) return 'completed';
+    return 'idle';
+  }, [isBusy, hasFailedPhase, file.entryCount, file.translatedCount]);
 
-    return {
-      total: entryCount,
-      translated: translatedCount,
-      untranslated: entryCount - translatedCount,
-      percentage: entryCount > 0 ? Math.round((translatedCount / entryCount) * 100) : 0,
-      tokens: tokens
-    };
-  }, [file.entryCount, file.translatedCount, file.tokensUsed]);
+  const badgeClass = cardStatus === 'active'
+    ? 'bg-blue-50 text-blue-600'
+    : cardStatus === 'completed'
+    ? 'bg-green-50 text-green-600'
+    : cardStatus === 'failed'
+    ? 'bg-red-50 text-red-600'
+    : 'border border-gray-200 text-gray-500 bg-transparent';
 
-  const handleExport = useCallback(() => {
-    onExport(file);
-  }, [file, onExport]);
+  const badgeText = cardStatus === 'active'
+    ? '处理中'
+    : cardStatus === 'completed'
+    ? '已完成'
+    : cardStatus === 'failed'
+    ? '失败'
+    : '未开始';
 
-  const handleDelete = useCallback(() => {
-    onDelete(file);
-  }, [file, onDelete]);
+  // Token count
+  const tokens = file.tokensUsed || 0;
+
+  const handleExport = useCallback(() => onExport(file), [file, onExport]);
+  const handleDelete = useCallback(() => onDelete(file), [file, onDelete]);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="apple-card p-6 overflow-visible"
+      className="bg-white rounded-2xl p-5 flex flex-col gap-5 transition-all duration-400 hover:shadow-lg hover:-translate-y-0.5"
+      style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.03), 0 0 0 1px rgba(0,0,0,0.02)' }}
     >
-      {/* 文件头部信息 */}
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div className="flex items-center gap-4 min-w-0 flex-1">
-          <div className="flex-shrink-0">
-            <FileIcon type={file.fileType} />
-          </div>
+      {/* 1. Header: file info + status badge */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5 min-w-0 flex-1">
+          <FileIcon type={file.fileType} />
           <div className="min-w-0 flex-1">
-            <h4 className="font-medium text-gray-900 truncate" title={file.name}>{file.name}</h4>
-            <div className="text-sm text-gray-500 mt-1">
+            <h4 className="text-sm font-semibold text-gray-900 truncate" title={file.name}>
+              {file.name}
+            </h4>
+            <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-1.5">
               {file.fileType === 'srt' ? (
-                <>{file.entryCount ?? 0} 条字幕</>
+                <span>{file.entryCount ?? 0} 条字幕</span>
               ) : (
-                <>{formatFileSize(file.fileSize ?? 0)}</>
+                <>
+                  <span>{formatFileSize(file.fileSize ?? 0)}</span>
+                  {file.duration != null && file.duration > 0 && (
+                    <>
+                      <span>·</span>
+                      <span>{formatDuration(file.duration)}</span>
+                    </>
+                  )}
+                </>
+              )}
+              {tokens > 0 && (
+                <span className="inline-flex items-center gap-0.5">
+                  ·
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                  </svg>
+                  <span>{tokens.toLocaleString()}</span>
+                </span>
               )}
             </div>
           </div>
         </div>
-
-        <div className={`px-3 py-1 rounded-full text-xs font-medium flex-shrink-0 ${
-          file.fileType === 'srt' ? (
-            translationStats.percentage === 100 && (file.splitProgress ?? 100) === 100
-              ? 'bg-green-100 text-green-700'
-              : isTranslating && translationPhase === 'splitting'
-              ? 'bg-cyan-100 text-cyan-700'
-              : isTranslating && translationStats.percentage === 100
-              ? 'bg-purple-100 text-purple-700'
-              : isTranslating && translationStats.percentage > 0
-              ? 'bg-blue-100 text-blue-700'
-              : translationStats.percentage > 0
-              ? 'bg-orange-100 text-orange-700'
-              : 'bg-gray-100 text-gray-600'
-          ) : (
-              file.transcriptionStatus === 'converting'
-                ? 'bg-yellow-100 text-yellow-700'
-                : file.transcriptionStatus === 'transcribing'
-                ? 'bg-blue-100 text-blue-700'
-                : file.transcriptionStatus === 'completed' ? (
-                  translationStats.percentage === 100 && (file.splitProgress ?? 100) === 100
-                    ? 'bg-green-100 text-green-700'
-                    : isTranslating && translationPhase === 'splitting'
-                    ? 'bg-cyan-100 text-cyan-700'
-                    : isTranslating && translationStats.percentage === 100
-                    ? 'bg-purple-100 text-purple-700'
-                    : isTranslating && translationStats.percentage > 0
-                    ? 'bg-blue-100 text-blue-700'
-                    : translationStats.percentage > 0
-                    ? 'bg-orange-100 text-orange-700'
-                    : 'bg-green-100 text-green-700'
-                ) : (
-                  file.transcriptionStatus === 'failed'
-                    ? 'bg-red-100 text-red-700'
-                    : 'bg-gray-100 text-gray-600'
-                )
-            )
-        }`}>
-          {file.fileType === 'srt' ? (
-            translationStats.percentage === 100 && (file.splitProgress ?? 100) === 100 ? '已完成' :
-            isTranslating && translationPhase === 'splitting' ? '断句中' :
-            isTranslating && translationStats.percentage === 100 ? '翻译完成' :
-            isTranslating && translationStats.percentage > 0 ? '翻译中' :
-            translationStats.percentage > 0 ? '翻译失败' : '等待翻译'
-          ) : (
-            file.transcriptionStatus === 'completed' ? (
-              translationStats.percentage === 100 && (file.splitProgress ?? 100) === 100 ? '已完成' :
-              isTranslating && translationPhase === 'splitting' ? '断句中' :
-              isTranslating && translationStats.percentage === 100 ? '翻译完成' :
-              isTranslating && translationStats.percentage > 0 ? '翻译中' :
-              translationStats.percentage > 0 ? '翻译失败' : '转录完成'
-            ) :
-            file.transcriptionStatus === 'converting' ? '转码中' :
-            file.transcriptionStatus === 'transcribing' ? '转录中' :
-            file.transcriptionStatus === 'failed' ? '转录失败' :
-            '等待转录'
-          )}
-        </div>
+        <span className={`px-2.5 py-1 rounded-md text-xs font-medium flex-shrink-0 ${badgeClass}`}>
+          {badgeText}
+        </span>
       </div>
 
-      {/* 进度条和操作按钮 */}
-      <div className="mb-4">
-        <div className="flex items-center gap-4">
-          {/* 进度显示 */}
-          <TranslationProgress file={file} isTranslating={isTranslating} translationStats={translationStats} translationPhase={translationPhase} translationStatus={translationStatus} />
+      {/* 2. Progress area (stepper) */}
+      <StepperProgress fileId={file.id} />
 
-          {/* 操作按钮 */}
-          <FileActionButtons
-            file={file}
-            isTranslating={isTranslating}
-            translationStats={translationStats}
-            isTranslatingGlobally={isTranslatingGlobally}
-            currentTranslatingFileId={currentTranslatingFileId}
-            onTranscribeAndTranslate={() => onTranscribeAndTranslate(file)}
-            onTranscribe={() => onTranscribe(file.id)}
-            onStartTranslation={() => onStartTranslation(file)}
-            onEdit={() => onEdit(file)}
-            onExport={handleExport}
-            onDelete={handleDelete}
-          />
-        </div>
-      </div>
+      {/* 3. Footer: action buttons */}
+      <FileActionButtons
+        file={file}
+        isTranslating={currentTranslatingFileId === file.id}
+        translationStats={{
+          percentage: (file.entryCount ?? 0) > 0
+            ? Math.round(((file.translatedCount ?? 0) / (file.entryCount ?? 1)) * 100)
+            : 0,
+        }}
+        isTranslatingGlobally={isTranslatingGlobally}
+        currentTranslatingFileId={currentTranslatingFileId}
+        onTranscribeAndTranslate={() => onTranscribeAndTranslate(file)}
+        onTranscribe={() => onTranscribe(file.id)}
+        onStartTranslation={() => onStartTranslation(file)}
+        onEdit={() => onEdit(file)}
+        onExport={handleExport}
+        onDelete={handleDelete}
+      />
     </motion.div>
   );
 };
 
 export const SubtitleFileItemMemo = memo(SubtitleFileItem, (prevProps, nextProps) => {
   const fileKeys: (keyof SubtitleFileMetadata)[] = [
-    'id',
-    'name',
-    'fileSize',
-    'transcriptionStatus'
+    'id', 'name', 'fileSize', 'duration',
+    'entryCount', 'translatedCount', 'tokensUsed', 'entriesVersion',
   ];
 
   for (const key of fileKeys) {
-    if (prevProps.file[key] !== nextProps.file[key]) {
-      return false;
-    }
+    if (prevProps.file[key] !== nextProps.file[key]) return false;
   }
 
-  const prevProgress = prevProps.file.transcriptionProgress;
-  const nextProgress = nextProps.file.transcriptionProgress;
-  if (prevProgress?.percent !== nextProgress?.percent ||
-      prevProgress?.tokens !== nextProgress?.tokens) {
-    return false;
-  }
+  // Deep compare phases object
+  if (prevProps.file.phases !== nextProps.file.phases) return false;
 
-  const prevEntryCount = prevProps.file.entryCount ?? 0;
-  const nextEntryCount = nextProps.file.entryCount ?? 0;
-  if (prevEntryCount !== nextEntryCount) {
-    return false;
-  }
-
-  const prevTranslated = prevProps.file.translatedCount ?? 0;
-  const nextTranslated = nextProps.file.translatedCount ?? 0;
-  if (prevTranslated !== nextTranslated) {
-    return false;
-  }
-
-  if ((prevProps.file.splitProgress ?? 100) !== (nextProps.file.splitProgress ?? 100)) {
-    return false;
-  }
-
-  if ((prevProps.file.tokensUsed || 0) !== (nextProps.file.tokensUsed || 0)) {
-    return false;
-  }
-
-  if (prevProps.translationPhase !== nextProps.translationPhase) {
-    return false;
-  }
-
-  if (prevProps.translationStatus !== nextProps.translationStatus) {
-    return false;
-  }
-
-  if (prevProps.isTranslatingGlobally !== nextProps.isTranslatingGlobally) {
-    return false;
-  }
-
-  if (prevProps.currentTranslatingFileId !== nextProps.currentTranslatingFileId) {
-    return false;
-  }
+  if (prevProps.isTranslatingGlobally !== nextProps.isTranslatingGlobally) return false;
+  if (prevProps.currentTranslatingFileId !== nextProps.currentTranslatingFileId) return false;
 
   return true;
 });

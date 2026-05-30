@@ -3,8 +3,9 @@
  * 负责文件加载、更新、删除等CRUD操作
  */
 
-import { SubtitleEntry, FileType, SubtitleFileMetadata, TranscriptionStatus, SingleTask } from '@/types';
+import { SubtitleEntry, FileType, SubtitleFileMetadata, SingleTask } from '@/types';
 import type { SubtitleFile } from '@/types/transcription';
+import type { FilePhases, PhaseState } from '@/types/progress';
 import { parseSRT } from '@/utils/srtParser';
 import { detectFileType } from '@/utils/fileFormat';
 import dataManager from '@/services/dataManager';
@@ -15,6 +16,23 @@ export type { SubtitleFile };
 
 export interface LoadFileOptions {
   existingFilesCount: number;
+}
+
+const UPCOMING: PhaseState = { status: 'upcoming', progress: 0, tokens: 0 };
+const COMPLETED: PhaseState = { status: 'completed', progress: 100, tokens: 0 };
+
+/**
+ * 创建初始阶段状态
+ * @param isSrt - 是否为 SRT 文件（无需转录）
+ * @param isTranslated - 是否已完成翻译（从历史任务恢复时）
+ */
+function createInitialPhases(isSrt: boolean, isTranslated: boolean): FilePhases {
+  return {
+    converting: { ...UPCOMING },
+    transcribing: isSrt ? { ...COMPLETED } : { ...UPCOMING },
+    translating: isTranslated ? { ...COMPLETED } : { ...UPCOMING },
+    splitting: { ...UPCOMING },
+  };
 }
 
 /**
@@ -52,7 +70,7 @@ export async function loadFromFile(
       lastModified: file.lastModified,
       entryCount: entries.length,
       translatedCount: entries.filter(e => e.translatedText).length,
-      transcriptionStatus: 'completed',
+      phases: createInitialPhases(true, false),
       tokensUsed: 0,
       entriesVersion: 0
     };
@@ -75,7 +93,7 @@ export async function loadFromFile(
       lastModified: file.lastModified,
       entryCount: 0,
       translatedCount: 0,
-      transcriptionStatus: 'idle',
+      phases: createInitialPhases(false, false),
       tokensUsed: 0,
       entriesVersion: 0,
       fileRef: file // 保留原始文件引用用于后续转录
@@ -187,20 +205,8 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
   // 计算统计信息
   const entryCount = entries.length;
   const translatedCount = entries.filter(e => e.translatedText).length;
-
-  // 确定转录状态
-  const hasEntries = entries.length > 0;
-  const transcriptionStatus: TranscriptionStatus = hasEntries ? 'completed' : 'idle';
-
-  // 获取转录进度
-  const transcriptionProgress = task.translation_progress
-    ? {
-        percent: task.translation_progress.total > 0
-          ? Math.round((task.translation_progress.completed / task.translation_progress.total) * 100)
-          : 0,
-        tokens: task.translation_progress.tokens
-      }
-    : undefined;
+  const isSrt = (task.fileType || 'srt') === 'srt';
+  const isTranslated = entryCount > 0 && translatedCount >= entryCount;
 
   return {
     id: fileId,
@@ -212,8 +218,7 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
     duration: task.duration,
     entryCount,
     translatedCount,
-    transcriptionStatus,
-    transcriptionProgress,
+    phases: createInitialPhases(isSrt, isTranslated),
     tokensUsed: task.translation_progress?.tokens || 0,
     entriesVersion: 0
   };

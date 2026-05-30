@@ -1,5 +1,6 @@
 // 导入 SubtitleEntry 类型以避免循环依赖
 import type { SubtitleEntry } from './index';
+import type { FilePhases } from './progress';
 
 // 热词分组
 export interface KeytermGroup {
@@ -84,15 +85,11 @@ export interface SubtitleFileMetadata {
   entryCount: number;                  // 字幕条目总数
   translatedCount: number;             // 已翻译数量
 
-  // 转录状态和进度
-  transcriptionStatus: TranscriptionStatus;
-  transcriptionProgress?: TranscriptionProgressInfo;
+  // 阶段状态（唯一的进度数据源）
+  phases: FilePhases;
 
   // 全局 tokens（转录 + 翻译）
   tokensUsed: number;
-
-  // 断句对齐进度（0-100）
-  splitProgress?: number;
 
   // entries 数据版本号（DataManager entries 变更时递增，用于触发 UI 刷新）
   entriesVersion: number;

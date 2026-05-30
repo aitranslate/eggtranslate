@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { downloadZipFile } from '@/utils/fileExport';
 import { exportTaskZip, getBaseName } from '@/services/SubtitleExporter';
 import { useSubtitleStore } from '@/stores/subtitleStore';
+import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { useTerms } from '@/contexts/TermsContext';
 import { useHistory } from '@/contexts/HistoryContext';
 import { SubtitleFileMetadata } from '@/types';
@@ -13,7 +14,6 @@ import { API_CONSTANTS } from '@/constants/api';
 import { SubtitleFileItem } from './components/SubtitleFileItem';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { SettingsModal } from '../SettingsModal';
-import { useTranslationPhase, useTranslationStatus } from '@/stores/translationConfigStore';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 interface SubtitleFileListProps {
@@ -35,8 +35,6 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   const { getRelevantTerms } = useTerms();
   const { addHistoryEntry } = useHistory();
   const { handleError } = useErrorHandler();
-  const translationPhase = useTranslationPhase();
-  const translationStatus = useTranslationStatus();
 
   const [isTranslatingGloballyState, setIsTranslatingGlobally] = useState(false);
   const [currentTranslatingFileId, setCurrentTranslatingFileId] = useState<string | null>(null);
@@ -110,12 +108,12 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     setCurrentTranslatingFileId(file.id);
 
     try {
-      if ((file.fileType === 'audio' || file.fileType === 'video') && file.transcriptionStatus !== 'completed') {
+      if ((file.fileType === 'audio' || file.fileType === 'video') && file.phases.transcribing.status !== 'completed') {
         await startTranscription(file.id);
 
         // 转录失败则中断，不继续翻译
         const updatedFile = useSubtitleStore.getState().getFile(file.id);
-        if (!updatedFile || updatedFile.transcriptionStatus !== 'completed') {
+        if (!updatedFile || updatedFile.phases.transcribing.status !== 'completed') {
           return;
         }
       }
@@ -148,7 +146,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
 
     for (const file of filesToProcess) {
       try {
-        if ((file.fileType === 'audio' || file.fileType === 'video') && file.transcriptionStatus !== 'completed') {
+        if ((file.fileType === 'audio' || file.fileType === 'video') && file.phases.transcribing.status !== 'completed') {
           await handleTranscribeAndTranslate(file);
         } else {
           await handleStartTranslation(file);
@@ -270,8 +268,6 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                   onTranscribe={handleTranscribe}
                   isTranslatingGlobally={isTranslatingGloballyState}
                   currentTranslatingFileId={currentTranslatingFileId}
-                  translationPhase={translationPhase}
-                  translationStatus={translationStatus}
                 />
               ))}
             </AnimatePresence>

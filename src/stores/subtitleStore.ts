@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import { SubtitleFile, SubtitleEntry, TranscriptionStatus, TranscriptionProgressInfo, SubtitleFileMetadata, Term, TranslationStatus } from '@/types';
+import { SubtitleFile, SubtitleEntry, SubtitleFileMetadata, Term, TranslationStatus } from '@/types';
 import { loadFromFile, removeFile as removeFileData, clearAllData as clearAllFileData, restoreFiles, restoreFilesWithEntries, type SubtitleFile as SubtitleFileType } from '@/services/SubtitleFileManager';
 import { runTranscriptionPipeline } from '@/services/transcriptionPipeline';
 import { executeTranslation } from '@/services/TranslationOrchestrator';
@@ -16,6 +16,7 @@ import { formatTime, parseTime } from '@/utils/timeUtils';
 import { countUnits } from '@/utils/textUnitCounter';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { toAppError } from '@/utils/errors';
+import type { ProgressPhase, PhaseState, FilePhases } from '@/types/progress';
 import toast from 'react-hot-toast';
 import localforage from 'localforage';
 
@@ -51,13 +52,13 @@ interface SubtitleStore {
 
   // Actions - 转录
   startTranscription: (fileId: string) => Promise<void>;
-  updateTranscriptionProgress: (fileId: string, progress: TranscriptionProgressInfo) => void;
-  updateTranscriptionStatus: (fileId: string, status: TranscriptionStatus) => void;
 
   // Actions - 翻译
   startTranslation: (fileId: string) => Promise<void>;
   updateTranslationProgress: (fileId: string, completed: number, total: number) => void;
-  updateSplitProgress: (fileId: string, progress: number) => void;
+
+  // Actions - 阶段状态管理
+  updatePhase: (fileId: string, phase: ProgressPhase, update: Partial<PhaseState>) => void;
 
   // ============================================
   // Tokens 管理（新增）
@@ -130,20 +131,13 @@ if (typeof window !== 'undefined') {
  * 检查是否有进行中的任务（转录或翻译）
  */
 function checkOngoingTasks(): boolean {
-  // 检查是否有翻译正在进行
-  const isTranslating = useTranslationConfigStore.getState().isTranslating;
-
-  // 检查是否有转录正在进行
   const files = useSubtitleStore.getState().files;
-  const isTranscribing = files.some(file =>
-    file.transcriptionStatus && (
-      file.transcriptionStatus === 'uploading' ||
-      file.transcriptionStatus === 'transcribing' ||
-      file.transcriptionStatus === 'llm_merging'
-    )
+  return files.some(file =>
+    file.phases.converting.status === 'active' ||
+    file.phases.transcribing.status === 'active' ||
+    file.phases.translating.status === 'active' ||
+    file.phases.splitting.status === 'active'
   );
-
-  return isTranslating || isTranscribing;
 }
 
 // ============================================
@@ -325,7 +319,6 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       const { apiKeys } = useTranscriptionStore.getState();
       if (!apiKeys.trim()) {
         toast.error('请先在设置中配置 AssemblyAI API Key');
-        get().updateTranscriptionStatus(fileId, 'failed');
         return;
       }
 
@@ -333,29 +326,37 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       const { keytermGroups, keytermsEnabled } = useTranscriptionStore.getState();
       const allKeyterms = keytermsEnabled ? keytermGroups.flatMap(g => g.keyterms) : [];
 
-      get().updateTranscriptionStatus(fileId, 'converting');
+      get().updatePhase(fileId, 'converting', { status: 'active', progress: -1, tokens: 0 });
 
       const result = await runTranscriptionPipeline(
         fileRef,
         allKeyterms,
         {
           onConverting: () => {
-            get().updateTranscriptionStatus(fileId, 'converting');
+            get().updatePhase(fileId, 'converting', { status: 'active', progress: -1 });
           },
           onUploading: () => {
-            get().updateTranscriptionStatus(fileId, 'uploading');
+            get().updatePhase(fileId, 'converting', { status: 'active', progress: -1 });
           },
           onTranscribing: () => {
-            get().updateTranscriptionStatus(fileId, 'transcribing');
+            get().updatePhase(fileId, 'converting', { status: 'completed', progress: 100 });
+            get().updatePhase(fileId, 'transcribing', { status: 'active', progress: -1, tokens: 0 });
           },
           onProgress: (percent) => {
-            get().updateTranscriptionProgress(fileId, { percent });
+            get().updatePhase(fileId, 'transcribing', { progress: percent });
           },
           onCompleted: () => {
             // 状态更新将在数据保存和统计更新后进行
           },
           onError: (_error) => {
-            get().updateTranscriptionStatus(fileId, 'failed');
+            // 标记当前活跃阶段为失败
+            const phases = get().getFile(fileId)?.phases;
+            if (phases?.converting.status === 'active') {
+              get().updatePhase(fileId, 'converting', { status: 'failed', progress: 0 });
+            }
+            if (phases?.transcribing.status === 'active') {
+              get().updatePhase(fileId, 'transcribing', { status: 'failed', progress: 0 });
+            }
           }
         }
       );
@@ -366,8 +367,9 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       // 更新统计信息
       get().updateFileStatistics(fileId);
 
-      // 现在更新状态为 completed（确保 entryCount 已正确更新）
-      get().updateTranscriptionStatus(fileId, 'completed');
+      // 转录完成
+      get().updatePhase(fileId, 'converting', { status: 'completed', progress: 100 });
+      get().updatePhase(fileId, 'transcribing', { status: 'completed', progress: 100 });
 
       toast.success(`转录完成！生成 ${result.entries.length} 条字幕`);
     } catch (error) {
@@ -375,42 +377,32 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       console.error('[subtitleStore]', appError.message, appError);
       toast.error(`转录失败: ${appError.message}`);
 
-      get().updateTranscriptionStatus(fileId, 'failed');
+      // 标记当前活跃阶段为失败
+      const phases = get().getFile(fileId)?.phases;
+      if (phases?.converting.status === 'active') {
+        get().updatePhase(fileId, 'converting', { status: 'failed', progress: 0 });
+      }
+      if (phases?.transcribing.status === 'active') {
+        get().updatePhase(fileId, 'transcribing', { status: 'failed', progress: 0 });
+      }
     }
   },
 
   /**
-   * 更新转录进度
+   * 更新指定阶段的状态
    */
-  updateTranscriptionProgress: (fileId: string, progress: TranscriptionProgressInfo) => {
+  updatePhase: (fileId: string, phase: ProgressPhase, update: Partial<PhaseState>) => {
     set((state) => ({
-      files: state.files.map(f =>
-        f.id === fileId
-          ? {
-              ...f,
-              transcriptionProgress: {
-                ...f.transcriptionProgress,
-                ...progress
-              }
-            }
-          : f
-      )
-    }));
-  },
-
-  /**
-   * 更新转录状态
-   */
-  updateTranscriptionStatus: (fileId: string, status: TranscriptionStatus) => {
-    set((state) => ({
-      files: state.files.map(f =>
-        f.id === fileId
-          ? {
-              ...f,
-              transcriptionStatus: status
-            }
-          : f
-      )
+      files: state.files.map(f => {
+        if (f.id !== fileId) return f;
+        return {
+          ...f,
+          phases: {
+            ...f.phases,
+            [phase]: { ...f.phases[phase], ...update }
+          }
+        };
+      })
     }));
   },
 
@@ -432,17 +424,14 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       return;
     }
 
-    // 设置全局翻译状态
-    const controller = await translationConfigStore.startTranslation(file.taskId);
-
-    // 重置 splitProgress（避免上次翻译残留值影响状态判断）
-    set((state) => ({
-      files: state.files.map(f =>
-        f.id === fileId ? { ...f, splitProgress: undefined } : f
-      )
-    }));
-
     try {
+      // 设置全局翻译状态
+      const controller = await translationConfigStore.startTranslation(file.taskId);
+
+      // 标记翻译阶段开始
+      get().updatePhase(fileId, 'translating', { status: 'active', progress: 0, tokens: 0 });
+      get().updatePhase(fileId, 'splitting', { status: 'upcoming', progress: 0, tokens: 0 });
+
       // ✅ Phase 3: 从 DataManager 获取完整 entries
       const task = dataManager.getTaskById(file.taskId);
       const entries = task?.subtitle_entries || [];
@@ -469,9 +458,15 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
             // 调用 TranslationService.updateProgress（它会累加 tokens 并更新 DataManager）
             await translationConfigStore.updateProgress(current, total, phase, status, taskId, newTokens);
 
-            // ✅ 同步更新 Store 的 tokens
+            // ✅ 同步更新 Store 的 tokens 和阶段进度
             if (newTokens !== undefined && newTokens > 0) {
               get().addTokens(fileId, newTokens);
+            }
+
+            // 更新翻译阶段进度
+            if (phase === 'direct' && total > 0) {
+              const percent = Math.round((current / total) * 100);
+              get().updatePhase(fileId, 'translating', { progress: percent });
             }
           },
           getRelevantTerms: (batchText: string, before: string, after: string): Term[] => {
@@ -516,6 +511,9 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
 
       // ✅ 同步 DataManager 中的 tokens（翻译完成后需要同步，因为 TranslationService 也会更新）
       get().updateFileStatistics(fileId);
+
+      // 标记翻译阶段完成
+      get().updatePhase(fileId, 'translating', { status: 'completed', progress: 100 });
 
       // Step 5.1+5.2: LLM 断句对齐（翻译后处理超长字幕）
       const aiSegmentationEnabled = useTranscriptionStore.getState().aiSegmentationEnabled;
@@ -579,7 +577,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         console.log('[subtitleStore] 开始 LLM 断句对齐...');
 
         // 进入断句阶段
-        get().updateSplitProgress(fileId, 0);
+        get().updatePhase(fileId, 'splitting', { status: 'active', progress: 0, tokens: 0 });
         await translationConfigStore.updateProgress(0, postSplitEntries.length, 'splitting', '断句对齐中...', file.taskId);
 
         // Step 5.1: LLM 原文拆分
@@ -594,7 +592,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
           threadCount: config.threadCount,
           onProgress: (current, total, tokensUsed) => {
             const percent = total > 0 ? Math.round((current / total) * 50) : 0;
-            get().updateSplitProgress(fileId, percent);
+            get().updatePhase(fileId, 'splitting', { progress: percent });
             translationConfigStore.updateProgress(current, total, 'splitting', `断句拆分中 ${current}/${total}`, file.taskId).catch(err => console.warn('[subtitleStore] updateProgress failed:', err));
             // tokensUsed 是累计值，只需累加增量
             const delta = tokensUsed - (lastSplitTokens);
@@ -668,7 +666,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
                 allAlignResults.push(result);
               }
               const alignPercent = 50 + Math.round((alignCompleted / alignTasks.length) * 50);
-              get().updateSplitProgress(fileId, alignPercent);
+              get().updatePhase(fileId, 'splitting', { progress: alignPercent });
               await translationConfigStore.updateProgress(
                 postSplitEntries.length + alignCompleted,
                 postSplitEntries.length + alignTasks.length,
@@ -759,17 +757,17 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
 
           // Update statistics after split/align（触发 Zustand 通知 UI 刷新）
           get().updateFileStatistics(fileId);
-          get().updateSplitProgress(fileId, 100);
+          get().updatePhase(fileId, 'splitting', { status: 'completed', progress: 100 });
           splitSucceeded = true;
           console.log('[subtitleStore] LLM 断句对齐完成');
         } else {
-          get().updateSplitProgress(fileId, 100);
+          get().updatePhase(fileId, 'splitting', { status: 'completed', progress: 100 });
           splitSucceeded = true;
           console.log('[subtitleStore] 无需拆分的字幕');
         }
       } catch (splitAlignError) {
         console.warn('[subtitleStore] LLM 断句对齐失败，保留原始翻译:', splitAlignError);
-        get().updateSplitProgress(fileId, 100);
+        get().updatePhase(fileId, 'splitting', { status: 'failed', progress: 0 });
       }
 
       // ✅ Phase 3: 移除 forcePersist，DataManager 负责持久化
@@ -782,6 +780,15 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       const appError = toAppError(error, '翻译失败');
       console.error('[subtitleStore]', appError.message, appError);
       toast.error(`翻译失败: ${appError.message}`);
+
+      // 标记当前活跃阶段为失败
+      const phases = get().getFile(fileId)?.phases;
+      if (phases?.translating.status === 'active') {
+        get().updatePhase(fileId, 'translating', { status: 'failed', progress: 0 });
+      }
+      if (phases?.splitting.status === 'active') {
+        get().updatePhase(fileId, 'splitting', { status: 'failed', progress: 0 });
+      }
     } finally {
       translationConfigStore.stopTranslation();
     }
@@ -802,19 +809,6 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
               translatedCount: completed,
               entryCount: total
             }
-          : f
-      )
-    }));
-  },
-
-  /**
-   * 更新断句对齐进度（0-100）
-   */
-  updateSplitProgress: (fileId: string, progress: number) => {
-    set((state) => ({
-      files: state.files.map(f =>
-        f.id === fileId
-          ? { ...f, splitProgress: progress }
           : f
       )
     }));

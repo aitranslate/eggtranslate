@@ -160,7 +160,7 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
           isTranslating: false,
           currentTaskId: '',
           progress: DEFAULT_PROGRESS,
-          abortController: null
+          abortController: null,
         });
       },
 
@@ -173,7 +173,7 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
           progress: DEFAULT_PROGRESS,
           tokensUsed: 0,
           currentTaskId: '',
-          abortController: null
+          abortController: null,
         });
 
         try {
@@ -242,7 +242,7 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
         await translationService.completeTranslation(taskId);
         set({
           isTranslating: false,
-          currentTaskId: ''
+          currentTaskId: '',
         });
       }
     }),
@@ -279,16 +279,6 @@ export const useIsTranslating = () => useTranslationConfigStore((state) => state
  * 获取翻译进度
  */
 export const useTranslationProgress = () => useTranslationConfigStore((state) => state.progress);
-
-/**
- * 获取翻译阶段（原始值，避免对象引用导致 memo 失效）
- */
-export const useTranslationPhase = () => useTranslationConfigStore((state) => state.progress.phase);
-
-/**
- * 获取翻译状态文本（原始值）
- */
-export const useTranslationStatus = () => useTranslationConfigStore((state) => state.progress.status);
 
 /**
  * 获取已使用 tokens

@@ -9,7 +9,6 @@ import { BatchFileUpload } from './BatchFileUpload';
 import { SubtitleFileList } from './SubtitleFileList';
 import { TranslationControls } from './TranslationControls';
 import { SubtitleEditor } from './SubtitleEditor';
-import { ProgressDisplay } from './ProgressDisplay';
 import { SettingsModal } from './SettingsModal';
 import { TermsManager } from './TermsManager';
 import { HistoryModal } from './HistoryModal';

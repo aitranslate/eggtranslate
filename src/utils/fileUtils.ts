@@ -22,7 +22,11 @@ export const canRetranscribe = (file: SubtitleFile | SubtitleFileMetadata): bool
 
   // 音视频文件
   if (file.fileType === 'audio' || file.fileType === 'video') {
-    // 只有未完成或失败时才允许重新转录
+    // SubtitleFileMetadata 使用 phases
+    if ('phases' in file && file.phases) {
+      return file.phases.transcribing.status !== 'completed' && file.phases.transcribing.status !== 'active';
+    }
+    // Legacy SubtitleFile 使用 transcriptionStatus
     return file.transcriptionStatus !== 'completed';
   }
 
