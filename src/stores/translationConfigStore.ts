@@ -210,6 +210,7 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
 
       /**
        * 更新翻译进度
+       * 注意：tokens 只在文件级别累加，这里不累加全局 tokens
        */
       updateProgress: async (
         current: number,
@@ -219,20 +220,10 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
         taskId: string,
         newTokens?: number
       ) => {
-        // 更新 store 状态
+        // 只更新进度状态，tokens 由调用方在文件级别管理
         set({
           progress: { current, total, phase, status }
         });
-
-        // 更新服务层
-        await translationService.updateProgress(current, total, phase, status, taskId, newTokens);
-
-        // 更新 tokens
-        if (newTokens !== undefined) {
-          set((state) => ({
-            tokensUsed: state.tokensUsed + newTokens
-          }));
-        }
       },
 
       /**

@@ -48,32 +48,28 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   }, [startTranscription]);
 
   const executeTranslation = useCallback(async (file: SubtitleFileMetadata) => {
-    await startTranslation(file.id);
+    const result = await startTranslation(file.id);
 
-    const batchTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
-    const completedTask = batchTasks?.tasks?.find((t: any) => t.taskId === file.taskId);
-
-    if (!completedTask) {
-      console.log('[SubtitleFileList] 文件已删除，跳过完成提示');
+    if (!result) {
+      console.log('[SubtitleFileList] 翻译未完成或已中止');
       return;
     }
 
-    const finalTokens = completedTask.phases?.translating?.tokens || 0;
-    const actualCompleted = completedTask.subtitle_entries?.filter((entry: any) =>
-      entry.translatedText && entry.translatedText.trim() !== ''
-    ).length || 0;
+    const { tokens, entries, phases } = result;
+    const actualCompleted = entries.filter(e =>
+      e.translatedText && e.translatedText.trim() !== ''
+    ).length;
 
     if (actualCompleted > 0) {
       await addHistoryEntry({
         taskId: file.taskId,
         filename: file.name,
         completedCount: actualCompleted,
-        totalTokens: finalTokens,
-        phases: completedTask.phases,
-        subtitle_entries: completedTask.subtitle_entries
+        totalTokens: tokens,
+        phases: phases,
+        subtitle_entries: entries
       });
     }
-    // Note: Data is already persisted by the stores, no need for forcePersistAllData
   }, [startTranslation, addHistoryEntry]);
 
   const handleStartTranslation = useCallback(async (file: SubtitleFileMetadata) => {

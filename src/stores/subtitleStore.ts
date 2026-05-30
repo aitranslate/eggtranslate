@@ -54,7 +54,7 @@ interface SubtitleStore {
   startTranscription: (fileId: string) => Promise<void>;
 
   // Actions - 翻译
-  startTranslation: (fileId: string) => Promise<void>;
+  startTranslation: (fileId: string) => Promise<{ tokens: number; entries: SubtitleEntry[]; phases: FilePhases } | null>;
   updateTranslationProgress: (fileId: string, completed: number, total: number) => void;
 
   // Actions - 阶段状态管理
@@ -448,15 +448,15 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
   // 翻译操作
   // ========================================
 
-  startTranslation: async (fileId: string) => {
+  startTranslation: async (fileId: string): Promise<{ tokens: number; entries: SubtitleEntry[]; phases: FilePhases } | null> => {
     const file = get().getFile(fileId);
-    if (!file) return;
+    if (!file) return null;
 
     const translationConfigStore = useTranslationConfigStore.getState();
     const config = translationConfigStore.config;
     if (!translationConfigStore.isConfigured) {
       toast.error('请先配置翻译 API');
-      return;
+      return null;
     }
 
     try {
@@ -489,11 +489,17 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
             await get().updateEntry(fileId, id, text, translatedText, status);
           },
           updateProgress: async (current: number, total: number, phase: 'direct' | 'splitting' | 'completed', status: string, taskId: string, newTokens?: number) => {
-            await translationConfigStore.updateProgress(current, total, phase, status, taskId, newTokens);
+            await translationConfigStore.updateProgress(current, total, phase, status, taskId);
 
-            if (phase === 'direct' && total > 0) {
-              const percent = Math.round((current / total) * 100);
-              get().updatePhase(fileId, 'translating', { progress: percent });
+            // 只在文件级别累加 tokens
+            if (newTokens !== undefined && newTokens > 0) {
+              const prevTokens = get().getFile(fileId)?.tokensUsed || 0;
+              const currentTokens = prevTokens + newTokens;
+              get().updatePhase(fileId, 'translating', {
+                progress: total > 0 ? Math.round((current / total) * 100) : 0,
+                tokens: currentTokens
+              });
+              get().setTokens(fileId, currentTokens);
             }
           },
           getRelevantTerms: (batchText: string, before: string, after: string): Term[] => {
@@ -525,10 +531,11 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
 
       if (controller.signal.aborted) {
         console.log('[subtitleStore] 翻译已中止（文件已删除）');
-        return;
+        return null;
       }
 
       // 完成翻译 - 直接写 localforage
+      const tokensAfterTranslate = get().getFile(fileId)?.tokensUsed || 0;
       const finalBatchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
       const finalTaskIndex = finalBatchTasks?.tasks.findIndex(t => t.taskId === file.taskId);
       if (finalTaskIndex !== -1 && finalBatchTasks) {
@@ -536,21 +543,22 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
           ...finalBatchTasks.tasks[finalTaskIndex],
           phases: {
             ...finalBatchTasks.tasks[finalTaskIndex].phases,
-            translating: { status: 'completed', progress: 100, tokens: translationConfigStore.tokensUsed || 0 }
+            translating: { status: 'completed', progress: 100, tokens: tokensAfterTranslate }
           }
         };
         await localforage.setItem('batch_tasks', finalBatchTasks);
       }
 
       get().updateFileStatistics(fileId);
-      get().setTokens(fileId, useTranslationConfigStore.getState().tokensUsed || 0);
+      get().setTokens(fileId, tokensAfterTranslate);
       get().updatePhase(fileId, 'translating', { status: 'completed', progress: 100 });
 
       const aiSegmentationEnabled = useTranscriptionStore.getState().aiSegmentationEnabled;
       if (!aiSegmentationEnabled) {
         console.log('[subtitleStore] AI 断句对齐已关闭，跳过');
         toast.success(`${file.name} 翻译完成`);
-        return;
+        const tokens = get().getFile(fileId)?.tokensUsed || 0;
+        return { tokens, entries, phases: get().getFile(fileId)?.phases };
       }
 
       let splitSucceeded = false;
@@ -605,7 +613,14 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
           threadCount: config.threadCount,
           onProgress: (current, total, tokensUsed) => {
             const percent = total > 0 ? Math.round((current / total) * 50) : 0;
-            get().updatePhase(fileId, 'splitting', { progress: percent });
+            const prevTokens = get().getFile(fileId)?.tokensUsed || 0;
+            // tokensUsed 是累计值，需要减去上一阶段的值才是增量
+            const newTokens = tokensUsed || 0;
+            get().updatePhase(fileId, 'splitting', { progress: percent, tokens: newTokens });
+            get().setTokens(fileId, newTokens);
+            if (tokensUsed && tokensUsed > prevTokens) {
+              console.log(`[subtitleStore] 断句拆分完成，消耗 ${tokensUsed - prevTokens} tokens，当前累计 ${newTokens}`);
+            }
             translationConfigStore.updateProgress(current, total, 'splitting', `断句拆分中 ${current}/${total}`, file.taskId).catch(err => console.warn('[subtitleStore] updateProgress failed:', err));
           },
         });
@@ -662,10 +677,16 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
 
             for (const result of chunkResults) {
               alignCompleted++;
+              const alignPercent = 50 + Math.round((alignCompleted / alignTasks.length) * 50);
               if (result) {
                 allAlignResults.push(result);
+                // 累加对齐 tokens
+                const prevTokens = get().getFile(fileId)?.tokensUsed || 0;
+                const newTokens = prevTokens + (result.tokensUsed || 0);
+                get().updatePhase(fileId, 'splitting', { progress: alignPercent, tokens: newTokens });
+                get().setTokens(fileId, newTokens);
+                console.log(`[subtitleStore] 对齐完成，消耗 ${result.tokensUsed} tokens，当前累计 ${newTokens}`);
               }
-              const alignPercent = 50 + Math.round((alignCompleted / alignTasks.length) * 50);
               get().updatePhase(fileId, 'splitting', { progress: alignPercent });
               await translationConfigStore.updateProgress(
                 postSplitEntries.length + alignCompleted,
@@ -771,6 +792,29 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       } else {
         toast.success(`${file.name} 翻译完成（断句对齐失败，保留原始分段）`);
       }
+
+      const finalTokens = get().getFile(fileId)?.tokensUsed || 0;
+      const lastBatchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+      const lastEntries = lastBatchTasks?.tasks.find(t => t.taskId === file.taskId)?.subtitle_entries || [];
+
+      // 更新 localforage 中的 tokens（供后续恢复使用）
+      if (lastBatchTasks) {
+        const taskIdx = lastBatchTasks.tasks.findIndex(t => t.taskId === file.taskId);
+        if (taskIdx !== -1) {
+          lastBatchTasks.tasks[taskIdx] = {
+            ...lastBatchTasks.tasks[taskIdx],
+            phases: {
+              ...lastBatchTasks.tasks[taskIdx].phases,
+              translating: { ...lastBatchTasks.tasks[taskIdx].phases.translating, tokens: finalTokens }
+            }
+          };
+          await localforage.setItem('batch_tasks', lastBatchTasks);
+        }
+      }
+
+      const finalPhases = get().getFile(fileId)?.phases;
+      console.log(`[subtitleStore] 任务完成，总消耗 ${finalTokens} tokens`);
+      return { tokens: finalTokens, entries: lastEntries, phases: finalPhases };
     } catch (error) {
       const appError = toAppError(error, '翻译失败');
       console.error('[subtitleStore]', appError.message, appError);
@@ -786,6 +830,7 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     } finally {
       translationConfigStore.stopTranslation();
     }
+    return null;
   },
 
   updateTranslationProgress: (fileId: string, completed: number, total: number) => {
