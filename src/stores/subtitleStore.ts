@@ -884,6 +884,8 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
                 const success = await performSplitAlignAtomic(entry, sourceLimit, targetLimit);
                 if (success) {
                   await get().updateEntrySplitStatus(fileId, entry.id, 'completed');
+                } else {
+                  await get().updateEntrySplitStatus(fileId, entry.id, 'pending');
                 }
                 return { success, tokens: 0 };
               })
