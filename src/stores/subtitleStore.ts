@@ -15,6 +15,7 @@ import { mapSourcePartsToBoundaries, boundariesToRanges } from '@/utils/sourceSp
 import { formatTime, parseTime } from '@/utils/timeUtils';
 import { countUnits } from '@/utils/textUnitCounter';
 import { toAppError } from '@/utils/errors';
+import { convertToMP3 } from '@/utils/convertToMP3';
 import type { ProgressPhase } from '@/types';
 import { markDirty, flushAll } from '@/services/PhasePersistence';
 import toast from 'react-hot-toast';
@@ -301,7 +302,18 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
 
     try {
       const fileRef = (file as any).fileRef;
-      if (!fileRef) {
+      let mediaFile: File | undefined = fileRef;
+
+      // 如果没有 fileRef，尝试从 IndexedDB 加载保存的 MP3
+      if (!mediaFile) {
+        const savedMp3 = await localforage.getItem<Blob>(`mp3_data:${file.taskId}`);
+        if (savedMp3) {
+          mediaFile = new File([savedMp3], 'audio.mp3', { type: 'audio/mpeg' });
+          console.log('[subtitleStore] 从 IndexedDB 恢复 MP3 用于转录');
+        }
+      }
+
+      if (!mediaFile) {
         toast.error('文件引用丢失，请重新上传');
         return;
       }
@@ -319,8 +331,25 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
       get().setWorkflow(fileId, 'transcribe');
       get().updatePhase(fileId, 'converting', { status: 'active', progress: -1, tokens: 0 });
 
+      // 转码前保存 MP3 到 IndexedDB（如果是新上传的文件，需要转换）
+      let mp3Blob: Blob;
+      try {
+        mp3Blob = await convertToMP3(mediaFile);
+      } catch (error) {
+        const appError = toAppError(error, '音频转码失败');
+        console.error('[subtitleStore]', appError.message, appError);
+        toast.error(`转码失败: ${appError.message}`);
+        get().updatePhase(fileId, 'converting', { status: 'failed', progress: 0 });
+        return;
+      }
+      await localforage.setItem(`mp3_data:${file.taskId}`, mp3Blob);
+      console.log('[subtitleStore] 已保存 MP3 到 IndexedDB');
+
+      // 使用转换后的 MP3 文件进行转录
+      const mp3File = new File([mp3Blob], 'audio.mp3', { type: 'audio/mpeg' });
+
       const result = await runTranscriptionPipeline(
-        fileRef,
+        mp3File,
         allKeyterms,
         {
           onConverting: () => {
