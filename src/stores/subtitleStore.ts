@@ -326,6 +326,12 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     const file = get().getFile(fileId);
     if (!file || file.fileType === 'srt') return;
 
+    // 如果已经转录完成，跳过
+    if (file.phases.transcribing.status === 'completed') {
+      console.log('[subtitleStore] 转录已完成，跳过');
+      return;
+    }
+
     try {
       const fileRef = (file as any).fileRef;
       let mediaFile: File | undefined = fileRef;
@@ -355,21 +361,33 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
 
       // 设置仅转录工作流
       get().setWorkflow(fileId, 'transcribe');
-      get().updatePhase(fileId, 'converting', { status: 'active', progress: -1, tokens: 0 });
 
-      // 转码前保存 MP3 到 IndexedDB（如果是新上传的文件，需要转换）
       let mp3Blob: Blob;
-      try {
-        mp3Blob = await convertToMP3(mediaFile);
-      } catch (error) {
-        const appError = toAppError(error, '音频转码失败');
-        console.error('[subtitleStore]', appError.message, appError);
-        toast.error(`转码失败: ${appError.message}`);
-        get().updatePhase(fileId, 'converting', { status: 'failed', progress: 0 });
-        return;
+
+      // 如果已转码完成，使用保存的 MP3；否则转码并保存
+      if (file.phases.converting.status === 'completed') {
+        console.log('[subtitleStore] 转码已完成，使用已保存的 MP3');
+        mp3Blob = await localforage.getItem<Blob>(`mp3_data:${file.taskId}`);
+        if (!mp3Blob) {
+          toast.error('MP3 数据丢失，请重新上传');
+          return;
+        }
+      } else {
+        // 需要转码
+        get().updatePhase(fileId, 'converting', { status: 'active', progress: -1, tokens: 0 });
+
+        try {
+          mp3Blob = await convertToMP3(mediaFile);
+        } catch (error) {
+          const appError = toAppError(error, '音频转码失败');
+          console.error('[subtitleStore]', appError.message, appError);
+          toast.error(`转码失败: ${appError.message}`);
+          get().updatePhase(fileId, 'converting', { status: 'failed', progress: 0 });
+          return;
+        }
+        await localforage.setItem(`mp3_data:${file.taskId}`, mp3Blob);
+        console.log('[subtitleStore] 已保存 MP3 到 IndexedDB');
       }
-      await localforage.setItem(`mp3_data:${file.taskId}`, mp3Blob);
-      console.log('[subtitleStore] 已保存 MP3 到 IndexedDB');
 
       // 使用转换后的 MP3 文件进行转录
       const mp3File = new File([mp3Blob], 'audio.mp3', { type: 'audio/mpeg' });
@@ -379,13 +397,20 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         allKeyterms,
         {
           onConverting: () => {
-            get().updatePhase(fileId, 'converting', { status: 'active', progress: -1 });
+            // 只有转码未完成时才更新状态
+            if (file.phases.converting.status !== 'completed') {
+              get().updatePhase(fileId, 'converting', { status: 'active', progress: -1 });
+            }
           },
           onUploading: () => {
-            get().updatePhase(fileId, 'converting', { status: 'active', progress: -1 });
+            if (file.phases.converting.status !== 'completed') {
+              get().updatePhase(fileId, 'converting', { status: 'active', progress: -1 });
+            }
           },
           onTranscribing: () => {
-            get().updatePhase(fileId, 'converting', { status: 'completed', progress: 100 });
+            if (file.phases.converting.status !== 'completed') {
+              get().updatePhase(fileId, 'converting', { status: 'completed', progress: 100 });
+            }
             get().updatePhase(fileId, 'transcribing', { status: 'active', progress: -1, tokens: 0 });
           },
           onProgress: (percent) => {
