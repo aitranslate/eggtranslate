@@ -91,7 +91,7 @@ export const PhaseTooltipCard: React.FC<PhaseTooltipCardProps> = ({
                 <span>{formatNumber(entryCount)}/{formatNumber(totalEntries)} 条</span>
               )}
               {tokens !== undefined && tokens > 0 && (
-                <span>· {formatNumber(tokens)} tokens</span>
+                <span>{formatNumber(tokens)} tokens</span>
               )}
             </div>
           )}

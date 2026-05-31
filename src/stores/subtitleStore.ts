@@ -524,6 +524,11 @@ export const useSubtitleStore = create<SubtitleStore>()(
         const file = get().getFile(fileId);
         if (!file) return;
 
+        // 完成时清除错误信息
+        if (update.status === 'completed') {
+          update.errorMessage = undefined;
+        }
+
         set((state) => ({
           tasks: state.tasks.map(t =>
             t.taskId === file.taskId
