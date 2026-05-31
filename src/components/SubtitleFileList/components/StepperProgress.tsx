@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
 import { Check, X } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useSubtitleStore, useFile } from '@/stores/subtitleStore';
+import { PhaseTooltipCard } from './PhaseTooltipCard';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { shouldLineBeActive } from '@/utils/badgeHelper';
 import type { ProgressPhase, PhaseProgress, FilePhases } from '@/types';
@@ -17,7 +18,7 @@ const BRAND_BLUE = '#0066FF';
 
 const PHASE_LABELS_CN: Record<ProgressPhase, string> = {
   converting: '视频转码',
-  transcribing: 'AI 转录',
+  transcribing: '语音识别',
   translating: '字幕翻译',
   splitting: '断句对齐',
 };
@@ -112,6 +113,7 @@ const ConnectingLine: React.FC<{
 export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId }) => {
   const file = useFile(fileId);
   const aiSegmentationEnabled = useTranscriptionStore(state => state.aiSegmentationEnabled);
+  const [showTooltip, setShowTooltip] = useState(false);
 
   // 决定显示哪些阶段节点（根据文件类型过滤）
   const displayPhases = useMemo(() => {
@@ -176,9 +178,10 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId }) => {
 
           return (
             <div key={phase} style={{ display: 'contents' }}>
-              {/* Node column */}
+              {/* Node column with tooltip */}
               <div
                 style={{
+                  position: 'relative',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -208,6 +211,8 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId }) => {
                       ? { duration: 2, repeat: Infinity, ease: 'easeOut' }
                       : { duration: 0.3 }
                   }
+                  onMouseEnter={() => setShowTooltip(true)}
+                  onMouseLeave={() => setShowTooltip(false)}
                 >
                   {isCompleted && (
                     <motion.div
@@ -230,6 +235,17 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId }) => {
                   {/* 不确定进度和确定进度都显示 Spinner */}
                   {isActive && <Spinner />}
                 </motion.div>
+
+                <PhaseTooltipCard
+                  phaseName={PHASE_LABELS_CN[phase]}
+                  progress={phaseState.progress > 0 && phaseState.progress < 100 ? phaseState.progress : undefined}
+                  tokens={phaseState.tokens > 0 ? phaseState.tokens : undefined}
+                  entryCount={phaseState.entryCount}
+                  totalEntries={phaseState.totalEntries}
+                  language={phaseState.language}
+                  errorMessage={phaseState.errorMessage}
+                  isVisible={showTooltip}
+                />
 
                 <span
                   style={{
