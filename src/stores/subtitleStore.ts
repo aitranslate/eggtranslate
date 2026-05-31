@@ -548,18 +548,22 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     try {
       const controller = await translationConfigStore.startTranslation(file.taskId);
 
-      // 只有未完成才设置 active 状态
+      // 从 localforage 获取完整 entries（需要在计算恢复进度之前）
+      const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+      const task = batchTasks?.tasks.find(t => t.taskId === file.taskId);
+      const entries = task?.subtitle_entries || [];
+
+      // 恢复翻译进度（断点续跑时保持已有进度）
+      const restoredProgress = file.phases.translating.progress > 0 ? file.phases.translating.progress : 0;
+      const restoredTokens = file.phases.translating.tokens || 0;
+
+      // 只有未完成才设置 active 状态，但保留已有进度和 tokens
       if (file.phases.translating.status !== 'completed') {
-        get().updatePhase(fileId, 'translating', { status: 'active', progress: 0, tokens: 0 });
+        get().updatePhase(fileId, 'translating', { status: 'active', progress: restoredProgress, tokens: restoredTokens });
       }
       if (file.phases.splitting.status !== 'completed') {
         get().updatePhase(fileId, 'splitting', { status: 'upcoming', progress: 0, tokens: 0 });
       }
-
-      // 从 localforage 获取完整 entries
-      const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
-      const task = batchTasks?.tasks.find(t => t.taskId === file.taskId);
-      const entries = task?.subtitle_entries || [];
 
       await executeTranslation(
         {
@@ -705,8 +709,17 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         } else {
           console.log('[subtitleStore] 开始 LLM 断句对齐...');
 
-          get().updatePhase(fileId, 'splitting', { status: 'active', progress: 0, tokens: 0 });
-          await translationConfigStore.updateProgress(0, entriesToProcess.length, 'splitting', '断句对齐中...', file.taskId);
+          // 恢复断句对齐进度（断点续跑时保持已有进度）
+          const restoredSplitProgress = file.phases.splitting.progress > 0 ? file.phases.splitting.progress : 0;
+          get().updatePhase(fileId, 'splitting', { status: 'active', progress: restoredSplitProgress, tokens: file.phases.splitting.tokens || 0 });
+
+          // 计算已完成的条目数（用于进度显示）
+          const completedCount = postSplitEntries.filter(e =>
+            e.splitAlignStatus === 'completed'
+          ).length;
+          const totalToProcess = completedCount + entriesToProcess.length;
+          const displayProgress = totalToProcess > 0 ? Math.round((completedCount / totalToProcess) * 100) : 0;
+          await translationConfigStore.updateProgress(completedCount, totalToProcess, 'splitting', `断句对齐中... (${completedCount}/${totalToProcess})`, file.taskId);
 
           // 辅助函数：检查是否需要拆分
           const needsSplit = (entry: SubtitleEntry, sourceLimit: number, targetLimit: number): boolean => {
