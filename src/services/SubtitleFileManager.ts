@@ -130,11 +130,29 @@ export async function removeFile(file: SubtitleFileMetadata): Promise<void> {
 
 /**
  * 从 localforage 恢复文件列表（返回元数据，不包含完整 entries）
+ * 检测中断的处理：任何 phase 状态为 'active' 说明实际处理已中断，标记为 'failed'
  */
 export async function restoreFiles(): Promise<SubtitleFileMetadata[]> {
   const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
   if (!batchTasks || batchTasks.tasks.length === 0) {
     return [];
+  }
+
+  let modified = false;
+  for (const task of batchTasks.tasks) {
+    const phases = task.phases;
+    if (phases) {
+      for (const phase of ['converting', 'transcribing', 'translating', 'splitting'] as const) {
+        if (phases[phase]?.status === 'active') {
+          phases[phase] = { status: 'failed', progress: 0, tokens: phases[phase].tokens || 0 };
+          modified = true;
+        }
+      }
+    }
+  }
+
+  if (modified) {
+    await localforage.setItem('batch_tasks', batchTasks);
   }
 
   return batchTasks.tasks.map(task => convertTaskToMetadata(task));
