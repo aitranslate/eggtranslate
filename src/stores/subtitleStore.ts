@@ -5,7 +5,7 @@
  */
 
 import { create } from 'zustand';
-import { SubtitleEntry, SubtitleFileMetadata, Term, TranslationStatus, FilePhases, PhaseProgress, WorkflowType } from '@/types';
+import { SubtitleEntry, SubtitleFileMetadata, Term, TranslationStatus, FilePhases, PhaseProgress, WorkflowType, SplitAlignStatus } from '@/types';
 import { loadFromFile as loadFromFileOriginal, removeFile as removeFileData, clearAllData as clearAllFileData, restoreFiles, convertTaskToMetadata } from '@/services/SubtitleFileManager';
 import { runTranscriptionPipeline } from '@/services/transcriptionPipeline';
 import { executeTranslation } from '@/services/TranslationOrchestrator';
@@ -14,6 +14,7 @@ import { generateStableFileId } from '@/utils/taskIdGenerator';
 import { mapSourcePartsToBoundaries, boundariesToRanges } from '@/utils/sourceSplitBoundaries';
 import { formatTime, parseTime } from '@/utils/timeUtils';
 import { countUnits } from '@/utils/textUnitCounter';
+import { getSourceLimit, getTargetLimit } from '@/utils/subtitleLengthPresets';
 import { toAppError } from '@/utils/errors';
 import { convertToMP3 } from '@/utils/convertToMP3';
 import type { ProgressPhase } from '@/types';
@@ -98,6 +99,7 @@ interface SubtitleStore {
   getFile: (fileId: string) => SubtitleFileMetadata | undefined;
   getAllFiles: () => SubtitleFileMetadata[];
   getTranslationProgress: (fileId: string) => { completed: number; total: number };
+  updateEntrySplitStatus: (fileId: string, entryId: number, status: SplitAlignStatus) => Promise<void>;
 }
 
 // ============================================
@@ -290,6 +292,30 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     await localforage.setItem('batch_tasks', batchTasks);
 
     get().updateFileStatistics(fileId);
+  },
+
+  updateEntrySplitStatus: async (fileId: string, entryId: number, status: SplitAlignStatus) => {
+    const file = get().getFile(fileId);
+    if (!file) return;
+
+    const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+    if (!batchTasks) return;
+
+    const taskIndex = batchTasks.tasks.findIndex(t => t.taskId === file.taskId);
+    if (taskIndex === -1) return;
+
+    const task = batchTasks.tasks[taskIndex];
+    const entries = task.subtitle_entries || [];
+    const entryIndex = entries.findIndex(e => e.id === entryId);
+
+    if (entryIndex !== -1) {
+      entries[entryIndex] = {
+        ...entries[entryIndex],
+        splitAlignStatus: status,
+      };
+      batchTasks.tasks[taskIndex] = { ...task, subtitle_entries: entries };
+      await localforage.setItem('batch_tasks', batchTasks);
+    }
   },
 
   // ========================================
@@ -595,6 +621,9 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
         const preset = useTranscriptionStore.getState().subtitleLengthPreset;
         let postSplitEntries = (await localforage.getItem<BatchTasks>('batch_tasks'))?.tasks.find(t => t.taskId === file.taskId)?.subtitle_entries || [];
 
+        // ============================================
+        // 向后兼容：恢复使用旧 id encoding 的 composite entries
+        // ============================================
         const compositeEntries = postSplitEntries.filter(e => e.id > 999999);
         if (compositeEntries.length > 0) {
           const groups = new Map<number, SubtitleEntry[]>();
@@ -624,181 +653,255 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
           postSplitEntries = (await localforage.getItem<BatchTasks>('batch_tasks'))?.tasks.find(t => t.taskId === file.taskId)?.subtitle_entries || [];
         }
 
-        const fullSourceText = postSplitEntries.map(e => e.text).join('\n');
-        const fullDraftTranslation = postSplitEntries.map(e => e.translatedText || '').join('\n');
+        // ============================================
+        // 原子 split+align 操作
+        // ============================================
 
-        console.log('[subtitleStore] 开始 LLM 断句对齐...');
+        // 获取需要处理的条目（无 parentId，未完成）
+        const entriesToProcess = postSplitEntries.filter(e =>
+          !e.parentId && e.splitAlignStatus !== 'completed'
+        );
 
-        get().updatePhase(fileId, 'splitting', { status: 'active', progress: 0, tokens: 0 });
-        await translationConfigStore.updateProgress(0, postSplitEntries.length, 'splitting', '断句对齐中...', file.taskId);
+        if (entriesToProcess.length === 0) {
+          console.log('[subtitleStore] 无需拆分的字幕');
+          get().updatePhase(fileId, 'splitting', { status: 'completed', progress: 100 });
+          splitSucceeded = true;
+        } else {
+          console.log('[subtitleStore] 开始 LLM 断句对齐...');
 
-        const splitResults = await llmSourceSplit({
-          entries: postSplitEntries,
-          sourceLang: config.sourceLanguage,
-          targetLang: config.targetLanguage,
-          preset,
-          fullSourceText,
-          fullDraftTranslation,
-          threadCount: config.threadCount,
-          onProgress: (current, total, tokensUsed) => {
-            const percent = total > 0 ? Math.round((current / total) * 50) : 0;
-            const prevTokens = get().getFile(fileId)?.tokensUsed || 0;
-            // tokensUsed 是累计值，需要减去上一阶段的值才是增量
-            const newTokens = tokensUsed || 0;
-            get().updatePhase(fileId, 'splitting', { progress: percent, tokens: newTokens });
-            get().setTokens(fileId, newTokens);
-            if (tokensUsed && tokensUsed > prevTokens) {
-              console.log(`[subtitleStore] 断句拆分完成，消耗 ${tokensUsed - prevTokens} tokens，当前累计 ${newTokens}`);
-            }
-            translationConfigStore.updateProgress(current, total, 'splitting', `断句拆分中 ${current}/${total}`, file.taskId).catch(err => console.warn('[subtitleStore] updateProgress failed:', err));
-          },
-        });
+          get().updatePhase(fileId, 'splitting', { status: 'active', progress: 0, tokens: 0 });
+          await translationConfigStore.updateProgress(0, entriesToProcess.length, 'splitting', '断句对齐中...', file.taskId);
 
-        if (splitResults.length > 0) {
-          console.log(`[subtitleStore] ${splitResults.length} 条字幕需要拆分对齐`);
-
-          const alignThreadCount = config.threadCount;
-          let alignCompleted = 0;
-
-          const alignTasks = splitResults
-            .map(split => {
-              const entry = postSplitEntries.find(e => e.id === split.entryId);
-              if (!entry || split.sourceParts.length <= 1) return null;
-              return { split, entry };
-            })
-            .filter((t): t is { split: typeof splitResults[0]; entry: SubtitleEntry } => t !== null);
-
-          type AlignResult = {
-            entryId: number;
-            entry: SubtitleEntry;
-            sourceParts: string[];
-            alignments: { id: number; text: string }[];
-            tokensUsed: number;
+          // 辅助函数：检查是否需要拆分
+          const needsSplit = (entry: SubtitleEntry, sourceLimit: number, targetLimit: number): boolean => {
+            const sourceUnits = countUnits(entry.text, config.sourceLanguage);
+            const targetUnits = countUnits(entry.translatedText || '', config.targetLanguage);
+            return sourceUnits > sourceLimit || targetUnits > targetLimit;
           };
 
-          const allAlignResults: AlignResult[] = [];
+          // 辅助函数：为单条 entry 生成唯一 ID
+          const generateSplitEntryId = async (): Promise<number> => {
+            const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
+            const entries = batchTasks?.tasks.find(t => t.taskId === file.taskId)?.subtitle_entries || [];
+            const maxId = entries.reduce((max, e) => Math.max(max, e.id), 0);
+            return maxId + 1;
+          };
 
-          for (let i = 0; i < alignTasks.length; i += alignThreadCount) {
-            const chunk = alignTasks.slice(i, i + alignThreadCount);
+          // 辅助函数：执行单条 entry 的原子 split+align
+          const performSplitAlignAtomic = async (
+            entry: SubtitleEntry,
+            sourceLimit: number,
+            targetLimit: number
+          ): Promise<boolean> => {
+            try {
+              // 1. 调用 llmSourceSplit（单条）
+              const fullSourceText = entry.text;
+              const fullDraftTranslation = entry.translatedText || '';
+
+              const sourceUnits = countUnits(entry.text, config.sourceLanguage);
+              const targetUnits = countUnits(entry.translatedText || '', config.targetLanguage);
+              const mustSplit = sourceUnits > sourceLimit * 1.5 || targetUnits > targetLimit * 1.5;
+
+              const splitPrompt = {
+                sourceLanguage: config.sourceLanguage,
+                targetLanguage: config.targetLanguage,
+                fullSourceText,
+                fullDraftTranslation,
+                sourceText: entry.text,
+                sourceLimit,
+                targetLimit,
+                splitRound: 1,
+                mustSplit,
+              };
+
+              // 直接调用 LLM（复用 llmSourceSplit 内部的 callLLMForSplit）
+              const { buildSourceSplitPrompt } = await import('@/utils/splitAlignPrompts');
+              const configStore = useTranslationConfigStore.getState().config;
+              const { callLLM } = await import('@/utils/llmApi');
+              const { jsonrepair } = await import('jsonrepair');
+
+              const prompt = buildSourceSplitPrompt(splitPrompt);
+              const result = await callLLM(
+                { baseURL: configStore.baseURL, apiKey: configStore.apiKey, model: configStore.model, rpm: configStore.rpm },
+                [
+                  { role: 'system', content: 'You are a subtitle segmentation assistant. Output JSON only.' },
+                  { role: 'user', content: JSON.stringify(prompt) },
+                ],
+                { temperature: 0.3 }
+              );
+
+              let parsed: { sourceParts: string[] };
+              try {
+                parsed = JSON.parse(result.content);
+              } catch {
+                const repaired = jsonrepair(result.content);
+                parsed = JSON.parse(repaired);
+              }
+
+              if (!parsed.sourceParts || parsed.sourceParts.length <= 1) {
+                // 无需拆分，标记完成
+                return true;
+              }
+
+              // 2. 调用 llmAlignTranslation
+              const { buildAlignPrompt } = await import('@/utils/splitAlignPrompts');
+              const alignPrompt = buildAlignPrompt({
+                sourceLanguage: config.sourceLanguage,
+                targetLanguage: config.targetLanguage,
+                sourceText: entry.text,
+                draftTranslation: entry.translatedText || '',
+                splitSourceLines: parsed.sourceParts.map((s, i) => ({ id: i + 1, source: s })),
+                theme: '',
+                terminology: [],
+              });
+
+              const alignResult = await callLLM(
+                { baseURL: configStore.baseURL, apiKey: configStore.apiKey, model: configStore.model, rpm: configStore.rpm },
+                [
+                  { role: 'system', content: 'You are a subtitle alignment assistant. Output JSON only.' },
+                  { role: 'user', content: JSON.stringify(alignPrompt) },
+                ],
+                { temperature: 0.3 }
+              );
+
+              let alignParsed: { translations: { id: number; text: string }[] };
+              try {
+                alignParsed = JSON.parse(alignResult.content);
+              } catch {
+                const repaired = jsonrepair(alignResult.content);
+                alignParsed = JSON.parse(repaired);
+              }
+
+              const translations = alignParsed.translations || [];
+              if (translations.length !== parsed.sourceParts.length) {
+                console.warn(`[subtitleStore] 对齐结果数量不匹配，跳过条目 ${entry.id}`);
+                return false;
+              }
+
+              // 3. 创建子条目
+              const words = entry.words;
+              let newEntryIdCounter = await generateSplitEntryId();
+
+              if (words && words.length > 0) {
+                // 有单词级时间戳，使用边界映射
+                const boundaries = mapSourcePartsToBoundaries(parsed.sourceParts, words, config.sourceLanguage);
+                const ranges = boundariesToRanges(boundaries, words.length);
+
+                // 更新父条目为第一个部分
+                const firstStart = words[ranges[0][0]].start;
+                const firstEnd = words[ranges[0][1]].end;
+                const firstWords = words.slice(ranges[0][0], ranges[0][1] + 1);
+                await get().updateEntry(fileId, entry.id, parsed.sourceParts[0], translations[0]?.text || '', undefined, formatTime(firstStart), formatTime(firstEnd), firstWords);
+
+                // 创建其余子条目
+                for (let i = ranges.length - 1; i >= 1; i--) {
+                  const ws = words[ranges[i][0]];
+                  const we = words[ranges[i][1]];
+                  const newEntry: SubtitleEntry = {
+                    id: newEntryIdCounter++,
+                    parentId: entry.id,
+                    splitIndex: i + 1,
+                    startTime: formatTime(ws.start),
+                    endTime: formatTime(we.end),
+                    text: parsed.sourceParts[i],
+                    translatedText: translations[i]?.text || '',
+                    translationStatus: 'completed',
+                    splitAlignStatus: 'completed',
+                    words: words.slice(ranges[i][0], ranges[i][1] + 1),
+                  };
+                  const bt = await localforage.getItem<BatchTasks>('batch_tasks');
+                  const ti = bt?.tasks.findIndex(t => t.taskId === file.taskId);
+                  if (bt && ti !== -1 && ti !== undefined) {
+                    bt.tasks[ti].subtitle_entries.push(newEntry);
+                    await localforage.setItem('batch_tasks', bt);
+                  }
+                }
+              } else {
+                // 无单词级时间戳，按长度比例分配时间
+                const totalDuration = parseTime(entry.endTime) - parseTime(entry.startTime);
+                const unitCounts = parsed.sourceParts.map(p => countUnits(p, config.sourceLanguage));
+                const totalUnits = unitCounts.reduce((a, b) => a + b, 0);
+
+                const partTimestamps: { start: number; end: number }[] = [];
+                let offset = parseTime(entry.startTime);
+                for (let i = 0; i < parsed.sourceParts.length; i++) {
+                  const duration = totalUnits > 0 ? (unitCounts[i] / totalUnits) * totalDuration : totalDuration / parsed.sourceParts.length;
+                  partTimestamps.push({ start: offset, end: offset + duration });
+                  offset += duration;
+                }
+
+                // 更新父条目为第一个部分
+                await get().updateEntry(fileId, entry.id, parsed.sourceParts[0], translations[0]?.text || '', undefined, formatTime(partTimestamps[0].start), formatTime(partTimestamps[0].end));
+
+                // 创建其余子条目
+                for (let i = parsed.sourceParts.length - 1; i >= 1; i--) {
+                  const newEntry: SubtitleEntry = {
+                    id: newEntryIdCounter++,
+                    parentId: entry.id,
+                    splitIndex: i + 1,
+                    startTime: formatTime(partTimestamps[i].start),
+                    endTime: formatTime(partTimestamps[i].end),
+                    text: parsed.sourceParts[i],
+                    translatedText: translations[i]?.text || '',
+                    translationStatus: 'completed',
+                    splitAlignStatus: 'completed',
+                  };
+                  const bt = await localforage.getItem<BatchTasks>('batch_tasks');
+                  const ti = bt?.tasks.findIndex(t => t.taskId === file.taskId);
+                  if (bt && ti !== -1 && ti !== undefined) {
+                    bt.tasks[ti].subtitle_entries.push(newEntry);
+                    await localforage.setItem('batch_tasks', bt);
+                  }
+                }
+              }
+
+              return true;
+            } catch (error) {
+              console.warn(`[subtitleStore] 原子 split+align 失败，条目 ${entry.id}:`, error);
+              return false;
+            }
+          };
+
+          const sourceLimit = getSourceLimit(config.sourceLanguage, preset);
+          const targetLimit = getTargetLimit(config.targetLanguage, preset);
+
+          let completedCount = 0;
+          let totalTokens = 0;
+
+          // 按 threadCount 分块并发处理
+          for (let i = 0; i < entriesToProcess.length; i += config.threadCount) {
+            const chunk = entriesToProcess.slice(i, i + config.threadCount);
 
             const chunkResults = await Promise.all(
-              chunk.map(async ({ split, entry }) => {
-                try {
-                  const { translations: alignments, tokensUsed: alignTokens } = await llmAlignTranslation({
-                    sourceText: entry.text,
-                    draftTranslation: entry.translatedText || '',
-                    splitSourceLines: split.sourceParts.map((s, i) => ({ id: i + 1, source: s })),
-                    sourceLang: config.sourceLanguage,
-                    targetLang: config.targetLanguage,
-                    theme: '',
-                    terminology: [],
-                  });
+              chunk.map(async (entry) => {
+                await get().updateEntrySplitStatus(fileId, entry.id, 'in_progress');
 
-                  if (alignments.length === split.sourceParts.length) {
-                    return { entryId: entry.id, entry, sourceParts: split.sourceParts, alignments, tokensUsed: alignTokens };
-                  }
-                } catch (alignError) {
-                  console.warn(`[subtitleStore] 译文对齐失败，跳过条目 ${entry.id}:`, alignError);
+                if (!needsSplit(entry, sourceLimit, targetLimit)) {
+                  await get().updateEntrySplitStatus(fileId, entry.id, 'completed');
+                  return { success: true, tokens: 0 };
                 }
-                return null;
+
+                const success = await performSplitAlignAtomic(entry, sourceLimit, targetLimit);
+                if (success) {
+                  await get().updateEntrySplitStatus(fileId, entry.id, 'completed');
+                }
+                return { success, tokens: 0 };
               })
             );
 
             for (const result of chunkResults) {
-              alignCompleted++;
-              const alignPercent = 50 + Math.round((alignCompleted / alignTasks.length) * 50);
-              if (result) {
-                allAlignResults.push(result);
-                // 累加对齐 tokens
-                const prevTokens = get().getFile(fileId)?.tokensUsed || 0;
-                const newTokens = prevTokens + (result.tokensUsed || 0);
-                get().updatePhase(fileId, 'splitting', { progress: alignPercent, tokens: newTokens });
-                get().setTokens(fileId, newTokens);
-                console.log(`[subtitleStore] 对齐完成，消耗 ${result.tokensUsed} tokens，当前累计 ${newTokens}`);
-              }
-              get().updatePhase(fileId, 'splitting', { progress: alignPercent });
+              completedCount++;
+              const percent = entriesToProcess.length > 0
+                ? Math.round((completedCount / entriesToProcess.length) * 100)
+                : 100;
+              get().updatePhase(fileId, 'splitting', { progress: percent, tokens: totalTokens });
               await translationConfigStore.updateProgress(
-                postSplitEntries.length + alignCompleted,
-                postSplitEntries.length + alignTasks.length,
+                completedCount,
+                entriesToProcess.length,
                 'splitting',
-                `译文对齐中 ${alignCompleted}/${alignTasks.length}`,
+                `断句对齐中 ${completedCount}/${entriesToProcess.length}`,
                 file.taskId
               );
-            }
-          }
-
-          let splitIdCounter = 0;
-          const existingEntries = (await localforage.getItem<BatchTasks>('batch_tasks'))?.tasks.find(t => t.taskId === file.taskId)?.subtitle_entries || [];
-          for (const e of existingEntries) {
-            if (e.id > 999999) {
-              splitIdCounter = Math.max(splitIdCounter, e.id % 1000000);
-            }
-          }
-          for (const result of allAlignResults) {
-            const entry = result.entry;
-            const words = entry.words;
-
-            if (words && words.length > 0) {
-              const boundaries = mapSourcePartsToBoundaries(result.sourceParts, words, config.sourceLanguage);
-              const ranges = boundariesToRanges(boundaries, words.length);
-
-              const firstStart = words[ranges[0][0]].start;
-              const firstEnd = words[ranges[0][1]].end;
-              const firstWords = words.slice(ranges[0][0], ranges[0][1] + 1);
-              await get().updateEntry(fileId, result.entryId, result.sourceParts[0], result.alignments[0]?.text || '', undefined, formatTime(firstStart), formatTime(firstEnd), firstWords);
-
-              for (let i = ranges.length - 1; i >= 1; i--) {
-                const ws = words[ranges[i][0]];
-                const we = words[ranges[i][1]];
-                splitIdCounter++;
-                const newEntry: SubtitleEntry = {
-                  id: result.entryId * 1000000 + splitIdCounter,
-                  startTime: formatTime(ws.start),
-                  endTime: formatTime(we.end),
-                  text: result.sourceParts[i],
-                  translatedText: result.alignments[i]?.text || '',
-                  translationStatus: 'completed',
-                  words: words.slice(ranges[i][0], ranges[i][1] + 1),
-                };
-                const bt = await localforage.getItem<BatchTasks>('batch_tasks');
-                const ti = bt?.tasks.findIndex(t => t.taskId === file.taskId);
-                if (bt && ti !== -1 && ti !== undefined) {
-                  bt.tasks[ti].subtitle_entries.push(newEntry);
-                  await localforage.setItem('batch_tasks', bt);
-                }
-              }
-            } else {
-              const totalDuration = parseTime(entry.endTime) - parseTime(entry.startTime);
-              const unitCounts = result.sourceParts.map(p => countUnits(p, config.sourceLanguage));
-              const totalUnits = unitCounts.reduce((a, b) => a + b, 0);
-
-              const partTimestamps: { start: number; end: number }[] = [];
-              let offset = parseTime(entry.startTime);
-              for (let i = 0; i < result.sourceParts.length; i++) {
-                const duration = totalUnits > 0 ? (unitCounts[i] / totalUnits) * totalDuration : totalDuration / result.sourceParts.length;
-                partTimestamps.push({ start: offset, end: offset + duration });
-                offset += duration;
-              }
-
-              await get().updateEntry(fileId, result.entryId, result.sourceParts[0], result.alignments[0]?.text || '', undefined, formatTime(partTimestamps[0].start), formatTime(partTimestamps[0].end));
-
-              for (let i = result.sourceParts.length - 1; i >= 1; i--) {
-                splitIdCounter++;
-                const newEntry: SubtitleEntry = {
-                  id: result.entryId * 1000000 + splitIdCounter,
-                  startTime: formatTime(partTimestamps[i].start),
-                  endTime: formatTime(partTimestamps[i].end),
-                  text: result.sourceParts[i],
-                  translatedText: result.alignments[i]?.text || '',
-                  translationStatus: 'completed',
-                };
-                const bt = await localforage.getItem<BatchTasks>('batch_tasks');
-                const ti = bt?.tasks.findIndex(t => t.taskId === file.taskId);
-                if (bt && ti !== -1 && ti !== undefined) {
-                  bt.tasks[ti].subtitle_entries.push(newEntry);
-                  await localforage.setItem('batch_tasks', bt);
-                }
-              }
             }
           }
 
@@ -806,10 +909,6 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
           get().updatePhase(fileId, 'splitting', { status: 'completed', progress: 100 });
           splitSucceeded = true;
           console.log('[subtitleStore] LLM 断句对齐完成');
-        } else {
-          get().updatePhase(fileId, 'splitting', { status: 'completed', progress: 100 });
-          splitSucceeded = true;
-          console.log('[subtitleStore] 无需拆分的字幕');
         }
       } catch (splitAlignError) {
         console.warn('[subtitleStore] LLM 断句对齐失败，保留原始翻译:', splitAlignError);
