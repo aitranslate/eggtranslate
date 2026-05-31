@@ -248,13 +248,17 @@ export async function executeTranslation(
   const initialProgress = calculateActualProgress(entries);
   let currentCompletedCount = initialProgress.completed;
 
-  await callbacks.updateProgress(
-    currentCompletedCount,
-    entries.length,
-    'direct',
-    `准备翻译... (已完成: ${currentCompletedCount}/${entries.length})`,
-    taskId
-  );
+  // 跳过初始化进度调用：如果已有完成条目，说明是断点续跑，
+  // 进度已在 UI 显示，不需要重置为 0%
+  if (currentCompletedCount === 0) {
+    await callbacks.updateProgress(
+      currentCompletedCount,
+      entries.length,
+      'direct',
+      `准备翻译... (已完成: ${currentCompletedCount}/${entries.length})`,
+      taskId
+    );
+  }
 
   // 创建批次（createTranslationBatches 已经只返回有未翻译条目的批次）
   const batchesToTranslate = createTranslationBatches(entries, config, callbacks);
