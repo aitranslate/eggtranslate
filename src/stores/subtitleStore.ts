@@ -492,7 +492,7 @@ export const useSubtitleStore = create<SubtitleStore>()(
                     phases: {
                       ...t.phases,
                       converting: { status: 'completed', progress: 100, tokens: 0 } as PhaseProgress,
-                      transcribing: { status: 'completed', progress: 100, tokens: 0 } as PhaseProgress,
+                      transcribing: { status: 'completed', progress: 100, tokens: 0, language: result.language, entryCount: result.entries.length, totalEntries: result.entries.length } as PhaseProgress,
                     }
                   }
                 : t

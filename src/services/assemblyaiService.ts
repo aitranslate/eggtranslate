@@ -96,7 +96,7 @@ export class AssemblyAIService {
     mediaFile: File,
     options: { keyterms?: string[] } = {},
     onProgress?: (status: string, percent: number) => void
-  ): Promise<AssemblyAISentence[]> {
+  ): Promise<{ sentences: AssemblyAISentence[], language: string }> {
     try {
       const client = this.createClient();
 
@@ -156,16 +156,19 @@ export class AssemblyAIService {
 
       onProgress?.('completed', 100);
 
-      return segments.map(s => ({
-        text: s.text,
-        start: Math.round(s.start * 1000),
-        end: Math.round(s.end * 1000),
-        words: words.slice(s.wordStart, s.wordEnd + 1).map(w => ({
-          text: w.text,
-          start: w.start,
-          end: w.end
-        }))
-      }));
+      return {
+        sentences: segments.map(s => ({
+          text: s.text,
+          start: Math.round(s.start * 1000),
+          end: Math.round(s.end * 1000),
+          words: words.slice(s.wordStart, s.wordEnd + 1).map(w => ({
+            text: w.text,
+            start: w.start,
+            end: w.end
+          }))
+        })),
+        language: languageCode
+      };
 
     } catch (error) {
       const appError = toAppError(error, 'ASR 转录失败');

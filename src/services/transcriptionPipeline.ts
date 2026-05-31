@@ -36,10 +36,11 @@ export const runTranscriptionPipeline = async (
   callbacks: ProgressCallbacks = {}
 ): Promise<{
   entries: SubtitleEntry[];
+  language: string;
 }> => {
   try {
     // 1. 上传并转录（使用智能断句）
-    const sentences = await assemblyaiService.transcribeWithSmartSegmentation(
+    const { sentences, language } = await assemblyaiService.transcribeWithSmartSegmentation(
       fileRef,
       { keyterms },
       (status, percent) => {
@@ -72,7 +73,8 @@ export const runTranscriptionPipeline = async (
     callbacks.onCompleted?.();
 
     return {
-      entries
+      entries,
+      language
     };
 
   } catch (error) {
