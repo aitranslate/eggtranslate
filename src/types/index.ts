@@ -11,6 +11,9 @@ export interface SubtitleWord {
   end: number;   // 秒
 }
 
+// 断句对齐状态类型
+export type SplitAlignStatus = 'pending' | 'in_progress' | 'completed';
+
 // 字幕条目类型
 export interface SubtitleEntry {
   id: number;
@@ -20,6 +23,11 @@ export interface SubtitleEntry {
   translatedText: string;
   translationStatus: TranslationStatus;
   words?: SubtitleWord[];  // 单词级时间戳（转录产生，SRT 导入为空）
+
+  // 断句对齐相关
+  parentId?: number;           // 父条目 id，undefined = 原始条目
+  splitIndex?: number;         // 第几个子条目（1, 2, 3...）
+  splitAlignStatus?: SplitAlignStatus;  // 原子操作状态
 }
 
 // LLM API 基础配置类型
