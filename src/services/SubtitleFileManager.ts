@@ -38,6 +38,28 @@ function createInitialPhases(isSrt: boolean, isTranslated: boolean, workflow: Wo
 }
 
 /**
+ * 从音视频文件获取时长（不需要转码）
+ * 直接读取文件头的元数据，速度很快
+ */
+export function getMediaDuration(file: File): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const element = file.type.startsWith('audio/')
+      ? document.createElement('audio')
+      : document.createElement('video');
+
+    element.src = URL.createObjectURL(file);
+    element.onloadedmetadata = () => {
+      URL.revokeObjectURL(element.src);
+      resolve(element.duration);
+    };
+    element.onerror = () => {
+      URL.revokeObjectURL(element.src);
+      resolve(undefined);
+    };
+  });
+}
+
+/**
  * 从 File 对象加载字幕文件
  * 返回 task + metadata，由调用方（store）负责添加到 tasks 数组
  */
@@ -49,6 +71,9 @@ export async function loadFromFile(
   const index = options.existingFilesCount;
   const taskId = generateTaskId();
   const fileId = generateStableFileId(taskId);
+
+  // 音视频文件立即获取 duration（不需要转码）
+  const duration = fileType !== 'srt' ? await getMediaDuration(file) : undefined;
 
   if (fileType === 'srt') {
     const content = await file.text();
@@ -89,6 +114,7 @@ export async function loadFromFile(
       index,
       fileType,
       fileSize: file.size,
+      duration,
     };
 
     return {
@@ -98,6 +124,7 @@ export async function loadFromFile(
         name: file.name,
         fileType,
         fileSize: file.size,
+        duration,
         lastModified: file.lastModified,
         entryCount: 0,
         translatedCount: 0,

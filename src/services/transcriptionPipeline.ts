@@ -36,7 +36,6 @@ export const runTranscriptionPipeline = async (
   callbacks: ProgressCallbacks = {}
 ): Promise<{
   entries: SubtitleEntry[];
-  duration: number;
 }> => {
   try {
     // 1. 上传并转录（使用智能断句）
@@ -70,13 +69,10 @@ export const runTranscriptionPipeline = async (
       });
     }
 
-    const duration = sentences[sentences.length - 1]?.end / 1000 || 0;
-
     callbacks.onCompleted?.();
 
     return {
-      entries,
-      duration
+      entries
     };
 
   } catch (error) {
