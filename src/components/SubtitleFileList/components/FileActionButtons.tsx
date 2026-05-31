@@ -9,10 +9,12 @@ interface FileActionButtonsProps {
   translationStats: {
     percentage: number;
   };
-  isTranslatingGlobally: boolean;
-  currentTranslatingFileId: string | null;
+  isQueued: boolean;
+  queuePosition: number;
+  isActive: boolean;
   onTranscribeAndTranslate: () => void;
   onTranscribe: () => void;
+  onDequeue?: () => void;
   onStartTranslation: () => void;
   onEdit: () => void;
   onExport: () => void;
@@ -23,10 +25,12 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
   file,
   isTranslating,
   translationStats,
-  isTranslatingGlobally,
-  currentTranslatingFileId,
+  isQueued,
+  queuePosition,
+  isActive,
   onTranscribeAndTranslate,
   onTranscribe,
+  onDequeue,
   onStartTranslation,
   onEdit,
   onExport,
@@ -38,7 +42,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
     [file.phases.converting.status, file.phases.transcribing.status]
   );
 
-  const isBusy = isTranscribing || isTranslating || currentTranslatingFileId === file.id;
+  const isBusy = isTranscribing || isTranslating || isActive || isQueued;
   const isAudioVideo = file.fileType === 'audio' || file.fileType === 'video';
   const isTranscriptionDone = file.phases.transcribing.status === 'completed';
   const splittingFailed = file.phases.splitting.status === 'failed';
@@ -46,10 +50,9 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
   const canTranscribeAndTranslate = useMemo(() => {
     if (isBusy) return false;
     if (translationStats.percentage === 100) return false;
-    if (isTranslatingGlobally) return false;
     if (file.fileType === 'srt') return translationStats.percentage < 100;
     return canRetranscribe(file) || isTranscriptionDone;
-  }, [isBusy, translationStats.percentage, isTranslatingGlobally, file, isTranscriptionDone]);
+  }, [isBusy, translationStats.percentage, file, isTranscriptionDone]);
 
   const canTranscribe = useMemo(() => {
     if (isBusy) return false;
@@ -59,13 +62,12 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
 
   const canTranslate = useMemo(() => {
     if (isBusy) return false;
-    if (isTranslatingGlobally) return false;
     if (isAudioVideo && !isTranscriptionDone) return false;
     // 允许重试：断句失败时（翻译可能已100%），仍可重新触发整个流程
     if (splittingFailed) return true;
     if (translationStats.percentage === 100) return false;
     return true;
-  }, [isBusy, translationStats.percentage, isTranslatingGlobally, isAudioVideo, isTranscriptionDone, splittingFailed]);
+  }, [isBusy, translationStats.percentage, isAudioVideo, isTranscriptionDone, splittingFailed]);
 
   // Determine primary action button
   const showTranscribeButton = isAudioVideo && canRetranscribe(file);
@@ -123,21 +125,27 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              if (isAudioVideo && !isTranscriptionDone) {
+              if (isQueued) {
+                onDequeue?.();
+              } else if (isAudioVideo && !isTranscriptionDone) {
                 onTranscribeAndTranslate();
               } else {
                 onStartTranslation();
               }
             }}
-            disabled={!canTranscribeAndTranslate && !canTranslate}
+            disabled={!isQueued && !canTranscribeAndTranslate && !canTranslate}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
-              background: (canTranscribeAndTranslate || canTranslate) ? '#0066FF' : '#C4C4C4',
+              background: isQueued ? '#8E8E93' : (canTranscribeAndTranslate || canTranslate) ? '#0066FF' : '#C4C4C4',
             }}
-            onMouseEnter={(e) => { if (canTranscribeAndTranslate || canTranslate) (e.currentTarget.style.background = '#005ce6'); }}
-            onMouseLeave={(e) => { if (canTranscribeAndTranslate || canTranslate) (e.currentTarget.style.background = '#0066FF'); }}
+            onMouseEnter={(e) => { if (!isQueued && (canTranscribeAndTranslate || canTranslate)) (e.currentTarget.style.background = '#005ce6'); }}
+            onMouseLeave={(e) => { if (!isQueued && (canTranscribeAndTranslate || canTranslate)) (e.currentTarget.style.background = '#0066FF'); }}
           >
-            {isBusy ? (
+            {isQueued ? (
+              <>
+                取消排队
+              </>
+            ) : isBusy ? (
               <>
                 <div
                   className="rounded-full animate-spin"

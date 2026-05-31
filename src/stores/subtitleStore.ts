@@ -41,11 +41,21 @@ interface SubtitleStore {
   tasks: SingleTask[];
   selectedFileId: string | null;
 
+  // Queue state (memory-only, not persisted)
+  taskQueue: string[];
+  activeTaskId: string | null;
+
   // Actions - 文件操作
   addFile: (file: File) => Promise<string>;
   removeFile: (fileId: string) => Promise<void>;
   selectFile: (fileId: string) => void;
   clearAll: () => Promise<void>;
+
+  // Queue actions
+  enqueueTask: (fileId: string) => void;
+  dequeueTask: (fileId: string) => void;
+  enqueueAllUncompleted: () => void;
+  processNext: () => Promise<void>;
 
   // Actions - 字幕操作
   updateEntry: (fileId: string, entryId: number, text: string, translatedText?: string, status?: TranslationStatus, startTime?: string, endTime?: string, words?: SubtitleEntry['words']) => void;
@@ -96,6 +106,12 @@ function checkOngoingTasks(): boolean {
   );
 }
 
+function isTaskCompleted(file: SubtitleFileMetadata): boolean {
+  return file.phases.translating.status === 'completed'
+    && file.phases.splitting.status !== 'failed'
+    && (file.fileType === 'srt' || file.phases.transcribing.status === 'completed');
+}
+
 // ============================================
 // Store 创建（persist 中间件包裹）
 // ============================================
@@ -106,6 +122,8 @@ export const useSubtitleStore = create<SubtitleStore>()(
       // Initial State
       tasks: [],
       selectedFileId: null,
+      taskQueue: [],
+      activeTaskId: null,
 
       // ========================================
       // 文件操作
@@ -129,6 +147,8 @@ export const useSubtitleStore = create<SubtitleStore>()(
       removeFile: async (fileId: string) => {
         const file = get().getFile(fileId);
         if (!file) return;
+
+        get().dequeueTask(fileId);
 
         const translationStore = useTranslationConfigStore.getState();
         if (translationStore.isTranslating && translationStore.currentTaskId === file.taskId) {
@@ -156,7 +176,7 @@ export const useSubtitleStore = create<SubtitleStore>()(
       clearAll: async () => {
         try {
           const tasksToClean = get().tasks;
-          set({ tasks: [], selectedFileId: null });
+          set({ tasks: [], selectedFileId: null, taskQueue: [], activeTaskId: null });
           for (const task of tasksToClean) {
             await removeMp3Data(task.taskId);
           }
@@ -165,6 +185,97 @@ export const useSubtitleStore = create<SubtitleStore>()(
           const appError = toAppError(error, '清空数据失败');
           console.error('[subtitleStore]', appError.message, appError);
           toast.error('清空数据失败');
+        }
+      },
+
+      // ========================================
+      // Queue actions
+      // ========================================
+
+      enqueueTask: (fileId: string) => {
+        const state = get();
+        if (state.taskQueue.includes(fileId) || state.activeTaskId === fileId) return;
+        const file = state.getFile(fileId);
+        if (!file) return;
+        if (isTaskCompleted(file)) return;
+
+        set((s) => ({ taskQueue: [...s.taskQueue, fileId] }));
+        if (get().activeTaskId === null) {
+          get().processNext().catch(err => console.error('[subtitleStore] processNext failed:', err));
+        }
+      },
+
+      dequeueTask: (fileId: string) => {
+        set((s) => ({
+          taskQueue: s.taskQueue.filter(id => id !== fileId),
+        }));
+        if (get().activeTaskId === fileId) {
+          const translationStore = useTranslationConfigStore.getState();
+          if (translationStore.isTranslating) {
+            translationStore.stopTranslation();
+          }
+          // Note: transcription has no abort mechanism (pre-existing limitation).
+          // The finally guard in processNext prevents interference with the next task.
+          set({ activeTaskId: null });
+          get().processNext().catch(err => console.error('[subtitleStore] processNext failed:', err));
+        }
+      },
+
+      processNext: async () => {
+        const state = get();
+        if (state.taskQueue.length === 0) {
+          set({ activeTaskId: null });
+          return;
+        }
+
+        const fileId = state.taskQueue[0];
+        set((s) => ({
+          taskQueue: s.taskQueue.slice(1),
+          activeTaskId: fileId,
+        }));
+
+        const file = get().getFile(fileId);
+        if (!file) {
+          get().processNext().catch(err => console.error('[subtitleStore] processNext failed:', err));
+          return;
+        }
+
+        try {
+          const isAudioVideo = file.fileType === 'audio' || file.fileType === 'video';
+          const needsTranscription = isAudioVideo && file.phases.transcribing.status !== 'completed';
+
+          if (needsTranscription) {
+            get().setWorkflow(fileId, 'full');
+            await get().startTranscription(fileId);
+
+            const afterTranscribe = get().getFile(fileId);
+            if (!afterTranscribe || afterTranscribe.phases.transcribing.status !== 'completed') {
+              return;
+            }
+          }
+
+          if (file.fileType === 'srt') {
+            get().setWorkflow(fileId, 'translate');
+          }
+          await get().startTranslation(fileId);
+        } catch (error) {
+          console.error('[subtitleStore] processNext task failed:', error);
+        } finally {
+          // Only clear if this invocation is still the active one.
+          // If dequeueTask was called, activeTaskId is already null and a new processNext is running.
+          if (get().activeTaskId === fileId) {
+            set({ activeTaskId: null });
+            get().processNext().catch(err => console.error('[subtitleStore] processNext failed:', err));
+          }
+        }
+      },
+
+      enqueueAllUncompleted: () => {
+        const files = get().getAllFiles();
+        for (const file of files) {
+          if (!isTaskCompleted(file)) {
+            get().enqueueTask(file.id);
+          }
         }
       },
 
@@ -999,4 +1110,10 @@ export const useFile = (fileId: string) => {
     const task = tasks.find(t => generateStableFileId(t.taskId) === fileId);
     return task ? convertTaskToMetadata(task) : undefined;
   }, [tasks, fileId]);
+};
+
+export const useQueueState = () => {
+  const taskQueue = useSubtitleStore((state) => state.taskQueue, useShallow);
+  const activeTaskId = useSubtitleStore((state) => state.activeTaskId);
+  return useMemo(() => ({ taskQueue, activeTaskId }), [taskQueue, activeTaskId]);
 };

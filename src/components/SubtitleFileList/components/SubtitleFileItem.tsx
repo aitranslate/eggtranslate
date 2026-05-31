@@ -17,8 +17,10 @@ interface SubtitleFileItemProps {
   onDelete: (file: SubtitleFileMetadata) => Promise<void>;
   onTranscribeAndTranslate: (file: SubtitleFileMetadata) => Promise<void>;
   onTranscribe: (fileId: string) => Promise<void>;
-  isTranslatingGlobally: boolean;
-  currentTranslatingFileId: string | null;
+  onDequeue: (fileId: string) => void;
+  isQueued: boolean;
+  queuePosition: number;
+  isActive: boolean;
 }
 
 export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
@@ -30,12 +32,14 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   onDelete,
   onTranscribeAndTranslate,
   onTranscribe,
-  isTranslatingGlobally,
-  currentTranslatingFileId,
+  onDequeue,
+  isQueued,
+  queuePosition,
+  isActive,
 }) => {
   const isTranscribing = file.phases.converting.status === 'active' ||
     file.phases.transcribing.status === 'active';
-  const isBusy = isTranscribing || (currentTranslatingFileId === file.id);
+  const isBusy = isTranscribing || isActive || isQueued;
 
   // 获取 aiSegmentationEnabled 配置
   const aiSegmentationEnabled = useTranscriptionStore(state => state.aiSegmentationEnabled);
@@ -52,13 +56,15 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   }, [file.fileType, aiSegmentationEnabled]);
 
   // 使用 getCardBadge 计算 badge 信息
-  const badgeInfo = getCardBadge(file.phases, displayPhases);
+  const badgeInfo = getCardBadge(file.phases, displayPhases, isQueued, queuePosition);
   const badgeClass = badgeInfo.color === 'green'
     ? 'bg-green-50 text-green-600'
     : badgeInfo.color === 'blue'
     ? 'bg-blue-50 text-blue-600'
     : badgeInfo.color === 'red'
     ? 'bg-red-50 text-red-600'
+    : badgeInfo.color === 'yellow'
+    ? 'bg-amber-100 text-amber-700'
     : 'border border-gray-200 text-gray-500 bg-transparent';
   const badgeText = badgeInfo.text;
 
@@ -120,16 +126,18 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
       {/* 3. Footer: action buttons */}
       <FileActionButtons
         file={file}
-        isTranslating={currentTranslatingFileId === file.id}
+        isTranslating={isActive}
         translationStats={{
           percentage: (file.entryCount ?? 0) > 0
             ? Math.round(((file.translatedCount ?? 0) / (file.entryCount ?? 1)) * 100)
             : 0,
         }}
-        isTranslatingGlobally={isTranslatingGlobally}
-        currentTranslatingFileId={currentTranslatingFileId}
+        isQueued={isQueued}
+        queuePosition={queuePosition}
+        isActive={isActive}
         onTranscribeAndTranslate={() => onTranscribeAndTranslate(file)}
         onTranscribe={() => onTranscribe(file.id)}
+        onDequeue={() => onDequeue(file.id)}
         onStartTranslation={() => onStartTranslation(file)}
         onEdit={() => onEdit(file)}
         onExport={handleExport}
@@ -152,8 +160,9 @@ export const SubtitleFileItemMemo = memo(SubtitleFileItem, (prevProps, nextProps
   // Deep compare phases object
   if (prevProps.file.phases !== nextProps.file.phases) return false;
 
-  if (prevProps.isTranslatingGlobally !== nextProps.isTranslatingGlobally) return false;
-  if (prevProps.currentTranslatingFileId !== nextProps.currentTranslatingFileId) return false;
+  if (prevProps.isQueued !== nextProps.isQueued) return false;
+  if (prevProps.queuePosition !== nextProps.queuePosition) return false;
+  if (prevProps.isActive !== nextProps.isActive) return false;
 
   return true;
 });

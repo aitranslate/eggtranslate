@@ -4,12 +4,8 @@ import { Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { downloadZipFile } from '@/utils/fileExport';
 import { exportTaskZip, getBaseName } from '@/services/SubtitleExporter';
-import { useSubtitleStore, useFiles } from '@/stores/subtitleStore';
-import { useTranslationConfigStore } from '@/stores/translationConfigStore';
-import { useTerms } from '@/contexts/TermsContext';
-import { useHistory } from '@/contexts/HistoryContext';
+import { useSubtitleStore, useFiles, useQueueState } from '@/stores/subtitleStore';
 import { SubtitleFileMetadata } from '@/types';
-import { API_CONSTANTS } from '@/constants/api';
 import { SubtitleFileItemMemo as SubtitleFileItem } from './components/SubtitleFileItem';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { SettingsModal } from '../SettingsModal';
@@ -27,131 +23,22 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   const files = useFiles();
   const removeFile = useSubtitleStore((state) => state.removeFile);
   const clearAllData = useSubtitleStore((state) => state.clearAll);
-  const getTranslationProgress = useSubtitleStore((state) => state.getTranslationProgress);
-  const startTranscription = useSubtitleStore((state) => state.startTranscription);
-  const startTranslation = useSubtitleStore((state) => state.startTranslation);
+  const { taskQueue, activeTaskId } = useQueueState();
+  const enqueueTask = useSubtitleStore((state) => state.enqueueTask);
+  const dequeueTask = useSubtitleStore((state) => state.dequeueTask);
+  const enqueueAllUncompleted = useSubtitleStore((state) => state.enqueueAllUncompleted);
 
-  const { getRelevantTerms } = useTerms();
-  const { addHistoryEntry } = useHistory();
   const { handleError } = useErrorHandler();
 
-  const [isTranslatingGloballyState, setIsTranslatingGlobally] = useState(false);
-  const [currentTranslatingFileId, setCurrentTranslatingFileId] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<SubtitleFileMetadata | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  const handleTranscribe = useCallback(async (fileId: string) => {
-    await startTranscription(fileId);
-  }, [startTranscription]);
-
-  const executeTranslation = useCallback(async (file: SubtitleFileMetadata) => {
-    const result = await startTranslation(file.id);
-
-    if (!result) {
-      console.log('[SubtitleFileList] 翻译未完成或已中止');
-      return;
-    }
-
-    const { tokens, entries, phases } = result;
-    const actualCompleted = entries.filter(e =>
-      e.translatedText && e.translatedText.trim() !== ''
-    ).length;
-
-    if (actualCompleted > 0) {
-      await addHistoryEntry({
-        taskId: file.taskId,
-        filename: file.name,
-        completedCount: actualCompleted,
-        totalTokens: tokens,
-        phases: phases,
-        subtitle_entries: entries
-      });
-    }
-  }, [startTranslation, addHistoryEntry]);
-
-  const handleStartTranslation = useCallback(async (file: SubtitleFileMetadata) => {
-    setCurrentTranslatingFileId(file.id);
-
-    try {
-      // 设置仅翻译工作流
-      useSubtitleStore.getState().setWorkflow(file.id, 'translate');
-      await executeTranslation(file);
-    } catch (error) {
-      handleError(error, {
-        context: { operation: '翻译', fileName: file.name }
-      });
-    } finally {
-      setCurrentTranslatingFileId(null);
-    }
-  }, [executeTranslation, handleError]);
-
-  const handleTranscribeAndTranslate = useCallback(async (file: SubtitleFileMetadata) => {
-    setCurrentTranslatingFileId(file.id);
-
-    try {
-      // 设置全流程工作流
-      useSubtitleStore.getState().setWorkflow(file.id, 'full');
-
-      if ((file.fileType === 'audio' || file.fileType === 'video') && file.phases.transcribing.status !== 'completed') {
-        await startTranscription(file.id);
-
-        // 转录失败则中断，不继续翻译
-        const updatedFile = useSubtitleStore.getState().getFile(file.id);
-        if (!updatedFile || updatedFile.phases.transcribing.status !== 'completed') {
-          return;
-        }
-
-        // 使用转录后的最新 file 引用
-        await executeTranslation(updatedFile);
-      } else {
-        await executeTranslation(file);
-      }
-    } catch (error) {
-      handleError(error, {
-        context: { operation: '转译', fileName: file.name }
-      });
-    } finally {
-      setCurrentTranslatingFileId(null);
-    }
-  }, [startTranscription, executeTranslation, handleError]);
-
-  const handleStartAllTranslation = useCallback(async () => {
-    if (files.length === 0 || isTranslatingGloballyState) return;
-
-    const filesToProcess = files.filter(file => {
-      // total === 0 表示还没有加载字幕条目，需要处理
-      // completed < total 表示进度未完成，需要处理
-      const progress = getTranslationProgress(file.id);
-      return progress.total === 0 || progress.completed < progress.total;
-    });
-
-    if (filesToProcess.length === 0) {
-      toast.success('所有文件都已翻译完成');
-      return;
-    }
-
-    setIsTranslatingGlobally(true);
-    toast.success(`开始处理 ${filesToProcess.length} 个文件`);
-
-    for (const file of filesToProcess) {
-      try {
-        if ((file.fileType === 'audio' || file.fileType === 'video') && file.phases.transcribing.status !== 'completed') {
-          await handleTranscribeAndTranslate(file);
-        } else {
-          await handleStartTranslation(file);
-        }
-        await new Promise(resolve => setTimeout(resolve, API_CONSTANTS.BATCH_TASK_GAP_MS));
-      } catch (error) {
-        handleError(error, {
-          context: { operation: '批量处理', fileName: file.name }
-        });
-      }
-    }
-
-    setIsTranslatingGlobally(false);
-  }, [files, isTranslatingGloballyState, getTranslationProgress, handleTranscribeAndTranslate, handleStartTranslation, handleError]);
+  const handleStartAll = useCallback(() => {
+    if (files.length === 0) return;
+    enqueueAllUncompleted();
+  }, [files, enqueueAllUncompleted]);
 
   const handleSettingsClose = useCallback(() => {
     setIsSettingsOpen(false);
@@ -227,8 +114,8 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                 共 {files.length} 个文件
               </div>
               <button
-                onClick={handleStartAllTranslation}
-                disabled={files.length === 0 || isTranslatingGloballyState}
+                onClick={handleStartAll}
+                disabled={files.length === 0}
                 className="apple-button px-5 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>全部开始</span>
@@ -246,21 +133,29 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
 
           <div className="space-y-4">
             <AnimatePresence>
-              {files.map((file, index) => (
-                <SubtitleFileItem
-                  key={file.id}
-                  file={file}
-                  index={index}
-                  onEdit={onEditFile}
-                  onStartTranslation={handleStartTranslation}
-                  onExport={handleExport}
-                  onDelete={handleDeleteFile}
-                  onTranscribeAndTranslate={handleTranscribeAndTranslate}
-                  onTranscribe={handleTranscribe}
-                  isTranslatingGlobally={isTranslatingGloballyState}
-                  currentTranslatingFileId={currentTranslatingFileId}
-                />
-              ))}
+              {files.map((file, index) => {
+                const isQueued = taskQueue.includes(file.id);
+                const queuePosition = taskQueue.indexOf(file.id) + 1;
+                const isActive = activeTaskId === file.id;
+
+                return (
+                  <SubtitleFileItem
+                    key={file.id}
+                    file={file}
+                    index={index}
+                    onEdit={onEditFile}
+                    onStartTranslation={() => enqueueTask(file.id)}
+                    onExport={handleExport}
+                    onDelete={handleDeleteFile}
+                    onTranscribeAndTranslate={() => enqueueTask(file.id)}
+                    onTranscribe={() => enqueueTask(file.id)}
+                    onDequeue={() => dequeueTask(file.id)}
+                    isQueued={isQueued && !isActive}
+                    queuePosition={queuePosition}
+                    isActive={isActive}
+                  />
+                );
+              })}
             </AnimatePresence>
           </div>
         </div>

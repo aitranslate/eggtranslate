@@ -2,7 +2,7 @@ import type { FilePhases, ProgressPhase } from '@/types';
 
 export interface BadgeInfo {
   text: string;
-  color: 'green' | 'blue' | 'gray' | 'red';
+  color: 'green' | 'blue' | 'gray' | 'red' | 'yellow';
 }
 
 /**
@@ -14,7 +14,17 @@ export interface BadgeInfo {
  * - 全 upcoming → "未开始" 灰色
  * - 有 failed → "失败" 红色
  */
-export function getCardBadge(phases: FilePhases, displayPhases: ProgressPhase[]): BadgeInfo {
+export function getCardBadge(
+  phases: FilePhases,
+  displayPhases: ProgressPhase[],
+  isQueued?: boolean,
+  queuePosition?: number
+): BadgeInfo {
+  // 排队中优先级最高（在 phase 判断之前）
+  if (isQueued && queuePosition != null) {
+    return getQueueBadge(queuePosition);
+  }
+
   const statuses = displayPhases.map(p => phases[p].status);
 
   if (statuses.includes('active')) {
@@ -51,6 +61,14 @@ export function getCardBadge(phases: FilePhases, displayPhases: ProgressPhase[])
   }
 
   return { text: '未开始', color: 'gray' };
+}
+
+/**
+ * 排队中状态的 badge
+ * 排队中不是 phases 的 status，而是从 taskQueue 派生的 UI 状态
+ */
+export function getQueueBadge(queuePosition: number): BadgeInfo {
+  return { text: `排队中 #${queuePosition}`, color: 'yellow' };
 }
 
 /**
