@@ -337,18 +337,20 @@ export const useSubtitleStore = create<SubtitleStore>()(
             allKeyterms,
             {
               onConverting: () => {
-                // 只有转码未完成时才更新状态
-                if (file.phases.converting.status !== 'completed') {
+                const currentPhases = get().getFile(fileId)?.phases;
+                if (currentPhases?.converting.status !== 'completed') {
                   get().updatePhase(fileId, 'converting', { status: 'active', progress: -1 });
                 }
               },
               onUploading: () => {
-                if (file.phases.converting.status !== 'completed') {
+                const currentPhases = get().getFile(fileId)?.phases;
+                if (currentPhases?.converting.status !== 'completed') {
                   get().updatePhase(fileId, 'converting', { status: 'active', progress: -1 });
                 }
               },
               onTranscribing: () => {
-                if (file.phases.converting.status !== 'completed') {
+                const currentPhases = get().getFile(fileId)?.phases;
+                if (currentPhases?.converting.status !== 'completed') {
                   get().updatePhase(fileId, 'converting', { status: 'completed', progress: 100 });
                 }
                 get().updatePhase(fileId, 'transcribing', { status: 'active', progress: -1, tokens: 0 });
@@ -619,12 +621,11 @@ export const useSubtitleStore = create<SubtitleStore>()(
                 return sourceUnits > sourceLimit || targetUnits > targetLimit;
               };
 
-              // 辅助函数：为单条 entry 生成唯一 ID（从内存 tasks 获取）
-              const generateSplitEntryId = (): number => {
+              // 初始化 ID 计数器（读一次 store，后续原子递增）
+              let nextSplitId = (() => {
                 const entries = get().tasks.find(t => t.taskId === file.taskId)?.subtitle_entries || [];
-                const maxId = entries.reduce((max, e) => Math.max(max, e.id), 0);
-                return maxId + 1;
-              };
+                return entries.reduce((max, e) => Math.max(max, e.id), 0) + 1;
+              })();
 
               // 辅助函数：执行单条 entry 的原子 split+align
               const performSplitAlignAtomic = async (
@@ -723,7 +724,6 @@ export const useSubtitleStore = create<SubtitleStore>()(
 
                   // 3. 创建子条目（直接修改内存 tasks）
                   const words = entry.words;
-                  let newEntryIdCounter = generateSplitEntryId();
 
                   if (words && words.length > 0) {
                     // 有单词级时间戳，使用边界映射
@@ -742,7 +742,7 @@ export const useSubtitleStore = create<SubtitleStore>()(
                       const ws = words[ranges[i][0]];
                       const we = words[ranges[i][1]];
                       childEntries.push({
-                        id: newEntryIdCounter++,
+                        id: nextSplitId++,
                         parentId: entry.id,
                         splitIndex: i + 1,
                         startTime: formatTime(ws.start),
@@ -786,7 +786,7 @@ export const useSubtitleStore = create<SubtitleStore>()(
                     const childEntries: SubtitleEntry[] = [];
                     for (let i = parsed.sourceParts.length - 1; i >= 1; i--) {
                       childEntries.push({
-                        id: newEntryIdCounter++,
+                        id: nextSplitId++,
                         parentId: entry.id,
                         splitIndex: i + 1,
                         startTime: formatTime(partTimestamps[i].start),
@@ -935,7 +935,9 @@ export const useSubtitleStore = create<SubtitleStore>()(
     {
       name: 'batch_tasks',
       storage: createJSONStorage(() => localforage),
-      partialize: (state) => ({ tasks: state.tasks }),
+      partialize: (state) => ({
+        tasks: state.tasks.map(({ fileRef, ...task }) => task),
+      }),
       version: 1,
       migrate: (persistedState: any, version: number) => {
         // 旧格式：{ tasks: [...] }（来自 localforage batch_tasks）

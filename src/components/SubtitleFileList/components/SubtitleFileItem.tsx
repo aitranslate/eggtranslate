@@ -142,7 +142,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
 export const SubtitleFileItemMemo = memo(SubtitleFileItem, (prevProps, nextProps) => {
   const fileKeys: (keyof SubtitleFileMetadata)[] = [
     'id', 'name', 'fileSize', 'duration',
-    'entryCount', 'translatedCount', 'tokensUsed', 'entriesVersion',
+    'entryCount', 'translatedCount', 'tokensUsed',
   ];
 
   for (const key of fileKeys) {
