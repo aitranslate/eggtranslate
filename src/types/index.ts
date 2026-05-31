@@ -119,6 +119,10 @@ export interface PhaseProgress {
   status: 'upcoming' | 'active' | 'completed' | 'failed';
   progress: number;  // 0-100, -1 = indeterminate
   tokens: number;
+  language?: string;       // 语音识别检测到的语言，如 'en', 'zh'
+  errorMessage?: string;   // 失败时的错误信息
+  entryCount?: number;    // 该阶段处理的条目数（语音识别/翻译/断句）
+  totalEntries?: number;  // 总条目数
 }
 
 // ProgressPhase: 阶段名称类型
