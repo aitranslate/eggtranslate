@@ -5,8 +5,7 @@
 
 import JSZip from 'jszip';
 import { toSRT, toTXT, toBilingual, toSrcTrans } from '@/utils/srtParser';
-import type { BatchTasks } from '@/types';
-import localforage from 'localforage';
+import { useSubtitleStore } from '@/stores/subtitleStore';
 
 /**
  * 基于 taskId 导出为 SRT 格式
@@ -14,9 +13,8 @@ import localforage from 'localforage';
  * @param useTranslation 是否使用翻译文本
  * @returns SRT 格式字符串
  */
-export async function exportTaskSRT(taskId: string, useTranslation = true): Promise<string> {
-  const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
-  const task = batchTasks?.tasks.find(t => t.taskId === taskId);
+export function exportTaskSRT(taskId: string, useTranslation = true): string {
+  const task = useSubtitleStore.getState().tasks.find(t => t.taskId === taskId);
   if (!task || !task.subtitle_entries) {
     return '';
   }
@@ -29,9 +27,8 @@ export async function exportTaskSRT(taskId: string, useTranslation = true): Prom
  * @param useTranslation 是否使用翻译文本
  * @returns TXT 格式字符串
  */
-export async function exportTaskTXT(taskId: string, useTranslation = true): Promise<string> {
-  const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
-  const task = batchTasks?.tasks.find(t => t.taskId === taskId);
+export function exportTaskTXT(taskId: string, useTranslation = true): string {
+  const task = useSubtitleStore.getState().tasks.find(t => t.taskId === taskId);
   if (!task || !task.subtitle_entries) {
     return '';
   }
@@ -43,9 +40,8 @@ export async function exportTaskTXT(taskId: string, useTranslation = true): Prom
  * @param taskId 任务 ID
  * @returns 双语格式字符串
  */
-export async function exportTaskBilingual(taskId: string): Promise<string> {
-  const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
-  const task = batchTasks?.tasks.find(t => t.taskId === taskId);
+export function exportTaskBilingual(taskId: string): string {
+  const task = useSubtitleStore.getState().tasks.find(t => t.taskId === taskId);
   if (!task || !task.subtitle_entries) {
     return '';
   }
@@ -60,8 +56,7 @@ export async function exportTaskBilingual(taskId: string): Promise<string> {
  * @returns ZIP 文件的 Blob
  */
 export async function exportTaskZip(taskId: string): Promise<Blob> {
-  const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
-  const task = batchTasks?.tasks.find(t => t.taskId === taskId);
+  const task = useSubtitleStore.getState().tasks.find(t => t.taskId === taskId);
   if (!task || !task.subtitle_entries) {
     throw new Error('任务数据不存在');
   }

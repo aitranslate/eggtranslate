@@ -68,6 +68,9 @@ export interface SubtitleFileMetadata {
 
   // entries 数据版本号（DataManager entries 变更时递增，用于触发 UI 刷新）
   entriesVersion: number;
+
+  // 音视频原始文件引用（不持久化，仅内存）
+  fileRef?: File;
 }
 
 // 断句模式

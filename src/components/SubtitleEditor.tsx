@@ -1,10 +1,12 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Edit3, Save, X, Search, Filter, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { SubtitleEntry } from '@/types';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-import { useSubtitleStore } from '@/stores/subtitleStore';
+import { useSubtitleStore, useFile } from '@/stores/subtitleStore';
+
+const EMPTY_ENTRIES: SubtitleEntry[] = [];
 
 interface SubtitleEditorProps {
   isOpen: boolean;
@@ -17,25 +19,17 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   onClose,
   fileId
 }) => {
-  const file = useSubtitleStore((state) => state.getFile(fileId));
-  // 订阅 entriesVersion：当 entries 数据变更时触发重新读取
-  const entriesVersion = useSubtitleStore((state) => state.getFile(fileId)?.entriesVersion ?? 0);
-  const getFileEntries = useSubtitleStore((state) => state.getFileEntries);
+  const file = useFile(fileId);
   const updateEntry = useSubtitleStore((state) => state.updateEntry);
   const deleteEntry = useSubtitleStore((state) => state.deleteEntry);
 
-  // Handle async entries loading
-  const [entries, setEntries] = useState<SubtitleEntry[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    getFileEntries(fileId).then(loadedEntries => {
-      if (!cancelled) {
-        setEntries(loadedEntries);
-      }
-    });
-    return () => { cancelled = true; };
-  }, [fileId, getFileEntries, entriesVersion]);
+  // 直接从 tasks 订阅 entries（同步、响应式）
+  const taskId = file?.taskId;
+  const fileEntries = useSubtitleStore((state) => {
+    if (!taskId) return EMPTY_ENTRIES;
+    const task = state.tasks.find(t => t.taskId === taskId);
+    return task?.subtitle_entries ?? EMPTY_ENTRIES;
+  });
 
   const { handleError } = useErrorHandler();
 
@@ -44,10 +38,6 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const [editTranslation, setEditTranslation] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'translated' | 'untranslated'>('all');
-
-  const fileEntries = useMemo(() => {
-    return entries || [];
-  }, [entries, entriesVersion]);
 
   const filteredEntries = useMemo(() => {
     let filtered = fileEntries || [];
@@ -75,11 +65,11 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     setEditTranslation(entry.translatedText || '');
   }, []);
 
-  const onSaveEdit = useCallback(async () => {
+  const onSaveEdit = useCallback(() => {
     if (editingId === null || !file?.id) return;
 
     try {
-      await updateEntry(file.id, editingId, editText, editTranslation);
+      updateEntry(file.id, editingId, editText, editTranslation);
       setEditingId(null);
       setEditText('');
       setEditTranslation('');
@@ -97,7 +87,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     setEditTranslation('');
   }, []);
 
-  const handleMerge = useCallback(async () => {
+  const handleMerge = useCallback(() => {
     if (!file?.id || !fileEntries.length) return;
 
     const toMerge: Array<{current: SubtitleEntry, next: SubtitleEntry}> = [];
@@ -113,14 +103,10 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
 
     for (const { current, next } of toMerge) {
       const mergedText = `${current.text} ${next.text}`;
-      await updateEntry(file.id, current.id, mergedText, current.translatedText, 'completed');
-      await deleteEntry(file.id, next.id);
+      updateEntry(file.id, current.id, mergedText, current.translatedText, 'completed');
+      deleteEntry(file.id, next.id);
     }
 
-    if (toMerge.length > 0) {
-      const updateFileStatistics = useSubtitleStore.getState().updateFileStatistics;
-      updateFileStatistics(file.id);
-    }
   }, [file, fileEntries, updateEntry, deleteEntry]);
 
   const translationStats = useMemo(() => {

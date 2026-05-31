@@ -1,38 +1,20 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Toaster } from 'react-hot-toast';
 import { TermsProvider } from '@/contexts/TermsContext';
 import { HistoryProvider } from '@/contexts/HistoryContext';
 import { MainApp } from '@/components/MainApp';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { useSubtitleStore } from '@/stores/subtitleStore';
 import '@/index.css';
-
-/**
- * 应用初始化组件
- * 负责在应用启动时加载数据
- */
-const AppInitializer = () => {
-  const loadFiles = useSubtitleStore((state) => state.loadFiles);
-
-  useEffect(() => {
-    loadFiles();
-  }, [loadFiles]);
-
-  return null;
-};
 
 function App() {
   return (
     <ErrorBoundary
       onError={(error, errorInfo) => {
         // 错误已经被 ErrorBoundary 记录
-        // 这里可以添加额外的错误上报逻辑
-        // 例如发送到 Sentry、LogRocket 等
       }}
     >
       <HistoryProvider>
         <TermsProvider>
-          <AppInitializer />
           <MainApp />
           <Toaster
             position="top-right"

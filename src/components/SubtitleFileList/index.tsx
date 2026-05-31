@@ -2,16 +2,15 @@ import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import localforage from 'localforage';
 import { downloadZipFile } from '@/utils/fileExport';
 import { exportTaskZip, getBaseName } from '@/services/SubtitleExporter';
-import { useSubtitleStore } from '@/stores/subtitleStore';
+import { useSubtitleStore, useFiles } from '@/stores/subtitleStore';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { useTerms } from '@/contexts/TermsContext';
 import { useHistory } from '@/contexts/HistoryContext';
 import { SubtitleFileMetadata } from '@/types';
 import { API_CONSTANTS } from '@/constants/api';
-import { SubtitleFileItem } from './components/SubtitleFileItem';
+import { SubtitleFileItemMemo as SubtitleFileItem } from './components/SubtitleFileItem';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { SettingsModal } from '../SettingsModal';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -25,7 +24,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   className,
   onEditFile
 }) => {
-  const files = useSubtitleStore((state) => state.files);
+  const files = useFiles();
   const removeFile = useSubtitleStore((state) => state.removeFile);
   const clearAllData = useSubtitleStore((state) => state.clearAll);
   const getTranslationProgress = useSubtitleStore((state) => state.getTranslationProgress);
@@ -103,9 +102,12 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
         if (!updatedFile || updatedFile.phases.transcribing.status !== 'completed') {
           return;
         }
-      }
 
-      await executeTranslation(file);
+        // 使用转录后的最新 file 引用
+        await executeTranslation(updatedFile);
+      } else {
+        await executeTranslation(file);
+      }
     } catch (error) {
       handleError(error, {
         context: { operation: '转译', fileName: file.name }

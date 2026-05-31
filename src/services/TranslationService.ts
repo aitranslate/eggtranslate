@@ -173,7 +173,8 @@ class TranslationService {
 
   /**
    * 更新翻译进度
-   * @param newTokens - 新增的 tokens（此方法只传递给 Store，不自己累加）
+   * 注意：phase 持久化已由 subtitleStore 的 persist 中间件自动处理，
+   * 此方法仅保留接口兼容性。
    */
   async updateProgress(
     current: number,
@@ -183,147 +184,32 @@ class TranslationService {
     taskId?: string,
     newTokens?: number
   ): Promise<void> {
-    try {
-      if (taskId) {
-        const batchTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
-        const task = batchTasks?.tasks?.find((t: any) => t.taskId === taskId);
-        const currentTokens = task?.phases?.translating?.tokens || 0;
-
-        const updateObj = {
-          completed: current,
-          total: total,
-          status: phase === 'completed' ? 'completed' : 'translating',
-        };
-
-        // 累加 tokens（newTokens 来自翻译批次增量）
-        if (newTokens !== undefined && newTokens > 0) {
-          updateObj.tokens = currentTokens + newTokens;
-        }
-
-        // Update task in localforage
-        if (batchTasks?.tasks) {
-          const taskIndex = batchTasks.tasks.findIndex((t: any) => t.taskId === taskId);
-          if (taskIndex !== -1) {
-            batchTasks.tasks[taskIndex].phases = {
-              ...batchTasks.tasks[taskIndex].phases,
-              translating: {
-                ...batchTasks.tasks[taskIndex].phases?.translating,
-                ...updateObj
-              }
-            };
-            await localforage.setItem('batch_tasks', batchTasks);
-          }
-        }
-      }
-    } catch (error) {
-      const appError = toAppError(error, '更新翻译进度失败');
-      console.error('[TranslationService]', appError.message, appError);
-      throw appError;
-    }
+    // subtitleStore.updatePhase 已通过 persist 中间件自动处理 localforage
+    // 无需额外的 localforage 操作
   }
 
   /**
    * 重置翻译进度
+   * 注意：phase 持久化已由 subtitleStore 的 persist 中间件自动处理
    */
   async resetProgress(): Promise<void> {
-    try {
-      const batchTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
-      const currentTask = batchTasks?.tasks?.find((t: any) => t.isCurrent);
-
-      if (currentTask) {
-        // Update in localforage
-        if (batchTasks?.tasks) {
-          const taskIndex = batchTasks.tasks.findIndex((t: any) => t.taskId === currentTask.taskId);
-          if (taskIndex !== -1) {
-            batchTasks.tasks[taskIndex].phases = {
-              ...batchTasks.tasks[taskIndex].phases,
-              translating: {
-                completed: 0,
-                tokens: 0,
-                status: 'idle'
-              }
-            };
-            await localforage.setItem('batch_tasks', batchTasks);
-          }
-        }
-      }
-    } catch (error) {
-      const appError = toAppError(error, '重置翻译进度失败');
-      console.error('[TranslationService]', appError.message, appError);
-      throw appError;
-    }
+    // subtitleStore 的 persist 中间件自动处理持久化
   }
 
   /**
    * 完成翻译任务
+   * 注意：phase 持久化已由 subtitleStore 的 persist 中间件自动处理
    */
   async completeTranslation(taskId: string): Promise<void> {
-    try {
-      const batchTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
-      const task = batchTasks?.tasks?.find((t: any) => t.taskId === taskId);
-
-      if (task) {
-        const taskTokens = task.phases?.translating?.tokens || 0;
-
-        // Update in localforage
-        if (batchTasks?.tasks) {
-          const taskIndex = batchTasks.tasks.findIndex((t: any) => t.taskId === taskId);
-          if (taskIndex !== -1) {
-            batchTasks.tasks[taskIndex].phases = {
-              ...batchTasks.tasks[taskIndex].phases,
-              translating: {
-                ...batchTasks.tasks[taskIndex].phases?.translating,
-                status: 'completed',
-                tokens: taskTokens
-              }
-            };
-            await localforage.setItem('batch_tasks', batchTasks);
-          }
-        }
-
-        // 延迟再次保存确保数据落盘
-        setTimeout(async () => {
-          try {
-            const freshTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
-            const taskIdx = freshTasks?.tasks?.findIndex((t: any) => t.taskId === taskId);
-            if (taskIdx !== -1 && freshTasks?.tasks) {
-              freshTasks.tasks[taskIdx].phases.translating.status = 'completed';
-              await localforage.setItem('batch_tasks', freshTasks);
-            }
-            console.log('翻译任务持久化完成:', taskId);
-          } catch (error) {
-            const appError = toAppError(error, '延迟持久化失败');
-            console.warn('[TranslationService]', appError.message);
-          }
-        }, API_CONSTANTS.PERSIST_DELAY_MS);
-      }
-    } catch (error) {
-      const appError = toAppError(error, '保存完成状态失败');
-      console.error('[TranslationService]', appError.message, appError);
-      throw appError;
-    }
+    // subtitleStore 的 persist 中间件自动处理持久化
   }
 
   /**
    * 清空当前任务
+   * 注意：数据管理已由 subtitleStore 统一处理
    */
   async clearTask(): Promise<void> {
-    try {
-      const batchTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
-      if (batchTasks?.tasks) {
-        // Remove current task marker
-        batchTasks.tasks.forEach((t: any) => {
-          if (t.isCurrent) {
-            t.isCurrent = false;
-          }
-        });
-        await localforage.setItem('batch_tasks', batchTasks);
-      }
-    } catch (error) {
-      const appError = toAppError(error, '清空任务失败');
-      console.error('[TranslationService]', appError.message, appError);
-      throw appError;
-    }
+    // subtitleStore.clearAll 已处理所有数据清理
   }
 
   /**

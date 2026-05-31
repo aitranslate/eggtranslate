@@ -4,7 +4,7 @@
  */
 
 import type { SubtitleEntry, TranslationStatus } from '@/types';
-import localforage from 'localforage';
+import { useSubtitleStore } from '@/stores/subtitleStore';
 import toast from 'react-hot-toast';
 import { API_CONSTANTS } from '@/constants/api';
 import { toAppError } from '@/utils/errors';
@@ -186,27 +186,6 @@ export async function processBatch(
     }
 
     if (batchUpdates.length > 0) {
-      // Persist updates to localforage
-      const batchTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
-      if (batchTasks?.tasks) {
-        const taskIndex = batchTasks.tasks.findIndex((t: any) => t.taskId === taskId);
-        if (taskIndex !== -1) {
-          const task = batchTasks.tasks[taskIndex];
-          // Apply updates to entries
-          const updatedEntries = task.subtitle_entries.map((entry: SubtitleEntry) => {
-            const update = batchUpdates.find(u => u.id === entry.id);
-            return update ? {
-              ...entry,
-              text: update.text,
-              translatedText: update.translatedText ?? entry.translatedText,
-              translationStatus: update.status ?? entry.translationStatus
-            } : entry;
-          });
-          batchTasks.tasks[taskIndex].subtitle_entries = updatedEntries;
-          await localforage.setItem('batch_tasks', batchTasks);
-        }
-      }
-
       for (const update of batchUpdates) {
         await callbacks.updateEntry(
           update.id,
@@ -328,8 +307,7 @@ export async function saveTranslationHistory(
   try {
     await new Promise(resolve => setTimeout(resolve, API_CONSTANTS.HISTORY_SAVE_DELAY_MS));
 
-    const batchTasks = await localforage.getItem<{ tasks: any[] }>('batch_tasks');
-    const currentTask = batchTasks?.tasks?.find(t => t.taskId === taskId);
+    const currentTask = useSubtitleStore.getState().tasks.find(t => t.taskId === taskId);
 
     if (currentTask) {
       const finalTokens = currentTask.phases?.translating?.tokens || tokensUsed || 0;

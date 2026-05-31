@@ -88,6 +88,7 @@ export interface SingleTask {
   fileType?: FileType;   // Unified file type
   fileSize?: number;                  // File size in bytes
   duration?: number;                  // Audio duration in seconds
+  fileRef?: File;                     // 音视频原始文件引用（不持久化）
 }
 
 // 批量任务列表类型

@@ -1,17 +1,21 @@
 /**
  * 字幕文件管理服务
- * 负责文件加载、更新、删除等CRUD操作
+ * 负责文件解析和元数据转换（不直接操作 localforage，由 store persist 中间件管理）
  */
 
-import { SubtitleEntry, FileType, SubtitleFileMetadata, SingleTask, FilePhases, PhaseProgress, WorkflowType } from '@/types';
+import { SubtitleFileMetadata, SingleTask, FilePhases, PhaseProgress, WorkflowType } from '@/types';
 import { parseSRT } from '@/utils/srtParser';
 import { detectFileType } from '@/utils/fileFormat';
 import localforage from 'localforage';
 import { generateTaskId, generateStableFileId } from '@/utils/taskIdGenerator';
-import type { BatchTasks } from '@/types';
 
 export interface LoadFileOptions {
   existingFilesCount: number;
+}
+
+export interface LoadFileResult {
+  metadata: SubtitleFileMetadata & { fileRef?: File };
+  task: SingleTask;
 }
 
 const UPCOMING: PhaseProgress = { status: 'upcoming', progress: 0, tokens: 0 };
@@ -35,25 +39,21 @@ function createInitialPhases(isSrt: boolean, isTranslated: boolean, workflow: Wo
 
 /**
  * 从 File 对象加载字幕文件
- * 返回 SubtitleFileMetadata（元数据）
- *
- * 注意：音视频文件需要保留 fileRef，所以返回类型是联合
+ * 返回 task + metadata，由调用方（store）负责添加到 tasks 数组
  */
 export async function loadFromFile(
   file: File,
   options: LoadFileOptions
-): Promise<SubtitleFileMetadata & { fileRef?: File }> {
+): Promise<LoadFileResult> {
   const fileType = detectFileType(file.name);
   const index = options.existingFilesCount;
   const taskId = generateTaskId();
+  const fileId = generateStableFileId(taskId);
 
   if (fileType === 'srt') {
-    // SRT 文件：读取文本内容
     const content = await file.text();
     const entries = parseSRT(content);
 
-    // 直接写入 localforage
-    const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks') || { tasks: [] };
     const newTask: SingleTask = {
       taskId,
       subtitle_entries: entries,
@@ -63,27 +63,24 @@ export async function loadFromFile(
       fileType: 'srt',
       fileSize: file.size,
     };
-    batchTasks.tasks.push(newTask);
-    await localforage.setItem('batch_tasks', batchTasks);
-
-    const fileId = generateStableFileId(taskId);
 
     return {
-      id: fileId,
-      taskId,
-      name: file.name,
-      fileType: 'srt',
-      fileSize: file.size,
-      lastModified: file.lastModified,
-      entryCount: entries.length,
-      translatedCount: entries.filter(e => e.translatedText).length,
-      phases: createInitialPhases(true, false, 'translate'),
-      tokensUsed: 0,
-      entriesVersion: 0
+      metadata: {
+        id: fileId,
+        taskId,
+        name: file.name,
+        fileType: 'srt',
+        fileSize: file.size,
+        lastModified: file.lastModified,
+        entryCount: entries.length,
+        translatedCount: entries.filter(e => e.translatedText).length,
+        phases: createInitialPhases(true, false, 'translate'),
+        tokensUsed: 0,
+        entriesVersion: 0
+      },
+      task: newTask
     };
   } else {
-    // 音视频文件：也立即创建任务（空条目），转录完成后更新
-    const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks') || { tasks: [] };
     const newTask: SingleTask = {
       taskId,
       subtitle_entries: [],
@@ -93,76 +90,32 @@ export async function loadFromFile(
       fileType,
       fileSize: file.size,
     };
-    batchTasks.tasks.push(newTask);
-    await localforage.setItem('batch_tasks', batchTasks);
-
-    const fileId = generateStableFileId(taskId);
 
     return {
-      id: fileId,
-      taskId,
-      name: file.name,
-      fileType,
-      fileSize: file.size,
-      lastModified: file.lastModified,
-      entryCount: 0,
-      translatedCount: 0,
-      phases: createInitialPhases(false, false),
-      tokensUsed: 0,
-      entriesVersion: 0,
-      fileRef: file // 保留原始文件引用用于后续转录
+      metadata: {
+        id: fileId,
+        taskId,
+        name: file.name,
+        fileType,
+        fileSize: file.size,
+        lastModified: file.lastModified,
+        entryCount: 0,
+        translatedCount: 0,
+        phases: createInitialPhases(false, false),
+        tokensUsed: 0,
+        entriesVersion: 0,
+        fileRef: file
+      },
+      task: newTask
     };
   }
 }
 
 /**
- * 删除文件
+ * 清理 MP3 数据（独立于 persist 中间件管理）
  */
-export async function removeFile(file: SubtitleFileMetadata): Promise<void> {
-  const taskId = file.taskId;
-  const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
-  if (batchTasks) {
-    batchTasks.tasks = batchTasks.tasks.filter(t => t.taskId !== taskId);
-    await localforage.setItem('batch_tasks', batchTasks);
-  }
+export async function removeMp3Data(taskId: string): Promise<void> {
   await localforage.removeItem(`mp3_data:${taskId}`);
-}
-
-/**
- * 从 localforage 恢复文件列表（返回元数据，不包含完整 entries）
- * 检测中断的处理：任何 phase 状态为 'active' 说明实际处理已中断，标记为 'failed'
- */
-export async function restoreFiles(): Promise<SubtitleFileMetadata[]> {
-  const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
-  if (!batchTasks || batchTasks.tasks.length === 0) {
-    return [];
-  }
-
-  let modified = false;
-  for (const task of batchTasks.tasks) {
-    const phases = task.phases;
-    if (phases) {
-      for (const phase of ['converting', 'transcribing', 'translating', 'splitting'] as const) {
-        if (phases[phase]?.status === 'active') {
-          phases[phase] = { status: 'failed', progress: phases[phase].progress || 0, tokens: phases[phase].tokens || 0 };
-          modified = true;
-        }
-      }
-    }
-  }
-
-  if (modified) {
-    await localforage.setItem('batch_tasks', batchTasks);
-  }
-
-  return batchTasks.tasks.map(task => convertTaskToMetadata(task));
-}
-
-/**
- * 清空所有数据
- */
-export async function clearAllData(): Promise<void> {
-  await localforage.setItem('batch_tasks', { tasks: [] });
 }
 
 // ============================================
@@ -193,7 +146,8 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
     entryCount,
     translatedCount,
     phases: task.phases || createInitialPhases(isSrt, isTranslated),
-    tokensUsed: task.phases?.translating?.tokens || 0,
-    entriesVersion: 0
+    tokensUsed: (task.phases?.translating?.tokens || 0) + (task.phases?.splitting?.tokens || 0),
+    entriesVersion: 0,
+    fileRef: task.fileRef
   };
 }

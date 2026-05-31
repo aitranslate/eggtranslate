@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { Check, X } from 'lucide-react';
 import { useMemo } from 'react';
-import { useSubtitleStore } from '@/stores/subtitleStore';
+import { useSubtitleStore, useFile } from '@/stores/subtitleStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { shouldLineBeActive } from '@/utils/badgeHelper';
 import type { ProgressPhase, PhaseProgress, FilePhases } from '@/types';
@@ -110,7 +110,7 @@ const ConnectingLine: React.FC<{
 };
 
 export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId }) => {
-  const file = useSubtitleStore(state => state.files.find(f => f.id === fileId));
+  const file = useFile(fileId);
   const aiSegmentationEnabled = useTranscriptionStore(state => state.aiSegmentationEnabled);
 
   // 决定显示哪些阶段节点（根据文件类型过滤）
