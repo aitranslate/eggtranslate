@@ -973,7 +973,11 @@ export const useSubtitleStore = create<SubtitleStore>()(
                 }
               }
 
-              get().updatePhase(fileId, 'splitting', { status: 'completed', progress: 100 });
+              get().updatePhase(fileId, 'splitting', {
+                status: 'completed',
+                progress: 100,
+                tokens: totalTokens,
+              });
               splitSucceeded = true;
               console.log('[subtitleStore] LLM 断句对齐完成');
             }
