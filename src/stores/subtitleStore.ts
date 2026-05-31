@@ -714,12 +714,12 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
           get().updatePhase(fileId, 'splitting', { status: 'active', progress: restoredSplitProgress, tokens: file.phases.splitting.tokens || 0 });
 
           // 计算已完成的条目数（用于进度显示）
-          const completedCount = postSplitEntries.filter(e =>
+          const alreadyCompletedCount = postSplitEntries.filter(e =>
             e.splitAlignStatus === 'completed'
           ).length;
-          const totalToProcess = completedCount + entriesToProcess.length;
-          const displayProgress = totalToProcess > 0 ? Math.round((completedCount / totalToProcess) * 100) : 0;
-          await translationConfigStore.updateProgress(completedCount, totalToProcess, 'splitting', `断句对齐中... (${completedCount}/${totalToProcess})`, file.taskId);
+          const totalToProcess = alreadyCompletedCount + entriesToProcess.length;
+          const displayProgress = totalToProcess > 0 ? Math.round((alreadyCompletedCount / totalToProcess) * 100) : 0;
+          await translationConfigStore.updateProgress(alreadyCompletedCount, totalToProcess, 'splitting', `断句对齐中... (${alreadyCompletedCount}/${totalToProcess})`, file.taskId);
 
           // 辅助函数：检查是否需要拆分
           const needsSplit = (entry: SubtitleEntry, sourceLimit: number, targetLimit: number): boolean => {
