@@ -144,7 +144,7 @@ export async function restoreFiles(): Promise<SubtitleFileMetadata[]> {
     if (phases) {
       for (const phase of ['converting', 'transcribing', 'translating', 'splitting'] as const) {
         if (phases[phase]?.status === 'active') {
-          phases[phase] = { status: 'failed', progress: 0, tokens: phases[phase].tokens || 0 };
+          phases[phase] = { status: 'failed', progress: phases[phase].progress || 0, tokens: phases[phase].tokens || 0 };
           modified = true;
         }
       }
