@@ -1001,10 +1001,16 @@ export const useSubtitleStore = create<SubtitleStore>()(
 
           const phases = get().getFile(fileId)?.phases;
           if (phases?.translating.status === 'active') {
-            get().updatePhase(fileId, 'translating', { status: 'failed', progress: 0 });
+            get().updatePhase(fileId, 'translating', {
+              status: 'failed',
+              errorMessage: error instanceof Error ? error.message : String(error),
+            });
           }
           if (phases?.splitting.status === 'active') {
-            get().updatePhase(fileId, 'splitting', { status: 'failed', progress: 0 });
+            get().updatePhase(fileId, 'splitting', {
+              status: 'failed',
+              errorMessage: error instanceof Error ? error.message : String(error),
+            });
           }
         } finally {
           translationConfigStore.stopTranslation();
