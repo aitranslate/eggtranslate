@@ -532,6 +532,12 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     const file = get().getFile(fileId);
     if (!file) return null;
 
+    // 如果翻译已完成，跳过
+    if (file.phases.translating.status === 'completed' && file.phases.splitting.status === 'completed') {
+      console.log('[subtitleStore] 翻译和断句对齐都已完成，跳过');
+      return null;
+    }
+
     const translationConfigStore = useTranslationConfigStore.getState();
     const config = translationConfigStore.config;
     if (!translationConfigStore.isConfigured) {
@@ -542,8 +548,13 @@ export const useSubtitleStore = create<SubtitleStore>((set, get) => ({
     try {
       const controller = await translationConfigStore.startTranslation(file.taskId);
 
-      get().updatePhase(fileId, 'translating', { status: 'active', progress: 0, tokens: 0 });
-      get().updatePhase(fileId, 'splitting', { status: 'upcoming', progress: 0, tokens: 0 });
+      // 只有未完成才设置 active 状态
+      if (file.phases.translating.status !== 'completed') {
+        get().updatePhase(fileId, 'translating', { status: 'active', progress: 0, tokens: 0 });
+      }
+      if (file.phases.splitting.status !== 'completed') {
+        get().updatePhase(fileId, 'splitting', { status: 'upcoming', progress: 0, tokens: 0 });
+      }
 
       // 从 localforage 获取完整 entries
       const batchTasks = await localforage.getItem<BatchTasks>('batch_tasks');
