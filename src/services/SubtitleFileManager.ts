@@ -125,6 +125,7 @@ export async function removeFile(file: SubtitleFileMetadata): Promise<void> {
     batchTasks.tasks = batchTasks.tasks.filter(t => t.taskId !== taskId);
     await localforage.setItem('batch_tasks', batchTasks);
   }
+  await localforage.removeItem(`mp3_data:${taskId}`);
 }
 
 /**
