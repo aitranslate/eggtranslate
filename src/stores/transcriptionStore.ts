@@ -11,6 +11,9 @@ interface TranscriptionStore {
   apiKeys: string;
   keytermGroups: KeytermGroup[];
   keytermsEnabled: boolean;
+  /** 新任务的默认热词分组；null = 默认不使用 */
+  defaultKeytermGroupId: string | null;
+  setDefaultKeytermGroupId: (id: string | null) => void;
   subtitleLengthPreset: SubtitleLengthPreset;
   aiSegmentationEnabled: boolean;
   updateKeytermGroups: (groups: KeytermGroup[]) => Promise<void>;
@@ -30,6 +33,7 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
       apiKeys: '',
       keytermGroups: DEFAULT_GROUPS,
       keytermsEnabled: true,
+      defaultKeytermGroupId: null,
       subtitleLengthPreset: 'standard',
       aiSegmentationEnabled: true,
 
@@ -40,6 +44,10 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
 
       setKeytermsEnabled: (enabled) => {
         set({ keytermsEnabled: enabled });
+      },
+
+      setDefaultKeytermGroupId: (id) => {
+        set({ defaultKeytermGroupId: id });
       },
 
       setApiKeys: (keys) => {
@@ -61,7 +69,8 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
         keytermGroups: state.keytermGroups,
         keytermsEnabled: state.keytermsEnabled,
         subtitleLengthPreset: state.subtitleLengthPreset,
-        aiSegmentationEnabled: state.aiSegmentationEnabled
+        aiSegmentationEnabled: state.aiSegmentationEnabled,
+        defaultKeytermGroupId: state.defaultKeytermGroupId
       }),
     }
   )
