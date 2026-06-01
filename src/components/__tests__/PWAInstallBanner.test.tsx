@@ -48,7 +48,7 @@ describe('PWAInstallBanner', () => {
     expect(screen.getByText('安装到桌面')).toBeTruthy();
     expect(screen.getByText(/独立窗口|桌面图标/)).toBeTruthy();
     expect(screen.getByRole('button', { name: '安装' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '✕' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '关闭' })).toBeTruthy();
   });
 
   it('renders the iOS guide when isIOS=true', () => {
@@ -93,7 +93,7 @@ describe('PWAInstallBanner', () => {
     });
 
     render(<PWAInstallBanner />);
-    const btn = screen.getByRole('button', { name: '✕' });
+    const btn = screen.getByRole('button', { name: '关闭' });
 
     fireEvent.click(btn);
 
