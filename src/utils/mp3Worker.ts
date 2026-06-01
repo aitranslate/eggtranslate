@@ -57,8 +57,8 @@ function convertFloat32ToInt16(buffer: Float32Array): Int16Array {
   return result;
 }
 
-function post(msg: WorkerOut): void {
-  self.postMessage(msg);
+function post(msg: WorkerOut, transfer?: Transferable[]): void {
+  (self as unknown as Worker).postMessage(msg, transfer);
 }
 
 self.onmessage = async (e: MessageEvent<EncodeMessage>) => {

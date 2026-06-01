@@ -200,6 +200,25 @@ class TranslationService {
       }
     }
   }
+
+  /**
+   * 重置翻译进度
+   * 占位方法 - 当前由调用方在 translationConfigStore 中负责状态管理
+   * TODO: P2-T7 中重构为统一的位置
+   */
+  async resetProgress(): Promise<void> {
+    // No-op: progress state is managed in the store
+  }
+
+  /**
+   * 标记翻译完成
+   * 占位方法 - 当前由调用方在 translationConfigStore 中负责状态管理
+   * TODO: P2-T7 中重构为统一的位置
+   * @param taskId 任务 ID
+   */
+  async completeTranslation(_taskId: string): Promise<void> {
+    // No-op: completion state is managed in the store
+  }
 }
 
 // 创建单例实例
