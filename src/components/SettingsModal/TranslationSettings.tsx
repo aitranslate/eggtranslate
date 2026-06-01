@@ -30,7 +30,7 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
       {/* 语言配置 */}
       <div className="space-y-3">
         <h3 className="apple-heading-small">语言配置</h3>
-        <SettingsHint>源语言留空表示自动检测；目标语言是翻译输出的语言。</SettingsHint>
+        <SettingsHint>选择字幕的源语言和翻译输出的目标语言。</SettingsHint>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
           <LanguageSelector
