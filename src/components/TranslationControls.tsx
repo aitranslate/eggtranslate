@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Play, Download, Settings } from 'lucide-react';
-import { useTerms } from '@/contexts/TermsContext';
-import { useHistory } from '@/contexts/HistoryContext';
+import { useTermsStore } from '@/stores/termsStore';
+import { useHistoryStore } from '@/stores/historyStore';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { downloadSubtitleFile } from '@/utils/fileExport';
@@ -14,7 +14,8 @@ import {
 import { toSRT, toTXT, toBilingual } from '@/utils/srtParser';
 import { API_CONSTANTS } from '@/constants/api';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-import type { SubtitleEntry, TranslationStatus } from '@/types';
+import { getRelevantTerms, formatTermsForPrompt } from '@/utils/termsHelpers';
+import type { SubtitleEntry, Term, TranslationStatus } from '@/types';
 import { useTranslationConfigStore, useSubtitleStore } from '@/stores';
 
 interface TranslationControlsProps {
@@ -47,8 +48,8 @@ export const TranslationControls: React.FC<TranslationControlsProps> = ({
 
   const { updateEntry: updateEntryInStore } = useSubtitleStore();
 
-  const { getRelevantTerms, formatTermsForPrompt } = useTerms();
-  const { addHistoryEntry } = useHistory();
+  const terms = useTermsStore((state) => state.terms);
+  const addHistory = useHistoryStore((state) => state.addHistory);
 
   // 使用统一错误处理
   const { handleError } = useErrorHandler();
@@ -59,6 +60,19 @@ export const TranslationControls: React.FC<TranslationControlsProps> = ({
   const updateEntry = useCallback(async (id: number, text: string, translatedText: string, status?: TranslationStatus) => {
     await updateEntryInStore(fileId, id, text, translatedText, status);
   }, [fileId, updateEntryInStore]);
+
+  // 适配 orchestrator 期望的 (text, before, after) 签名：把 terms 绑定到 helpers
+  const getRelevantTermsForCallback = useCallback(
+    (text: string, contextBefore?: string, contextAfter?: string) =>
+      getRelevantTerms(terms, text, contextBefore, contextAfter),
+    [terms]
+  );
+
+  // orchestrator 期望 (terms: Term[]) => string，helpers 签名已一致，直接透传
+  const formatTermsForPromptCallback = useCallback(
+    (termsToFormat: Term[]) => formatTermsForPrompt(termsToFormat),
+    []
+  );
 
   const onStartTranslation = useCallback(async () => {
     if (!entries.length) {
@@ -92,8 +106,8 @@ export const TranslationControls: React.FC<TranslationControlsProps> = ({
         translateBatch,
         updateEntry,
         updateProgress,
-        getRelevantTerms,
-        formatTermsForPrompt
+        getRelevantTerms: getRelevantTermsForCallback,
+        formatTermsForPrompt: formatTermsForPromptCallback
       };
 
       // 执行翻译流程
@@ -114,7 +128,7 @@ export const TranslationControls: React.FC<TranslationControlsProps> = ({
       await completeTranslation(taskId);
 
       // 保存历史记录
-      await saveTranslationHistory(taskId, filename, tokensUsed, addHistoryEntry);
+      await saveTranslationHistory(taskId, filename, tokensUsed, addHistory);
     } catch (error) {
       // 使用统一错误处理
       handleError(error, {
@@ -134,10 +148,10 @@ export const TranslationControls: React.FC<TranslationControlsProps> = ({
     startTranslation,
     stopTranslation,
     completeTranslation,
-    getRelevantTerms,
-    formatTermsForPrompt,
+    getRelevantTermsForCallback,
+    formatTermsForPromptCallback,
     onOpenSettings,
-    addHistoryEntry,
+    addHistory,
     handleError
   ]);
 

@@ -17,9 +17,9 @@ import { HelpButton } from './HelpButton';
 import { GuideModal } from './GuideModal';
 import { useFiles } from '@/stores/subtitleStore';
 import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
-import { useHistory } from '@/contexts/HistoryContext';
+import { useHistoryStore } from '@/stores/historyStore';
 import { SubtitleFileMetadata } from '@/types';
-import { useTerms } from '@/contexts/TermsContext';
+import { useTermsStore } from '@/stores/termsStore';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { FadeIn } from './motion/FadeIn';
 
@@ -57,8 +57,8 @@ export const MainApp: React.FC = () => {
   const [isEditingModalOpen, setIsEditingModalOpen] = useState(false);
   const files = useFiles();
   const isConfigured = useIsTranslationConfigured();
-  const { history } = useHistory();
-  const { terms } = useTerms();
+  const history = useHistoryStore((state) => state.history);
+  const terms = useTermsStore((state) => state.terms);
 
   const { handleError } = useErrorHandler();
   useScrollAnimation();

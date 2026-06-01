@@ -1,11 +1,12 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { useTerms } from '@/contexts/TermsContext';
+import { useTermsStore } from '@/stores/termsStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, Edit3, Save, X, Upload, Download, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ConfirmDialog } from './ConfirmDialog';
 import { downloadTextFile } from '@/utils/fileExport';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import type { Term } from '@/types';
 
 interface TermsManagerProps {
   isOpen: boolean;
@@ -13,15 +14,43 @@ interface TermsManagerProps {
 }
 
 export const TermsManager: React.FC<TermsManagerProps> = ({ isOpen, onClose }) => {
-  const {
-    terms,
-    addTerm,
-    removeTerm,
-    updateTerm,
-    clearTerms,
-    importTerms,
-    exportTerms
-  } = useTerms();
+  const terms = useTermsStore((state) => state.terms);
+  const addTerm = useTermsStore((state) => state.addTerm);
+  const deleteTerm = useTermsStore((state) => state.deleteTerm);
+  const updateTerm = useTermsStore((state) => state.updateTerm);
+  const clearTerms = useTermsStore((state) => state.clearTerms);
+  const saveTerms = useTermsStore((state) => state.saveTerms);
+
+  // 派生 importTerms：从文本解析术语行并保存
+  const importTerms = useCallback(async (termsText: string) => {
+    const lines = termsText.split('\n').filter(line => line.trim());
+    const newTerms: Term[] = [];
+    const lineRegex = /^(.+?):\s*(.+?)(?:\s*\[(.+)\])?$/;
+
+    for (const line of lines) {
+      const match = line.match(lineRegex);
+      if (match) {
+        newTerms.push({
+          original: match[1].trim(),
+          translation: match[2].trim(),
+          notes: match[3]?.trim()
+        });
+      }
+    }
+
+    await saveTerms(newTerms);
+    toast.success('术语导入成功');
+  }, [saveTerms]);
+
+  // 派生 exportTerms：将术语列表序列化为可导入的文本
+  const exportTerms = useCallback(() => {
+    return terms.map(term => {
+      if (term.notes) {
+        return `${term.original}: ${term.translation} [${term.notes}]`;
+      }
+      return `${term.original}: ${term.translation}`;
+    }).join('\n');
+  }, [terms]);
 
   const { handleError } = useErrorHandler();
 
@@ -44,7 +73,11 @@ export const TermsManager: React.FC<TermsManagerProps> = ({ isOpen, onClose }) =
     }
 
     try {
-      await addTerm(newOriginal.trim(), newTranslation.trim(), newNotes.trim() || undefined);
+      await addTerm({
+        original: newOriginal.trim(),
+        translation: newTranslation.trim(),
+        notes: newNotes.trim() || undefined
+      });
       setNewOriginal('');
       setNewTranslation('');
       setNewNotes('');
@@ -58,14 +91,14 @@ export const TermsManager: React.FC<TermsManagerProps> = ({ isOpen, onClose }) =
 
   const onRemoveTerm = useCallback(async (index: number) => {
     try {
-      await removeTerm(index);
+      await deleteTerm(index);
       toast.success('术语已删除');
     } catch (error) {
       handleError(error, {
         context: { operation: '删除术语' }
       });
     }
-  }, [removeTerm, handleError]);
+  }, [deleteTerm, handleError]);
 
   const onStartEdit = useCallback((index: number) => {
     setEditingIndex(index);
@@ -83,7 +116,11 @@ export const TermsManager: React.FC<TermsManagerProps> = ({ isOpen, onClose }) =
     }
 
     try {
-      await updateTerm(editingIndex, editOriginal.trim(), editTranslation.trim(), editNotes.trim() || undefined);
+      await updateTerm(editingIndex, {
+        original: editOriginal.trim(),
+        translation: editTranslation.trim(),
+        notes: editNotes.trim() || undefined
+      });
       setEditingIndex(null);
       setEditOriginal('');
       setEditTranslation('');
@@ -113,7 +150,6 @@ export const TermsManager: React.FC<TermsManagerProps> = ({ isOpen, onClose }) =
       await importTerms(importText.trim());
       setImportText('');
       setShowImport(false);
-      toast.success('术语导入成功');
     } catch (error) {
       handleError(error, {
         context: { operation: '导入术语' }
