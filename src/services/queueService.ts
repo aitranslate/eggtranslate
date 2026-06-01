@@ -21,6 +21,8 @@ function isTaskCompleted(file: SubtitleFileMetadata): boolean {
   );
 }
 
+let isProcessNextScheduled = false;
+
 export function enqueueTask(fileId: string): void {
   const queue = useQueueStore.getState();
   if (queue.taskQueue.includes(fileId) || queue.activeTaskId === fileId) return;
@@ -29,11 +31,14 @@ export function enqueueTask(fileId: string): void {
   if (isTaskCompleted(file)) return;
 
   useQueueStore.getState().setTaskQueue([...queue.taskQueue, fileId]);
-  if (useQueueStore.getState().activeTaskId === null) {
+  if (useQueueStore.getState().activeTaskId === null && !isProcessNextScheduled) {
+    isProcessNextScheduled = true;
     // Defer to microtask so synchronous callers can observe the enqueued item
     // before processing starts and removes it from the head of the queue.
     queueMicrotask(() => {
-      processNext().catch((err) => logger.error('processNext failed:', err));
+      processNext()
+        .catch((err) => logger.error('processNext failed:', err))
+        .finally(() => { isProcessNextScheduled = false; });
     });
   }
 }

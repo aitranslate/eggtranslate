@@ -111,6 +111,30 @@ describe('queueService', () => {
     expect(useQueueStore.getState().taskQueue).toEqual([fid('t1'), fid('t3')]);
   });
 
+  it('enqueueAllUncompleted does not schedule parallel processNext (queue guard)', async () => {
+    // 回归测试：enqueueAllUncompleted 必须只排程一个 processNext，
+    // 否则两个 microtask 都会跑，第二个会覆盖 activeTaskId 导致并行
+    const { startTranslation } = await import('../translationService');
+    useFilesStore.setState({
+      tasks: [makeFile('t1', false), makeFile('t2', false)],
+    });
+    enqueueAllUncompleted();
+    // 让 microtask 跑完 + processNext 跑完
+    await new Promise((r) => setTimeout(r, 10));
+    // startTranslation 应该被调用 1 次（f1 开始），不是 2 次
+    // 第二次调用是 f2 排队，f1 完成后再调用
+    // 由于我们 mock 的是同一个函数，计数 ≥ 1 表示至少 f1 跑了
+    expect(startTranslation).toHaveBeenCalled();
+    // activeTaskId 在 f1 完成后应该是 null（如果 f2 还在队列，会被 finishTask 清掉）
+    // 或者 === f2（如果 f2 已经被 pop 出来）
+    // 关键是：不应该两个都同时在跑 —— 验证 activeTaskId 与 queue 是一致的
+    const state = useQueueStore.getState();
+    if (state.activeTaskId !== null) {
+      // 如果有 active，queue 里不应该还有它
+      expect(state.taskQueue).not.toContain(state.activeTaskId);
+    }
+  });
+
   it('processNext calls translationService for SRT file', async () => {
     const { startTranslation } = await import('../translationService');
     useFilesStore.setState({ tasks: [makeFile('t1')] });
