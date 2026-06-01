@@ -2,6 +2,7 @@ import path from "path"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import sourceIdentifierPlugin from 'vite-plugin-source-info'
+import { VitePWA } from 'vite-plugin-pwa'  // <-- NEW
 
 const isProd = process.env.BUILD_MODE === 'prod'
 
@@ -16,7 +17,36 @@ export default defineConfig({
       enabled: !isProd,
       attributePrefix: 'data-matrix',
       includeProps: true,
-    })
+    }),
+    VitePWA({                              // <-- NEW
+      registerType: 'autoUpdate',          // 新 SW 自动激活（= skipWaiting + clients.claim）
+      injectRegister: 'auto',              // 插件自动注入注册脚本
+      manifest: {
+        name: '蛋蛋字幕翻译',
+        short_name: '蛋蛋字幕翻译',
+        description: '音视频转录 + 字幕翻译，本地处理隐私安全',
+        start_url: '/?source=pwa',
+        display: 'standalone',
+        theme_color: '#F3C323',
+        background_color: '#ffffff',
+        lang: 'zh-CN',
+        orientation: 'any',
+        icons: [
+          { src: '/icons/192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icons/512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+      },
+      workbox: {
+        // 在线 App，不预缓存任何资源
+        globPatterns: [],
+        cleanupOutdatedCaches: false,
+      },
+      devOptions: {
+        // dev 模式下也启用 PWA，方便手动测试安装横幅
+        enabled: false,
+      },
+    }),
   ],
   server: {
     port: 5173,
