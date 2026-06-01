@@ -11,7 +11,7 @@ import {
   saveTranslationHistory,
   type TranslationConfig
 } from '@/services/TranslationOrchestrator';
-import { exportSRT, exportTXT, exportBilingual } from '@/services/SubtitleExporter';
+import { toSRT, toTXT, toBilingual } from '@/utils/srtParser';
 import { API_CONSTANTS } from '@/constants/api';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import type { SubtitleEntry, TranslationStatus } from '@/types';
@@ -156,15 +156,15 @@ export const TranslationControls: React.FC<TranslationControlsProps> = ({
 
         switch (format) {
           case 'srt':
-            content = exportSRT(entries, true);
+            content = toSRT(entries, true);
             extension = 'srt';
             break;
           case 'txt':
-            content = exportTXT(entries, true);
+            content = toTXT(entries, true);
             extension = 'txt';
             break;
           case 'bilingual':
-            content = exportBilingual(entries);
+            content = toBilingual(entries);
             extension = 'srt';
             break;
         }

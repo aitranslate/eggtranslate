@@ -145,11 +145,11 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                     file={file}
                     index={index}
                     onEdit={onEditFile}
-                    onStartTranslation={() => enqueueTask(file.id)}
+                    onStartTranslation={async () => { enqueueTask(file.id); }}
                     onExport={handleExport}
                     onDelete={handleDeleteFile}
-                    onTranscribeAndTranslate={() => enqueueTask(file.id)}
-                    onTranscribe={() => enqueueTask(file.id)}
+                    onTranscribeAndTranslate={async () => { enqueueTask(file.id); }}
+                    onTranscribe={async () => { enqueueTask(file.id); }}
                     onDequeue={() => dequeueTask(file.id)}
                     isQueued={isQueued && !isActive}
                     queuePosition={queuePosition}
