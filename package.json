@@ -8,7 +8,10 @@
     "build": "tsc -b && vite build",
     "build:prod": "tsc -b && set BUILD_MODE=prod && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
@@ -74,6 +77,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/ui": "^4.1.7",
     "autoprefixer": "10.4.20",
     "eslint": "^9.15.0",
     "eslint-plugin-react-hooks": "^5.0.0",
@@ -84,6 +88,7 @@
     "typescript": "~5.6.2",
     "typescript-eslint": "^8.15.0",
     "vite": "^6.0.1",
-    "vite-plugin-source-info": "^1.0.0"
+    "vite-plugin-source-info": "^1.0.0",
+    "vitest": "^4.1.7"
   }
 }
