@@ -69,6 +69,9 @@ export interface SubtitleFileMetadata {
   // entries 数据版本号（DataManager entries 变更时递增，用于触发 UI 刷新）
   entriesVersion: number;
 
+  /** 该文件要使用的热词分组 ID；null 表示不使用热词 */
+  selectedKeytermGroupId: string | null;
+
   // 音视频原始文件引用（不持久化，仅内存）
   fileRef?: File;
 }
