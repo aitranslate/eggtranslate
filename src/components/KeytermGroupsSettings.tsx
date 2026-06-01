@@ -7,13 +7,15 @@ interface KeytermGroupsSettingsProps {
   onGroupsChange: (groups: KeytermGroup[]) => void;
   keytermsEnabled: boolean;
   onKeytermsEnabledChange: (enabled: boolean) => void;
+  onDefaultGroupChange?: (groupId: string | null) => void;
 }
 
 export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
   groups,
   onGroupsChange,
   keytermsEnabled,
-  onKeytermsEnabledChange
+  onKeytermsEnabledChange,
+  onDefaultGroupChange
 }) => {
   const [activeGroupId, setActiveGroupId] = useState(groups[0]?.id || '');
   const [newKeyterm, setNewKeyterm] = useState('');
@@ -114,7 +116,10 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
                   ? 'bg-blue-100 text-blue-700'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
-              onClick={() => setActiveGroupId(group.id)}
+              onClick={() => {
+                setActiveGroupId(group.id);
+                onDefaultGroupChange?.(group.id);
+              }}
             >
               <FolderOpen className="h-4 w-4" />
               {editingGroupId === group.id ? (
