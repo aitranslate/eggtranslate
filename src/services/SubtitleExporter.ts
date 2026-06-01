@@ -1,52 +1,11 @@
 /**
  * 字幕导出服务
- * 提供基于 taskId 的统一导出功能（SRT、TXT、双语）
+ * 基于 taskId 的 ZIP 导出
  */
 
 import JSZip from 'jszip';
-import { toSRT, toTXT, toBilingual, toSrcTrans } from '@/utils/srtParser';
+import { toSRT, toBilingual, toSrcTrans } from '@/utils/srtParser';
 import { useFilesStore } from '@/stores/filesStore';
-
-/**
- * 基于 taskId 导出为 SRT 格式
- * @param taskId 任务 ID
- * @param useTranslation 是否使用翻译文本
- * @returns SRT 格式字符串
- */
-export function exportTaskSRT(taskId: string, useTranslation = true): string {
-  const task = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
-  if (!task || !task.subtitle_entries) {
-    return '';
-  }
-  return toSRT(task.subtitle_entries, useTranslation);
-}
-
-/**
- * 基于 taskId 导出为 TXT 格式
- * @param taskId 任务 ID
- * @param useTranslation 是否使用翻译文本
- * @returns TXT 格式字符串
- */
-export function exportTaskTXT(taskId: string, useTranslation = true): string {
-  const task = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
-  if (!task || !task.subtitle_entries) {
-    return '';
-  }
-  return toTXT(task.subtitle_entries, useTranslation);
-}
-
-/**
- * 基于 taskId 导出为双语格式
- * @param taskId 任务 ID
- * @returns 双语格式字符串
- */
-export function exportTaskBilingual(taskId: string): string {
-  const task = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
-  if (!task || !task.subtitle_entries) {
-    return '';
-  }
-  return toBilingual(task.subtitle_entries);
-}
 
 /**
  * 基于 taskId 导出为 ZIP 压缩包
