@@ -1073,10 +1073,14 @@ export const useSubtitleStore = create<SubtitleStore>()(
         tasks: state.tasks.map(({ fileRef, ...task }) => task),
       }),
       version: 1,
-      migrate: (persistedState: any, version: number) => {
+      migrate: (persistedState: unknown, version: number) => {
         // 旧格式：{ tasks: [...] }（来自 localforage batch_tasks）
         // 新格式：{ tasks: [...] }（persist 中间件格式）
-        if (persistedState && typeof persistedState === 'object' && Array.isArray(persistedState.tasks)) {
+        if (
+          persistedState &&
+          typeof persistedState === 'object' &&
+          Array.isArray((persistedState as { tasks?: unknown }).tasks)
+        ) {
           return persistedState as { tasks: SingleTask[] };
         }
         // 兜底：空数据
