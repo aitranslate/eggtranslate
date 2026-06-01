@@ -4,11 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "echo y | pnpm install & vite",
-    "build": "echo y | pnpm install & rmdir /s /q node_modules\\.vite-temp & tsc -b & vite build",
-    "build:prod": "echo y | pnpm install & rmdir /s /q node_modules\\.vite-temp & tsc -b & set BUILD_MODE=prod & vite build",
-    "lint": "echo y | pnpm install & eslint .",
-    "preview": "echo y | pnpm install & vite preview"
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:prod": "tsc -b && set BUILD_MODE=prod && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
