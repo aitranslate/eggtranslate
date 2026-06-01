@@ -1,6 +1,5 @@
 import { useCallback, useMemo, memo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check } from 'lucide-react';
 import { SubtitleFileMetadata, ALL_PHASES, type ProgressPhase } from '@/types';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useFilesStore } from '@/stores/filesStore';
@@ -94,36 +93,6 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
         zIndex: isTooltipVisible ? 50 : 'auto',
       }}
     >
-      {/* 完成时一次性脉冲光圈 + 勾选标记 */}
-      {badgeInfo.color === 'green' && (
-        <div className="pointer-events-none absolute -top-1 -right-1 w-10 h-10">
-          {/* 双圈涟漪：错开 150ms 扩散 */}
-          <motion.div
-            key="ring-1"
-            initial={{ scale: 0.5, opacity: 0.6 }}
-            animate={{ scale: 2.2, opacity: 0 }}
-            transition={{ duration: 1.0, ease: 'easeOut' }}
-            className="absolute inset-0 rounded-full bg-emerald-400/50"
-          />
-          <motion.div
-            key="ring-2"
-            initial={{ scale: 0.5, opacity: 0.6 }}
-            animate={{ scale: 2.2, opacity: 0 }}
-            transition={{ duration: 1.0, delay: 0.15, ease: 'easeOut' }}
-            className="absolute inset-0 rounded-full bg-emerald-400/50"
-          />
-          {/* 中心勾选标记：spring 弹入后保留 */}
-          <motion.div
-            key="check"
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.1, type: 'spring', stiffness: 380, damping: 16 }}
-            className="absolute inset-0 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg shadow-emerald-500/30"
-          >
-            <Check className="w-5 h-5 text-white" strokeWidth={3} />
-          </motion.div>
-        </div>
-      )}
       {/* 1. Header: file info + status badge */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3.5 min-w-0 flex-1">
