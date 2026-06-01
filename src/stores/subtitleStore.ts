@@ -670,7 +670,8 @@ export const useSubtitleStore = create<SubtitleStore>()(
             toast.success(`${file.name} 翻译完成`);
             const tokens = get().getFile(fileId)?.tokensUsed || 0;
             const finalTask = get().tasks.find(t => t.taskId === file.taskId);
-            return { tokens, entries: finalTask?.subtitle_entries || entries, phases: get().getFile(fileId)?.phases! };
+            const finalFile = get().getFile(fileId);
+            return { tokens, entries: finalTask?.subtitle_entries || entries, phases: finalFile!.phases };
           }
 
           let splitSucceeded = false;

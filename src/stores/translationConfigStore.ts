@@ -38,7 +38,7 @@ interface TranslationConfigStore {
     contextBefore?: string,
     contextAfter?: string,
     terms?: string
-  ) => Promise<{ translations: Record<string, any>; tokensUsed: number }>;
+  ) => Promise<{ translations: Record<string, { direct: string }>; tokensUsed: number }>;
   updateProgress: (
     current: number,
     total: number,
