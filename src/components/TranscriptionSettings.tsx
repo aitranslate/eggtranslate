@@ -8,7 +8,8 @@ import {
   useKeytermsEnabled,
   useSetKeytermsEnabled,
   useApiKeys,
-  useSetApiKeys
+  useSetApiKeys,
+  useTranscriptionStore
 } from '@/stores/transcriptionStore';
 
 export const TranscriptionSettings: React.FC = () => {
@@ -18,6 +19,7 @@ export const TranscriptionSettings: React.FC = () => {
   const updateKeytermGroups = useUpdateKeytermGroups();
   const keytermsEnabled = useKeytermsEnabled();
   const setKeytermsEnabled = useSetKeytermsEnabled();
+  const setDefaultKeytermGroupId = useTranscriptionStore((state) => state.setDefaultKeytermGroupId);
 
   return (
     <div className="space-y-6">
@@ -31,6 +33,7 @@ export const TranscriptionSettings: React.FC = () => {
         onGroupsChange={updateKeytermGroups}
         keytermsEnabled={keytermsEnabled}
         onKeytermsEnabledChange={setKeytermsEnabled}
+        onDefaultGroupChange={setDefaultKeytermGroupId}
       />
     </div>
   );
