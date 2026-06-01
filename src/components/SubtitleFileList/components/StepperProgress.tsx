@@ -5,7 +5,7 @@ import { useSubtitleStore, useFile } from '@/stores/subtitleStore';
 import { PhaseTooltipCard } from './PhaseTooltipCard';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { shouldLineBeActive } from '@/utils/badgeHelper';
-import type { ProgressPhase, PhaseProgress, FilePhases } from '@/types';
+import { ALL_PHASES, type ProgressPhase, type PhaseProgress, type FilePhases } from '@/types';
 
 interface StepperProgressProps {
   fileId: string;
@@ -22,8 +22,6 @@ const PHASE_LABELS_CN: Record<ProgressPhase, string> = {
   translating: '字幕翻译',
   splitting: '断句对齐',
 };
-
-const ALL_PHASES: ProgressPhase[] = ['converting', 'transcribing', 'translating', 'splitting'];
 
 const Spinner: React.FC = () => (
   <div
