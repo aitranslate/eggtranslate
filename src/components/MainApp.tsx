@@ -15,7 +15,7 @@ import { TermsManager } from './TermsManager';
 import { HistoryModal } from './HistoryModal';
 import { HelpButton } from './HelpButton';
 import { GuideModal } from './GuideModal';
-import { useFiles } from '@/stores/subtitleStore';
+import { useFiles } from '@/stores/filesStore';
 import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
 import { useHistoryStore } from '@/stores/historyStore';
 import { SubtitleFileMetadata } from '@/types';

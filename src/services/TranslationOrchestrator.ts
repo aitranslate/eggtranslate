@@ -4,7 +4,7 @@
  */
 
 import type { SubtitleEntry, Term, TranslationStatus, TranslationHistoryEntry } from '@/types';
-import { useSubtitleStore } from '@/stores/subtitleStore';
+import { useFilesStore } from '@/stores/filesStore';
 import toast from 'react-hot-toast';
 import { API_CONSTANTS } from '@/constants/api';
 import { toAppError } from '@/utils/errors';
@@ -307,7 +307,7 @@ export async function saveTranslationHistory(
   try {
     await new Promise(resolve => setTimeout(resolve, API_CONSTANTS.HISTORY_SAVE_DELAY_MS));
 
-    const currentTask = useSubtitleStore.getState().tasks.find(t => t.taskId === taskId);
+    const currentTask = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
 
     if (currentTask) {
       const finalTokens = currentTask.phases?.translating?.tokens || tokensUsed || 0;

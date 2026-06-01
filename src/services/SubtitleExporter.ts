@@ -5,7 +5,7 @@
 
 import JSZip from 'jszip';
 import { toSRT, toTXT, toBilingual, toSrcTrans } from '@/utils/srtParser';
-import { useSubtitleStore } from '@/stores/subtitleStore';
+import { useFilesStore } from '@/stores/filesStore';
 
 /**
  * 基于 taskId 导出为 SRT 格式
@@ -14,7 +14,7 @@ import { useSubtitleStore } from '@/stores/subtitleStore';
  * @returns SRT 格式字符串
  */
 export function exportTaskSRT(taskId: string, useTranslation = true): string {
-  const task = useSubtitleStore.getState().tasks.find(t => t.taskId === taskId);
+  const task = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
   if (!task || !task.subtitle_entries) {
     return '';
   }
@@ -28,7 +28,7 @@ export function exportTaskSRT(taskId: string, useTranslation = true): string {
  * @returns TXT 格式字符串
  */
 export function exportTaskTXT(taskId: string, useTranslation = true): string {
-  const task = useSubtitleStore.getState().tasks.find(t => t.taskId === taskId);
+  const task = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
   if (!task || !task.subtitle_entries) {
     return '';
   }
@@ -41,7 +41,7 @@ export function exportTaskTXT(taskId: string, useTranslation = true): string {
  * @returns 双语格式字符串
  */
 export function exportTaskBilingual(taskId: string): string {
-  const task = useSubtitleStore.getState().tasks.find(t => t.taskId === taskId);
+  const task = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
   if (!task || !task.subtitle_entries) {
     return '';
   }
@@ -56,7 +56,7 @@ export function exportTaskBilingual(taskId: string): string {
  * @returns ZIP 文件的 Blob
  */
 export async function exportTaskZip(taskId: string): Promise<Blob> {
-  const task = useSubtitleStore.getState().tasks.find(t => t.taskId === taskId);
+  const task = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
   if (!task || !task.subtitle_entries) {
     throw new Error('任务数据不存在');
   }
