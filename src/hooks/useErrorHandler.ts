@@ -186,94 +186,9 @@ export function useErrorHandler() {
     }
   }, [handleError]);
 
-  /**
-   * 创建带错误处理的异步函数
-   *
-   * @param asyncFn - 异步函数
-   * @param options - 处理选项
-   * @returns 包装后的函数
-   *
-   * @example
-   * const safeTranslate = createSafeHandler(
-   *   (file) => translateFile(file),
-   *   { operation: '翻译文件' }
-   * );
-   * // 使用时无需 try-catch
-   * await safeTranslate(file);
-   */
-  const createSafeHandler = useCallback(<T extends any[], R>(
-    asyncFn: (...args: T) => Promise<R>,
-    options: ErrorHandlerOptions = {}
-  ) => {
-    return async (...args: T): Promise<R | null> => {
-      const result = await handleAsync(() => asyncFn(...args), options);
-      return result.success ? result.data! : null;
-    };
-  }, [handleAsync]);
-
-  /**
-   * 批量错误处理
-   *
-   * @param errors - 错误数组
-   * @param options - 处理选项
-   *
-   * @example
-   * const errors = [error1, error2, error3];
-   * handleBatchErrors(errors, {
-   *   operation: '批量翻译',
-   *   showToast: false // 只显示汇总
-   * });
-   */
-  const handleBatchErrors = useCallback((
-    errors: unknown[],
-    options: ErrorHandlerOptions = {}
-  ) => {
-    const { context, showToast = true } = options;
-    const abortErrors: Error[] = [];
-    const otherErrors: Error[] = [];
-
-    // 分类错误
-    for (const error of errors) {
-      const appError = toAppError(error);
-      if (isAbortError(appError)) {
-        abortErrors.push(appError);
-      } else {
-        otherErrors.push(appError);
-      }
-    }
-
-    // 记录所有错误
-    for (const error of [...abortErrors, ...otherErrors]) {
-      logError(error, LogLevel.ERROR, context);
-    }
-
-    // 显示汇总 toast
-    if (showToast) {
-      if (otherErrors.length > 0) {
-        toast.error(
-          `${context?.operation || '操作'}完成，${otherErrors.length} 个失败`,
-          { duration: 3000 }
-        );
-      } else if (abortErrors.length > 0) {
-        toast.success(
-          `${context?.operation || '操作'}已取消`,
-          { duration: 2000 }
-        );
-      }
-    }
-
-    return {
-      abortCount: abortErrors.length,
-      errorCount: otherErrors.length,
-      total: errors.length
-    };
-  }, [logError]);
-
   return {
     handleError,
     handleAsync,
-    createSafeHandler,
-    handleBatchErrors,
     isAbortError,
     toAppError,
     getUserMessage
