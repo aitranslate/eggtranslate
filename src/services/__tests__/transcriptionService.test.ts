@@ -1,0 +1,188 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { useFilesStore } from '@/stores/filesStore';
+import { useTranscriptionStore } from '@/stores/transcriptionStore';
+import { startTranscription } from '../transcriptionService';
+import type { SingleTask, SubtitleFileMetadata, SubtitleEntry, PhaseProgress, WorkflowType, FileType } from '@/types';
+
+vi.mock('../transcriptionPipeline', () => ({
+  runTranscriptionPipeline: vi.fn(),
+}));
+
+vi.mock('@/utils/convertToMP3', () => ({
+  convertToMP3: vi.fn(),
+}));
+
+vi.mock('localforage', () => ({
+  default: {
+    getItem: vi.fn().mockResolvedValue(null),
+    setItem: vi.fn().mockResolvedValue(undefined),
+    removeItem: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+import { runTranscriptionPipeline } from '../transcriptionPipeline';
+import { convertToMP3 } from '@/utils/convertToMP3';
+import localforage from 'localforage';
+
+const makeFile = (overrides: {
+  id?: string;
+  taskId?: string;
+  fileType?: FileType;
+  fileRef?: File | undefined;
+  transcribingStatus?: PhaseProgress['status'];
+  convertingStatus?: PhaseProgress['status'];
+  workflow?: WorkflowType;
+} = {}): SubtitleFileMetadata => {
+  const taskId = overrides.taskId ?? 't1';
+  const id = overrides.id ?? `file_${taskId}`;
+  return {
+    id,
+    taskId,
+    name: `${id}.mp3`,
+    fileType: overrides.fileType ?? 'audio',
+    fileSize: 100,
+    lastModified: 0,
+    entryCount: 0,
+    translatedCount: 0,
+    tokensUsed: 0,
+    entriesVersion: 0,
+    fileRef: overrides.fileRef,
+    duration: undefined,
+    phases: {
+      workflow: overrides.workflow ?? 'transcribe',
+      converting: { status: overrides.convertingStatus ?? 'upcoming', progress: 0, tokens: 0 },
+      transcribing: { status: overrides.transcribingStatus ?? 'upcoming', progress: 0, tokens: 0 },
+      translating: { status: 'upcoming', progress: 0, tokens: 0 },
+      splitting: { status: 'upcoming', progress: 0, tokens: 0 },
+    },
+  };
+};
+
+const makeTask = (file: SubtitleFileMetadata): SingleTask => ({
+  taskId: file.taskId,
+  subtitle_filename: file.name,
+  subtitle_entries: [],
+  phases: file.phases,
+  fileType: file.fileType,
+  fileSize: file.fileSize,
+  fileRef: file.fileRef,
+  index: 0,
+});
+
+describe('transcriptionService.startTranscription', () => {
+  beforeEach(() => {
+    useFilesStore.setState({ tasks: [] });
+    useTranscriptionStore.setState({
+      apiKeys: 'test-key',
+      keytermGroups: [],
+      keytermsEnabled: false,
+    });
+    vi.clearAllMocks();
+  });
+
+  it('returns early when file not found', async () => {
+    await startTranscription('non-existent');
+    expect(runTranscriptionPipeline).not.toHaveBeenCalled();
+    expect(convertToMP3).not.toHaveBeenCalled();
+  });
+
+  it('returns early for SRT file', async () => {
+    useFilesStore.setState({
+      tasks: [makeTask(makeFile({ fileType: 'srt' }))],
+    });
+    await startTranscription('file_t1');
+    expect(runTranscriptionPipeline).not.toHaveBeenCalled();
+  });
+
+  it('returns early when transcribing already completed', async () => {
+    useFilesStore.setState({
+      tasks: [makeTask(makeFile({ transcribingStatus: 'completed' }))],
+    });
+    await startTranscription('file_t1');
+    expect(runTranscriptionPipeline).not.toHaveBeenCalled();
+    expect(convertToMP3).not.toHaveBeenCalled();
+  });
+
+  it('returns early when API key is not configured', async () => {
+    useFilesStore.setState({
+      tasks: [makeTask(makeFile({ fileRef: new File([''], 'test.mp3', { type: 'audio/mpeg' }) }))],
+    });
+    useTranscriptionStore.setState({ apiKeys: '' });
+    await startTranscription('file_t1');
+    expect(runTranscriptionPipeline).not.toHaveBeenCalled();
+  });
+
+  it('uses fileRef when available, converts to MP3, runs pipeline, writes entries', async () => {
+    const mediaFile = new File([''], 'test.mp3', { type: 'audio/mpeg' });
+    useFilesStore.setState({
+      tasks: [makeTask(makeFile({ fileRef: mediaFile }))],
+    });
+    useTranscriptionStore.setState({ apiKeys: 'test-key' });
+
+    const mp3Blob = new Blob(['mp3 data'], { type: 'audio/mpeg' });
+    vi.mocked(convertToMP3).mockResolvedValue(mp3Blob);
+    vi.mocked(runTranscriptionPipeline).mockResolvedValue({
+      entries: [
+        {
+          id: 1,
+          startTime: '00:00:00,000',
+          endTime: '00:00:02,000',
+          text: 'hello',
+          translatedText: '',
+          translationStatus: 'pending',
+        },
+      ],
+      language: 'en',
+    });
+
+    await startTranscription('file_t1');
+
+    expect(convertToMP3).toHaveBeenCalledWith(mediaFile);
+    expect(runTranscriptionPipeline).toHaveBeenCalled();
+
+    const after = useFilesStore.getState().tasks[0];
+    expect(after.phases.converting.status).toBe('completed');
+    expect(after.phases.transcribing.status).toBe('completed');
+    expect(after.phases.transcribing.language).toBe('en');
+    expect(after.subtitle_entries).toHaveLength(1);
+    const firstEntry: SubtitleEntry = after.subtitle_entries[0];
+    expect(firstEntry.text).toBe('hello');
+  });
+
+  it('uses existing MP3 from IndexedDB when converting already completed', async () => {
+    const mp3Blob = new Blob(['cached mp3'], { type: 'audio/mpeg' });
+    useFilesStore.setState({
+      tasks: [makeTask(makeFile({ convertingStatus: 'completed' }))],
+    });
+    useTranscriptionStore.setState({ apiKeys: 'test-key' });
+
+    vi.mocked(localforage.getItem).mockResolvedValue(mp3Blob);
+
+    vi.mocked(runTranscriptionPipeline).mockResolvedValue({
+      entries: [],
+      language: 'zh',
+    });
+
+    await startTranscription('file_t1');
+
+    expect(convertToMP3).not.toHaveBeenCalled();
+    expect(runTranscriptionPipeline).toHaveBeenCalled();
+
+    const after = useFilesStore.getState().tasks[0];
+    expect(after.phases.transcribing.status).toBe('completed');
+  });
+
+  it('marks phase as failed when pipeline throws', async () => {
+    useFilesStore.setState({
+      tasks: [makeTask(makeFile({ fileRef: new File([''], 'test.mp3', { type: 'audio/mpeg' }) }))],
+    });
+    useTranscriptionStore.setState({ apiKeys: 'test-key' });
+
+    vi.mocked(convertToMP3).mockRejectedValue(new Error('convert failed'));
+
+    await startTranscription('file_t1');
+
+    const after = useFilesStore.getState().tasks[0];
+    expect(after.phases.converting.status).toBe('failed');
+  });
+});
