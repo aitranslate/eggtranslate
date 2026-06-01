@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { Check, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useSubtitleStore, useFile } from '@/stores/subtitleStore';
+import { useFile } from '@/stores/filesStore';
 import { PhaseTooltipCard } from './PhaseTooltipCard';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { shouldLineBeActive } from '@/utils/badgeHelper';
