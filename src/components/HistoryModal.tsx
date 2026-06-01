@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { useHistory } from '@/contexts/HistoryContext';
+import { useHistoryStore } from '@/stores/historyStore';
+import { calculateHistoryStats, findHistoryEntry } from '@/utils/historyHelpers';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -24,12 +25,9 @@ interface HistoryModalProps {
 }
 
 export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) => {
-  const {
-    history,
-    deleteHistoryEntry,
-    clearHistory,
-    getHistoryStats
-  } = useHistory();
+  const history = useHistoryStore((state) => state.history);
+  const deleteHistory = useHistoryStore((state) => state.removeHistory);
+  const clearHistory = useHistoryStore((state) => state.clearHistory);
 
   const { handleError } = useErrorHandler();
 
@@ -38,7 +36,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
 
-  const stats = getHistoryStats();
+  const stats = calculateHistoryStats(history);
 
   const filteredHistory = React.useMemo(() => {
     if (!searchTerm) return history;
@@ -50,7 +48,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
   }, [history, searchTerm]);
 
   const onDelete = useCallback(async (taskId: string) => {
-    const entry = history.find(e => e.taskId === taskId);
+    const entry = findHistoryEntry(history, taskId);
     if (!entry) return;
 
     setDeletingTaskId(taskId);
@@ -61,7 +59,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
     if (!deletingTaskId) return;
 
     try {
-      await deleteHistoryEntry(deletingTaskId);
+      await deleteHistory(deletingTaskId);
       toast.success('历史记录已删除');
     } catch (error) {
       handleError(error, {
@@ -71,7 +69,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
       setShowDeleteConfirm(false);
       setDeletingTaskId(null);
     }
-  }, [deleteHistoryEntry, deletingTaskId, handleError]);
+  }, [deleteHistory, deletingTaskId, handleError]);
 
   const onClear = useCallback(async () => {
     if (history.length === 0) return;
@@ -111,7 +109,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
   if (!isOpen) return null;
 
   const deletingEntry = deletingTaskId
-    ? history.find(e => e.taskId === deletingTaskId)
+    ? findHistoryEntry(history, deletingTaskId)
     : null;
 
   return (
