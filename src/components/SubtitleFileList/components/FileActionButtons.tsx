@@ -75,7 +75,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
   const showTranslateButton = true;
 
   return (
-    <div className="flex items-center justify-between border-t pt-4" style={{ borderColor: '#E5E5EA' }}>
+    <div className="flex items-center gap-3">
       {/* Secondary actions: edit, export, delete */}
       <div className="flex items-center gap-2">
         <button
