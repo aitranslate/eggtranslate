@@ -13,6 +13,7 @@ interface FileActionButtonsProps {
   isQueued: boolean;
   queuePosition: number;
   isActive: boolean;
+  allPhasesDone: boolean;
   onTranscribeAndTranslate: () => void;
   onTranscribe: () => void;
   onDequeue?: () => void;
@@ -30,6 +31,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
   isQueued,
   queuePosition,
   isActive,
+  allPhasesDone,
   onTranscribeAndTranslate,
   onTranscribe,
   onDequeue,
@@ -73,8 +75,33 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
   }, [isBusy, translationStats.percentage, isAudioVideo, isTranscriptionDone, splittingFailed]);
 
   // Determine primary action button
-  const showTranscribeButton = isAudioVideo && canRetranscribe(file);
+  // "仅转录" 按钮：audio/video 始终显示（终态置灰，不消失）
+  const showTranscribeButton = isAudioVideo;
+  // 主按钮：始终显示（终态置灰）
   const showTranslateButton = true;
+
+  // 仅转录按钮的禁用条件：忙、全部完成、不可重新转录
+  const transcribeButtonDisabled = !canTranscribe || allPhasesDone;
+
+  // 主按钮的禁用条件：忙以外 + 都完成 + 都不可操作
+  const primaryButtonDisabled = isQueued
+    ? false
+    : isBusy
+      ? true
+      : allPhasesDone
+        ? true
+        : !canTranscribeAndTranslate && !canTranslate;
+
+  // 主按钮文案
+  const primaryLabel = isQueued
+    ? '取消排队'
+    : isBusy
+      ? '处理中...'
+      : allPhasesDone
+        ? '一键转译'
+        : isAudioVideo && !isTranscriptionDone
+          ? '一键转译'
+          : '开始翻译';
 
   return (
     <div className="flex items-center justify-between border-t pt-4" style={{ borderColor: '#E5E5EA' }}>
@@ -113,27 +140,27 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
 
       {/* Primary actions */}
       <div className="flex items-center gap-3">
-        {/* Transcribe only (audio/video, when retranscribe is possible) */}
+        {/* Transcribe only (audio/video, always visible — grey when not actionable) */}
         {showTranscribeButton && (
           <motion.button
             onClick={(e) => { e.stopPropagation(); onTranscribe(); }}
-            disabled={!canTranscribe}
-            whileHover={canTranscribe ? { scale: 1.03 } : undefined}
-            whileTap={canTranscribe ? { scale: 0.96 } : undefined}
+            disabled={transcribeButtonDisabled}
+            whileHover={!transcribeButtonDisabled ? { scale: 1.03 } : undefined}
+            whileTap={!transcribeButtonDisabled ? { scale: 0.96 } : undefined}
             transition={{ type: 'spring', stiffness: 400, damping: 18 }}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
-              background: canTranscribe ? '#EBF3FF' : '#F2F2F7',
-              color: canTranscribe ? '#0066FF' : '#86868B',
+              background: transcribeButtonDisabled ? '#F2F2F7' : '#EBF3FF',
+              color: transcribeButtonDisabled ? '#86868B' : '#0066FF',
             }}
-            onMouseEnter={(e) => { if (canTranscribe) (e.currentTarget.style.background = '#D9E8FF'); }}
-            onMouseLeave={(e) => { if (canTranscribe) (e.currentTarget.style.background = '#EBF3FF'); }}
+            onMouseEnter={(e) => { if (!transcribeButtonDisabled) (e.currentTarget.style.background = '#D9E8FF'); }}
+            onMouseLeave={(e) => { if (!transcribeButtonDisabled) (e.currentTarget.style.background = '#EBF3FF'); }}
           >
             仅转录
           </motion.button>
         )}
 
-        {/* Primary button: translate or transcribe-and-translate */}
+        {/* Primary button: 取消排队 / 处理中 / 一键转译 / 开始翻译（终态全部完成时显示"一键转译"置灰） */}
         {showTranslateButton && (
           <motion.button
             onClick={(e) => {
@@ -146,19 +173,19 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
                 onStartTranslation();
               }
             }}
-            disabled={!isQueued && !canTranscribeAndTranslate && !canTranslate}
+            disabled={primaryButtonDisabled}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
-              background: isQueued ? '#8E8E93' : (canTranscribeAndTranslate || canTranslate) ? '#0066FF' : '#C4C4C4',
+              background: isQueued
+                ? '#8E8E93'
+                : primaryButtonDisabled
+                  ? '#C4C4C4'
+                  : (canTranscribeAndTranslate || canTranslate) ? '#0066FF' : '#C4C4C4',
             }}
-            onMouseEnter={(e) => { if (!isQueued && (canTranscribeAndTranslate || canTranslate)) (e.currentTarget.style.background = '#005ce6'); }}
-            onMouseLeave={(e) => { if (!isQueued && (canTranscribeAndTranslate || canTranslate)) (e.currentTarget.style.background = '#0066FF'); }}
+            onMouseEnter={(e) => { if (!isQueued && !primaryButtonDisabled) (e.currentTarget.style.background = '#005ce6'); }}
+            onMouseLeave={(e) => { if (!isQueued && !primaryButtonDisabled) (e.currentTarget.style.background = '#0066FF'); }}
           >
-            {isQueued ? (
-              <>
-                取消排队
-              </>
-            ) : isBusy ? (
+            {isBusy ? (
               <>
                 <div
                   className="rounded-full animate-spin"
@@ -173,7 +200,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
             ) : (
               <>
                 <Wand2 className="w-4 h-4" />
-                {isAudioVideo && !isTranscriptionDone ? '一键转译' : '开始翻译'}
+                {primaryLabel}
               </>
             )}
           </motion.button>

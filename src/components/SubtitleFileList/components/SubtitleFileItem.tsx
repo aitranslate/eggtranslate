@@ -60,6 +60,12 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
     return aiSegmentationEnabled ? basePhases : basePhases.filter(p => p !== 'splitting');
   }, [file.fileType, aiSegmentationEnabled]);
 
+  // 所有需要展示的阶段都完成了（用于 FileActionButtons 的 "一键转译置灰" 终态判断）
+  const allPhasesDone = useMemo(
+    () => displayPhases.every(p => file.phases[p]?.status === 'completed'),
+    [displayPhases, file.phases]
+  );
+
   // 使用 getCardBadge 计算 badge 信息
   const badgeInfo = getCardBadge(file.phases, displayPhases, isQueued, queuePosition);
   const badgeClass = badgeInfo.color === 'green'
@@ -142,6 +148,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
       <FileActionButtons
         file={file}
         isTranslating={isActive}
+        allPhasesDone={allPhasesDone}
         translationStats={{
           percentage: (file.entryCount ?? 0) > 0
             ? Math.round(((file.translatedCount ?? 0) / (file.entryCount ?? 1)) * 100)
