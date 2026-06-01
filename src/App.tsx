@@ -8,11 +8,7 @@ import '@/index.css';
 
 function App() {
   return (
-    <ErrorBoundary
-      onError={(error, errorInfo) => {
-        // 错误已经被 ErrorBoundary 记录
-      }}
-    >
+    <ErrorBoundary>
       <HistoryProvider>
         <TermsProvider>
           <MainApp />
