@@ -5,7 +5,10 @@ import { Stagger } from '../motion/Stagger';
 import toast from 'react-hot-toast';
 import { downloadZipFile } from '@/utils/fileExport';
 import { exportTaskZip, getBaseName } from '@/services/SubtitleExporter';
-import { useSubtitleStore, useFiles, useQueueState } from '@/stores/subtitleStore';
+import { useFiles } from '@/stores/filesStore';
+import { useQueueStore } from '@/stores/queueStore';
+import { removeFile, clearAll } from '@/services/filesService';
+import { enqueueTask, dequeueTask, enqueueAllUncompleted } from '@/services/queueService';
 import { SubtitleFileMetadata } from '@/types';
 import { SubtitleFileItemMemo as SubtitleFileItem } from './components/SubtitleFileItem';
 import { ConfirmDialog } from '../ConfirmDialog';
@@ -22,12 +25,8 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   onEditFile
 }) => {
   const files = useFiles();
-  const removeFile = useSubtitleStore((state) => state.removeFile);
-  const clearAllData = useSubtitleStore((state) => state.clearAll);
-  const { taskQueue, activeTaskId } = useQueueState();
-  const enqueueTask = useSubtitleStore((state) => state.enqueueTask);
-  const dequeueTask = useSubtitleStore((state) => state.dequeueTask);
-  const enqueueAllUncompleted = useSubtitleStore((state) => state.enqueueAllUncompleted);
+  const taskQueue = useQueueStore((state) => state.taskQueue);
+  const activeTaskId = useQueueStore((state) => state.activeTaskId);
 
   const { handleError } = useErrorHandler();
 
@@ -52,7 +51,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
 
   const handleConfirmClear = useCallback(async () => {
     try {
-      await clearAllData();
+      await clearAll();
       toast.success('所有文件已清空');
     } catch (error) {
       handleError(error, {
@@ -61,7 +60,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     } finally {
       setShowClearConfirm(false);
     }
-  }, [clearAllData, handleError]);
+  }, [clearAll, handleError]);
 
   const handleDeleteFile = useCallback(async (file: SubtitleFileMetadata) => {
     setFileToDelete(file);
