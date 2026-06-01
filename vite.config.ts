@@ -40,10 +40,9 @@ export default defineConfig({
       workbox: {
         // 在线 App，不预缓存任何资源
         globPatterns: [],
-        cleanupOutdatedCaches: false,
       },
       devOptions: {
-        // dev 模式下也启用 PWA，方便手动测试安装横幅
+        // dev 模式下不启用 SW；Task 7 手动 QA 用 pnpm preview 跑生产构建
         enabled: false,
       },
     }),
