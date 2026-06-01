@@ -11,7 +11,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: false, // We import describe/it/expect from 'vitest' explicitly
-    include: ['src/**/__tests__/**/*.test.ts', 'src/**/*.test.ts'],
+    include: ['src/**/__tests__/**/*.test.ts', 'src/**/__tests__/**/*.test.tsx', 'src/**/*.test.ts', 'src/**/*.test.tsx'],
     setupFiles: ['./src/test/setup.ts'],
   },
 });
