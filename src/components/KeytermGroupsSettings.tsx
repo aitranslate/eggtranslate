@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { FolderOpen, Plus, X, Trash2, Edit2, Check, Star } from 'lucide-react';
+import { FolderOpen, Plus, X, Trash2, Edit2, Check } from 'lucide-react';
 import type { KeytermGroup } from '@/types/transcription';
 
 interface KeytermGroupsSettingsProps {
   groups: KeytermGroup[];
   onGroupsChange: (groups: KeytermGroup[]) => void;
-  /** 默认热词组：v2 唯一的状态。新任务用这个组的 keyterms；null = 不使用。 */
+  /** 默认热词组：唯一的状态。选中 = 既显示其 keyterms 供编辑，又作为新任务的默认。null = 不使用。 */
   defaultKeytermGroupId: string | null;
   onDefaultGroupChange?: (groupId: string | null) => void;
 }
@@ -16,17 +16,24 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
   defaultKeytermGroupId,
   onDefaultGroupChange
 }) => {
-  // 正在编辑的组（展示 keyterms 输入区）。默认跟随 defaultKeytermGroupId；
-  // 没有默认时回退到第一组，保持可编辑。
-  const [editingGroupId, setEditingGroupId] = useState<string>(
-    () => defaultKeytermGroupId ?? groups[0]?.id ?? ''
-  );
+  // 只有一个概念："选中"。选中 = 既默认 = 又在编辑。点击切换。
+  // 没有选中时，不展示 keyterms 编辑区。
+  const selectedGroupId = defaultKeytermGroupId;
+  const selectedGroup = groups.find(g => g.id === selectedGroupId);
+
   const [newKeyterm, setNewKeyterm] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
   const [renamingName, setRenamingName] = useState('');
 
-  const editingGroup = groups.find(g => g.id === editingGroupId);
+  const handleSelect = (group: KeytermGroup) => {
+    // 选中的 → 取消；未选中的 → 选中
+    if (defaultKeytermGroupId === group.id) {
+      onDefaultGroupChange?.(null);
+    } else {
+      onDefaultGroupChange?.(group.id);
+    }
+  };
 
   const addGroup = () => {
     if (!newGroupName.trim()) return;
@@ -37,19 +44,13 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
     };
     onGroupsChange([...groups, newGroup]);
     setNewGroupName('');
-    // 新建的组自动成为默认 + 进入编辑
     onDefaultGroupChange?.(newGroup.id);
-    setEditingGroupId(newGroup.id);
   };
 
   const deleteGroup = (groupId: string) => {
     onGroupsChange(groups.filter(g => g.id !== groupId));
     if (defaultKeytermGroupId === groupId) {
-      // 删除当前默认组 → 默认清空
       onDefaultGroupChange?.(null);
-    }
-    if (editingGroupId === groupId) {
-      setEditingGroupId(groups.find(g => g.id !== groupId)?.id ?? '');
     }
   };
 
@@ -69,17 +70,17 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
   };
 
   const addKeyterm = () => {
-    if (!editingGroup || !newKeyterm.trim()) return;
+    if (!selectedGroup || !newKeyterm.trim()) return;
 
     const newTerms = newKeyterm
       .split(',')
       .map(t => t.trim())
-      .filter(t => t && !editingGroup.keyterms.includes(t));
+      .filter(t => t && !selectedGroup.keyterms.includes(t));
 
     if (newTerms.length === 0) return;
 
     onGroupsChange(groups.map(g =>
-      g.id === editingGroupId
+      g.id === selectedGroupId
         ? { ...g, keyterms: [...g.keyterms, ...newTerms] }
         : g
     ));
@@ -88,7 +89,7 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
 
   const removeKeyterm = (term: string) => {
     onGroupsChange(groups.map(g =>
-      g.id === editingGroupId
+      g.id === selectedGroupId
         ? { ...g, keyterms: g.keyterms.filter(k => k !== term) }
         : g
     ));
@@ -97,35 +98,21 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
   return (
     <div className="space-y-6">
       <div className="space-y-3">
-        <div className="flex items-baseline justify-between">
-          <h3 className="apple-heading-small">热词提示</h3>
-          <span className="text-xs text-gray-500">
-            点击分组切换默认；点击名称进入编辑
-          </span>
-        </div>
+        <h3 className="apple-heading-small">热词提示</h3>
 
-        {/* 分组标签 */}
+        {/* 分组标签：蓝底 = 选中 = 默认 */}
         <div className="flex flex-wrap gap-2">
           {groups.map((group) => {
-            const isDefault = defaultKeytermGroupId === group.id;
-            const isEditing = editingGroupId === group.id;
+            const isSelected = defaultKeytermGroupId === group.id;
             return (
               <div
                 key={group.id}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all ${
-                  isEditing
-                    ? 'bg-blue-100 text-blue-700'
+                  isSelected
+                    ? 'bg-blue-500 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                } ${isDefault ? 'ring-2 ring-blue-500' : ''}`}
-                onClick={() => {
-                  // 整张卡片：点 chip 切换默认（再次点已选中的 → 取消）
-                  if (isDefault) {
-                    onDefaultGroupChange?.(null);
-                  } else {
-                    onDefaultGroupChange?.(group.id);
-                  }
-                  setEditingGroupId(group.id);
-                }}
+                }`}
+                onClick={() => handleSelect(group)}
               >
                 <FolderOpen className="h-4 w-4" />
                 {renamingGroupId === group.id ? (
@@ -135,27 +122,17 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
                     onChange={(e) => setRenamingName(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && saveEditGroup()}
                     onClick={(e) => e.stopPropagation()}
-                    className="bg-transparent border-none outline-none text-sm w-24"
+                    className="bg-white/20 border-none outline-none text-sm w-24 text-white placeholder-white/60"
                     autoFocus
                   />
                 ) : (
-                  <span
-                    className="text-sm font-medium"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // 点名称：进入该组编辑（不改变默认）
-                      setEditingGroupId(group.id);
-                    }}
-                  >
-                    {group.name}
-                  </span>
+                  <span className="text-sm font-medium">{group.name}</span>
                 )}
                 <span className="text-xs opacity-60">({group.keyterms.length})</span>
-                {isDefault && <Star className="h-3 w-3 fill-blue-500 text-blue-500" />}
                 {renamingGroupId === group.id ? (
                   <button
                     onClick={(e) => { e.stopPropagation(); saveEditGroup(); }}
-                    className="hover:bg-blue-200 rounded p-0.5"
+                    className="hover:bg-blue-600 rounded p-0.5"
                   >
                     <Check className="h-3 w-3" />
                   </button>
@@ -163,7 +140,7 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
                   <div className="flex items-center gap-0.5">
                     <button
                       onClick={(e) => { e.stopPropagation(); startEditGroup(group); }}
-                      className="hover:bg-blue-200 rounded p-0.5"
+                      className={`rounded p-0.5 ${isSelected ? 'hover:bg-blue-600' : 'hover:bg-blue-200'}`}
                       title="重命名"
                     >
                       <Edit2 className="h-3 w-3" />
@@ -171,7 +148,7 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
                     {groups.length > 1 && (
                       <button
                         onClick={(e) => { e.stopPropagation(); deleteGroup(group.id); }}
-                        className="hover:bg-blue-200 rounded p-0.5"
+                        className={`rounded p-0.5 ${isSelected ? 'hover:bg-blue-600' : 'hover:bg-blue-200'}`}
                         title="删除"
                       >
                         <Trash2 className="h-3 w-3" />
@@ -216,21 +193,12 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
           )}
         </div>
 
-        {/* 编辑区：当前组的 keyterms 列表 */}
-        {editingGroup ? (
-          <div className="space-y-3">
-            <div className="text-sm text-gray-700 flex items-center gap-2">
-              <span>正在编辑：</span>
-              <span className="font-medium text-blue-700">{editingGroup.name}</span>
-              {defaultKeytermGroupId === editingGroup.id && (
-                <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                  默认分组
-                </span>
-              )}
-            </div>
-            {editingGroup.keyterms.length > 0 && (
+        {/* 编辑区：只在有选中组时显示 */}
+        {selectedGroup ? (
+          <div className="space-y-3 pt-2">
+            {selectedGroup.keyterms.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {editingGroup.keyterms.map((term) => (
+                {selectedGroup.keyterms.map((term) => (
                   <div
                     key={term}
                     className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 rounded-lg text-sm text-gray-700"
@@ -266,7 +234,7 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
           </div>
         ) : (
           <div className="text-sm text-gray-500 p-3 bg-gray-50 rounded-lg">
-            没有可编辑的分组
+            没有选中默认分组（新任务的 keyterms 留空）
           </div>
         )}
       </div>
