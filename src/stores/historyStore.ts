@@ -1,41 +1,47 @@
 import { create } from 'zustand';
-import { TranslationHistoryEntry } from '@/types';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import type { TranslationHistoryEntry } from '@/types';
 import localforage from 'localforage';
 
 interface HistoryState {
   history: TranslationHistoryEntry[];
-  loadHistory: () => Promise<void>;
   addHistory: (entry: Omit<TranslationHistoryEntry, 'timestamp'>) => Promise<void>;
   removeHistory: (taskId: string) => Promise<void>;
   clearHistory: () => Promise<void>;
 }
 
-const STORAGE_KEY = 'translation_history';
+export const useHistoryStore = create<HistoryState>()(
+  persist(
+    (set, get) => ({
+      history: [],
 
-export const useHistoryStore = create<HistoryState>((set, get) => ({
-  history: [],
+      addHistory: async (entry) => {
+        const fullEntry: TranslationHistoryEntry = { ...entry, timestamp: Date.now() };
+        set({ history: [fullEntry, ...get().history] });
+      },
 
-  loadHistory: async () => {
-    const history = await localforage.getItem<TranslationHistoryEntry[]>(STORAGE_KEY) || [];
-    set({ history });
-  },
+      removeHistory: async (taskId) => {
+        set({ history: get().history.filter((e) => e.taskId !== taskId) });
+      },
 
-  addHistory: async (entry) => {
-    const fullEntry: TranslationHistoryEntry = { ...entry, timestamp: Date.now() };
-    const newHistory = [fullEntry, ...get().history];
-    set({ history: newHistory });
-    await localforage.setItem(STORAGE_KEY, newHistory);
-  },
-
-  removeHistory: async (taskId) => {
-    const newHistory = get().history.filter((e) => e.taskId !== taskId);
-    if (newHistory.length === get().history.length) return;
-    set({ history: newHistory });
-    await localforage.setItem(STORAGE_KEY, newHistory);
-  },
-
-  clearHistory: async () => {
-    set({ history: [] });
-    await localforage.setItem(STORAGE_KEY, []);
-  },
-}));
+      clearHistory: async () => {
+        set({ history: [] });
+      },
+    }),
+    {
+      name: 'translation_history',
+      storage: createJSONStorage(() => localforage),
+      version: 1,
+      // 迁移：旧格式是 TranslationHistoryEntry[]，新格式是 {state: {history: [...]}}
+      migrate: (persistedState: unknown, version: number) => {
+        if (version === 0 && Array.isArray(persistedState)) {
+          return { history: persistedState as TranslationHistoryEntry[] };
+        }
+        if (persistedState && typeof persistedState === 'object' && 'history' in persistedState) {
+          return persistedState as { history: TranslationHistoryEntry[] };
+        }
+        return { history: [] };
+      },
+    }
+  )
+);
