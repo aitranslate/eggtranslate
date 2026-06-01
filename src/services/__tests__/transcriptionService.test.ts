@@ -177,18 +177,29 @@ describe('transcriptionService.startTranscription', () => {
     expect(after.phases.transcribing.status).toBe('completed');
   });
 
-  it('marks phase as failed when pipeline throws', async () => {
+  it('marks transcribing as failed when pipeline throws', async () => {
     useFilesStore.setState({
-      tasks: [makeTask(makeFile({ fileRef: new File([''], 'test.mp3', { type: 'audio/mpeg' }) }))],
+      tasks: [makeTask(makeFile({
+        convertingStatus: 'completed',
+        fileRef: new File([''], 'test.mp3', { type: 'audio/mpeg' }),
+      }))],
     });
     useTranscriptionStore.setState({ apiKeys: 'test-key' });
 
-    vi.mocked(convertToMP3).mockRejectedValue(new Error('convert failed'));
+    // 预填 MP3 缓存（用 setup.ts 里 mock 的 localforage）
+    const localforageMock = (await import('localforage')).default;
+    vi.mocked(localforageMock.setItem).mockResolvedValueOnce(undefined);
+    vi.mocked(localforageMock.getItem).mockResolvedValueOnce(new Blob(['fake-mp3-data']) as Blob);
+
+    const { runTranscriptionPipeline } = await import('../transcriptionPipeline');
+    vi.mocked(runTranscriptionPipeline).mockRejectedValue(new Error('pipeline failed'));
 
     await startTranscription('file_t1');
 
     const after = useFilesStore.getState().tasks[0];
-    expect(after.phases.converting.status).toBe('failed');
+    // 转录失败时只标 transcribing；converting 保持 completed（转码在 addFile 已成功）
+    expect(after.phases.transcribing.status).toBe('failed');
+    expect(after.phases.converting.status).toBe('completed');
   });
 
   it('sends keyterms from the selected group only (not all groups)', async () => {

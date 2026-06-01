@@ -1,6 +1,9 @@
 /**
  * 转录 Service
  * 编排音视频 → MP3 → AssemblyAI 转录 → 字幕条目
+ *
+ * 注意：转码（MP3）已在 addFile 阶段完成并持久化到 IndexedDB。
+ * 这里只做"取 MP3 → 调 API → 写字幕"。
  */
 
 import { useFilesStore } from '@/stores/filesStore';
@@ -22,17 +25,20 @@ export async function startTranscription(fileId: string): Promise<void> {
   }
 
   try {
-    let mediaFile: File | undefined = file.fileRef;
-
-    if (!mediaFile) {
-      const savedMp3 = await localforage.getItem<Blob>(`mp3_data:${file.taskId}`);
-      if (savedMp3) {
-        mediaFile = new File([savedMp3], 'audio.mp3', { type: 'audio/mpeg' });
-        logger.info('从 IndexedDB 恢复 MP3 用于转录');
-      }
+    // MP3 已在 addFile 阶段持久化；这里取出来用
+    let mp3Blob = await localforage.getItem<Blob>(`mp3_data:${file.taskId}`);
+    if (!mp3Blob && file.fileRef) {
+      // 兜底：MP3 缓存缺失（极少见，比如老数据）→ 现场转一次
+      logger.warn('[startTranscription] MP3 缓存缺失，临时转码');
+      mp3Blob = await convertToMP3(file.fileRef);
+      await localforage.setItem(`mp3_data:${file.taskId}`, mp3Blob);
+      useFilesStore.getState().updatePhase(fileId, 'converting', {
+        status: 'completed',
+        progress: 100,
+        tokens: 0,
+      });
     }
-
-    if (!mediaFile) {
+    if (!mp3Blob) {
       toast.error('文件引用丢失，请重新上传');
       return;
     }
@@ -55,52 +61,17 @@ export async function startTranscription(fileId: string): Promise<void> {
 
     useFilesStore.getState().setWorkflow(fileId, 'transcribe');
 
-    let mp3Blob: Blob;
-
-    if (file.phases.converting.status === 'completed') {
-      logger.info('转码已完成，使用已保存的 MP3');
-      mp3Blob = await localforage.getItem<Blob>(`mp3_data:${file.taskId}`);
-      if (!mp3Blob) {
-        toast.error('MP3 数据丢失，请重新上传');
-        return;
-      }
-    } else {
-      useFilesStore.getState().updatePhase(fileId, 'converting', { status: 'active', progress: -1, tokens: 0 });
-      try {
-        mp3Blob = await convertToMP3(mediaFile);
-      } catch (error) {
-        const appError = toAppError(error, '音频转码失败');
-        logger.error(appError.message, appError);
-        toast.error(`转码失败: ${appError.message}`);
-        useFilesStore.getState().updatePhase(fileId, 'converting', { status: 'failed', progress: 0 });
-        return;
-      }
-      await localforage.setItem(`mp3_data:${file.taskId}`, mp3Blob);
-    }
-
     const mp3File = new File([mp3Blob], 'audio.mp3', { type: 'audio/mpeg' });
 
     const result = await runTranscriptionPipeline(
       mp3File,
       allKeyterms,
       {
-        onConverting: () => {
-          const phases = useFilesStore.getState().getFile(fileId)?.phases;
-          if (phases?.converting.status !== 'completed') {
-            useFilesStore.getState().updatePhase(fileId, 'converting', { status: 'active', progress: -1 });
-          }
-        },
+        onConverting: () => {},
         onUploading: () => {
-          const phases = useFilesStore.getState().getFile(fileId)?.phases;
-          if (phases?.converting.status !== 'completed') {
-            useFilesStore.getState().updatePhase(fileId, 'converting', { status: 'active', progress: -1 });
-          }
+          useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'active', progress: -1, tokens: 0 });
         },
         onTranscribing: () => {
-          const phases = useFilesStore.getState().getFile(fileId)?.phases;
-          if (phases?.converting.status !== 'completed') {
-            useFilesStore.getState().updatePhase(fileId, 'converting', { status: 'completed', progress: 100 });
-          }
           useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'active', progress: -1, tokens: 0 });
         },
         onProgress: (percent) => {
@@ -109,9 +80,6 @@ export async function startTranscription(fileId: string): Promise<void> {
         onCompleted: () => {},
         onError: () => {
           const phases = useFilesStore.getState().getFile(fileId)?.phases;
-          if (phases?.converting.status === 'active') {
-            useFilesStore.getState().updatePhase(fileId, 'converting', { status: 'failed', progress: 0 });
-          }
           if (phases?.transcribing.status === 'active') {
             useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed', progress: 0 });
           }
@@ -148,12 +116,8 @@ export async function startTranscription(fileId: string): Promise<void> {
     logger.error(appError.message, appError);
     toast.error(`转录失败: ${appError.message}`);
 
-    const phases = useFilesStore.getState().getFile(fileId)?.phases;
-    if (phases?.converting.status === 'active') {
-      useFilesStore.getState().updatePhase(fileId, 'converting', { status: 'failed', progress: 0 });
-    }
-    if (phases?.transcribing.status === 'active') {
-      useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed', progress: 0 });
-    }
+    // pipeline 抛错时无条件标 transcribing 失败（不论之前是 upcoming 还是 active）
+    // converting 由 addFile 阶段负责，这里不动
+    useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed', progress: 0 });
   }
 }

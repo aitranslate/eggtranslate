@@ -11,7 +11,6 @@ import { removeFile, clearAll } from '@/services/filesService';
 import { enqueueTask, dequeueTask, enqueueAllUncompleted } from '@/services/queueService';
 import { SubtitleFileMetadata } from '@/types';
 import { SubtitleFileItemMemo as SubtitleFileItem } from './components/SubtitleFileItem';
-import { TranscodingIndicator } from './components/TranscodingIndicator';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { SettingsModal } from '../SettingsModal';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -131,8 +130,6 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
               </button>
             </div>
           </div>
-
-          <TranscodingIndicator />
 
           <Stagger className="space-y-4" stagger={0.07}>
             <AnimatePresence>
