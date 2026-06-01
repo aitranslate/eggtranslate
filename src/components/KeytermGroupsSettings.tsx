@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { FolderOpen, Plus, X, Trash2, Edit2, Check } from 'lucide-react';
+import { FolderOpen, Plus, X, Trash2, Edit2, Check, Star } from 'lucide-react';
 import type { KeytermGroup } from '@/types/transcription';
 
 interface KeytermGroupsSettingsProps {
   groups: KeytermGroup[];
   onGroupsChange: (groups: KeytermGroup[]) => void;
-  /** 当前选中的默认热词组（v2 不再有全局开关，这就是"默认"） */
+  /** 默认热词组：v2 唯一的状态。新任务用这个组的 keyterms；null = 不使用。 */
   defaultKeytermGroupId: string | null;
   onDefaultGroupChange?: (groupId: string | null) => void;
 }
@@ -16,64 +16,71 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
   defaultKeytermGroupId,
   onDefaultGroupChange
 }) => {
-  const [activeGroupId, setActiveGroupId] = useState(groups[0]?.id || '');
+  // 正在编辑的组（展示 keyterms 输入区）。默认跟随 defaultKeytermGroupId；
+  // 没有默认时回退到第一组，保持可编辑。
+  const [editingGroupId, setEditingGroupId] = useState<string>(
+    () => defaultKeytermGroupId ?? groups[0]?.id ?? ''
+  );
   const [newKeyterm, setNewKeyterm] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
-  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState('');
+  const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
+  const [renamingName, setRenamingName] = useState('');
 
-  const activeGroup = groups.find(g => g.id === activeGroupId);
+  const editingGroup = groups.find(g => g.id === editingGroupId);
 
   const addGroup = () => {
-    if (newGroupName.trim()) {
-      const newGroup: KeytermGroup = {
-        id: `group-${Date.now()}`,
-        name: newGroupName.trim(),
-        keyterms: []
-      };
-      onGroupsChange([...groups, newGroup]);
-      setNewGroupName('');
-      setActiveGroupId(newGroup.id);
-    }
+    if (!newGroupName.trim()) return;
+    const newGroup: KeytermGroup = {
+      id: `group-${Date.now()}`,
+      name: newGroupName.trim(),
+      keyterms: []
+    };
+    onGroupsChange([...groups, newGroup]);
+    setNewGroupName('');
+    // 新建的组自动成为默认 + 进入编辑
+    onDefaultGroupChange?.(newGroup.id);
+    setEditingGroupId(newGroup.id);
   };
 
   const deleteGroup = (groupId: string) => {
     onGroupsChange(groups.filter(g => g.id !== groupId));
-    if (activeGroupId === groupId) {
-      setActiveGroupId(groups[0]?.id || '');
+    if (defaultKeytermGroupId === groupId) {
+      // 删除当前默认组 → 默认清空
+      onDefaultGroupChange?.(null);
+    }
+    if (editingGroupId === groupId) {
+      setEditingGroupId(groups.find(g => g.id !== groupId)?.id ?? '');
     }
   };
 
   const startEditGroup = (group: KeytermGroup) => {
-    setEditingGroupId(group.id);
-    setEditingName(group.name);
+    setRenamingGroupId(group.id);
+    setRenamingName(group.name);
   };
 
   const saveEditGroup = () => {
-    if (editingName.trim()) {
+    if (renamingName.trim() && renamingGroupId) {
       onGroupsChange(groups.map(g =>
-        g.id === editingGroupId ? { ...g, name: editingName.trim() } : g
+        g.id === renamingGroupId ? { ...g, name: renamingName.trim() } : g
       ));
-      setEditingGroupId(null);
-      setEditingName('');
+      setRenamingGroupId(null);
+      setRenamingName('');
     }
   };
 
   const addKeyterm = () => {
-    if (!activeGroup || !newKeyterm.trim()) return;
+    if (!editingGroup || !newKeyterm.trim()) return;
 
-    // 按逗号分割，清理空格和空字符串
-    const newKeyterms = newKeyterm
+    const newTerms = newKeyterm
       .split(',')
-      .map(term => term.trim())
-      .filter(term => term && !activeGroup.keyterms.includes(term));
+      .map(t => t.trim())
+      .filter(t => t && !editingGroup.keyterms.includes(t));
 
-    if (newKeyterms.length === 0) return;
+    if (newTerms.length === 0) return;
 
-    // 批量添加新热词
     onGroupsChange(groups.map(g =>
-      g.id === activeGroupId
-        ? { ...g, keyterms: [...g.keyterms, ...newKeyterms] }
+      g.id === editingGroupId
+        ? { ...g, keyterms: [...g.keyterms, ...newTerms] }
         : g
     ));
     setNewKeyterm('');
@@ -81,7 +88,7 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
 
   const removeKeyterm = (term: string) => {
     onGroupsChange(groups.map(g =>
-      g.id === activeGroupId
+      g.id === editingGroupId
         ? { ...g, keyterms: g.keyterms.filter(k => k !== term) }
         : g
     ));
@@ -89,76 +96,93 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* 热词分组 */}
       <div className="space-y-3">
-        <div className="flex justify-between items-center">
+        <div className="flex items-baseline justify-between">
           <h3 className="apple-heading-small">热词提示</h3>
+          <span className="text-xs text-gray-500">
+            点击分组切换默认；点击名称进入编辑
+          </span>
         </div>
 
         {/* 分组标签 */}
         <div className="flex flex-wrap gap-2">
-          {groups.map((group) => (
-            <div
-              key={group.id}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all ${
-                activeGroupId === group.id
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-              onClick={() => {
-                setActiveGroupId(group.id);
-                // 点击已选中的分组 → 取消默认（设为 null）
-                if (defaultKeytermGroupId === group.id) {
-                  onDefaultGroupChange?.(null);
-                } else {
-                  onDefaultGroupChange?.(group.id);
-                }
-              }}
-            >
-              <FolderOpen className="h-4 w-4" />
-              {editingGroupId === group.id ? (
-                <input
-                  type="text"
-                  value={editingName}
-                  onChange={(e) => setEditingName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && saveEditGroup()}
-                  onClick={(e) => e.stopPropagation()}
-                  className="bg-transparent border-none outline-none text-sm w-24"
-                  autoFocus
-                />
-              ) : (
-                <span className="text-sm font-medium">{group.name}</span>
-              )}
-              <span className="text-xs opacity-60">({group.keyterms.length})</span>
-              {editingGroupId === group.id ? (
-                <button
-                  onClick={(e) => { e.stopPropagation(); saveEditGroup(); }}
-                  className="hover:bg-blue-200 rounded p-0.5"
-                >
-                  <Check className="h-3 w-3" />
-                </button>
-              ) : (
-                <div className="flex items-center gap-0.5">
+          {groups.map((group) => {
+            const isDefault = defaultKeytermGroupId === group.id;
+            const isEditing = editingGroupId === group.id;
+            return (
+              <div
+                key={group.id}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all ${
+                  isEditing
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                } ${isDefault ? 'ring-2 ring-blue-500' : ''}`}
+                onClick={() => {
+                  // 整张卡片：点 chip 切换默认（再次点已选中的 → 取消）
+                  if (isDefault) {
+                    onDefaultGroupChange?.(null);
+                  } else {
+                    onDefaultGroupChange?.(group.id);
+                  }
+                  setEditingGroupId(group.id);
+                }}
+              >
+                <FolderOpen className="h-4 w-4" />
+                {renamingGroupId === group.id ? (
+                  <input
+                    type="text"
+                    value={renamingName}
+                    onChange={(e) => setRenamingName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && saveEditGroup()}
+                    onClick={(e) => e.stopPropagation()}
+                    className="bg-transparent border-none outline-none text-sm w-24"
+                    autoFocus
+                  />
+                ) : (
+                  <span
+                    className="text-sm font-medium"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // 点名称：进入该组编辑（不改变默认）
+                      setEditingGroupId(group.id);
+                    }}
+                  >
+                    {group.name}
+                  </span>
+                )}
+                <span className="text-xs opacity-60">({group.keyterms.length})</span>
+                {isDefault && <Star className="h-3 w-3 fill-blue-500 text-blue-500" />}
+                {renamingGroupId === group.id ? (
                   <button
-                    onClick={(e) => { e.stopPropagation(); startEditGroup(group); }}
+                    onClick={(e) => { e.stopPropagation(); saveEditGroup(); }}
                     className="hover:bg-blue-200 rounded p-0.5"
                   >
-                    <Edit2 className="h-3 w-3" />
+                    <Check className="h-3 w-3" />
                   </button>
-                  {groups.length > 1 && (
+                ) : (
+                  <div className="flex items-center gap-0.5">
                     <button
-                      onClick={(e) => { e.stopPropagation(); deleteGroup(group.id); }}
+                      onClick={(e) => { e.stopPropagation(); startEditGroup(group); }}
                       className="hover:bg-blue-200 rounded p-0.5"
+                      title="重命名"
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Edit2 className="h-3 w-3" />
                     </button>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+                    {groups.length > 1 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteGroup(group.id); }}
+                        className="hover:bg-blue-200 rounded p-0.5"
+                        title="删除"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
-          {/* 新建分组输入框 */}
           {newGroupName ? (
             <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg">
               <input
@@ -192,12 +216,21 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
           )}
         </div>
 
-        {/* 当前分组的热词列表 */}
-        {activeGroup && (
+        {/* 编辑区：当前组的 keyterms 列表 */}
+        {editingGroup ? (
           <div className="space-y-3">
-            {activeGroup.keyterms.length > 0 && (
+            <div className="text-sm text-gray-700 flex items-center gap-2">
+              <span>正在编辑：</span>
+              <span className="font-medium text-blue-700">{editingGroup.name}</span>
+              {defaultKeytermGroupId === editingGroup.id && (
+                <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                  默认分组
+                </span>
+              )}
+            </div>
+            {editingGroup.keyterms.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {activeGroup.keyterms.map((term) => (
+                {editingGroup.keyterms.map((term) => (
                   <div
                     key={term}
                     className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 rounded-lg text-sm text-gray-700"
@@ -205,7 +238,6 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
                     <span>{term}</span>
                     <button
                       onClick={() => removeKeyterm(term)}
-                      className="hover:text-gray-900"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
@@ -214,7 +246,6 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
               </div>
             )}
 
-            {/* 添加热词 */}
             <div className="flex gap-2">
               <input
                 type="text"
@@ -233,9 +264,12 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
               </button>
             </div>
           </div>
+        ) : (
+          <div className="text-sm text-gray-500 p-3 bg-gray-50 rounded-lg">
+            没有可编辑的分组
+          </div>
         )}
       </div>
-
     </div>
   );
 };

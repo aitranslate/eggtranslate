@@ -44,11 +44,19 @@ export const runTranscriptionPipeline = async (
       fileRef,
       { keyterms },
       (status, percent) => {
-        callbacks.onProgress?.(percent);
-        if (status === 'converting') callbacks.onConverting?.();
-        else if (status === 'transcribing') callbacks.onTranscribing?.();
-        else if (status === 'segmenting') callbacks.onSegmenting?.();
-        else if (status === 'completed') callbacks.onCompleted?.();
+        // 关键：不要把 "converting" 阶段的 percent 透传给上层。
+        // converting 是内部 MP3 编码（addFile 阶段已经做完，这里是冗余再转一次），
+        // 但它的 5% 数字会被 transcribing 的 progress 误显，造成一闪而过的"5%"。
+        if (status === 'converting') {
+          callbacks.onConverting?.();
+        } else if (status === 'transcribing') {
+          callbacks.onProgress?.(percent);
+          callbacks.onTranscribing?.();
+        } else if (status === 'segmenting') {
+          callbacks.onSegmenting?.();
+        } else if (status === 'completed') {
+          callbacks.onCompleted?.();
+        }
       }
     );
 
