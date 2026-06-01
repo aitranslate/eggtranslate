@@ -6,7 +6,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { TranslationConfig, TranslationProgress } from '@/types';
-import translationService from '@/services/TranslationService';
+import { callLLM } from '@/utils/llmApi';
+import { jsonrepair } from 'jsonrepair';
+import { generateSharedPrompt, generateDirectPrompt } from '@/utils/translationPrompts';
 import toast from 'react-hot-toast';
 import { toAppError } from '@/utils/errors';
 
@@ -99,33 +101,29 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
       updateConfig: async (updates: Partial<TranslationConfig>) => {
         const newConfig = { ...get().config, ...updates };
 
-        try {
-          await translationService.updateConfig(newConfig);
-
-          set({
-            config: newConfig,
-            isConfigured: (newConfig.apiKey?.length || 0) > 0
-          });
-        } catch (error) {
-          const appError = toAppError(error, '更新配置失败');
-          console.error('[translationConfigStore]', appError.message, appError);
-          toast.error(`更新配置失败: ${appError.message}`);
-          throw error;
-        }
+        set({
+          config: newConfig,
+          isConfigured: (newConfig.apiKey?.length || 0) > 0
+        });
       },
 
       /**
        * 测试连接
        */
       testConnection: async () => {
+        const config = get().config;
+        if (!config.apiKey) {
+          toast.error('请先配置API密钥');
+          return false;
+        }
         try {
-          const result = await translationService.testConnection();
-          if (result) {
-            toast.success('连接测试成功！');
-          } else {
-            toast.error('连接测试失败');
-          }
-          return result;
+          await callLLM(
+            { baseURL: config.baseURL, apiKey: config.apiKey, model: config.model },
+            [{ role: 'user', content: 'Hello' }],
+            { maxRetries: 1 }
+          );
+          toast.success('连接测试成功！');
+          return true;
         } catch (error) {
           const appError = toAppError(error, '连接测试失败');
           console.error('[translationConfigStore]', appError.message, appError);
@@ -175,13 +173,6 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
           currentTaskId: '',
           abortController: null,
         });
-
-        try {
-          await translationService.resetProgress();
-        } catch (error) {
-          const appError = toAppError(error, '重置进度失败');
-          console.error('[translationConfigStore]', appError.message, appError);
-        }
       },
 
       /**
@@ -194,18 +185,60 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
         contextAfter = '',
         terms = ''
       ) => {
-        // 同步配置到 TranslationService（确保单例的 config 是最新的）
-        const currentConfig = get().config;
-        const serviceConfig = translationService.getConfig();
-
-        // 只在配置不同时才更新（避免不必要的写入）
-        if (serviceConfig.apiKey !== currentConfig.apiKey ||
-            serviceConfig.baseURL !== currentConfig.baseURL ||
-            serviceConfig.model !== currentConfig.model) {
-          await translationService.updateConfig(currentConfig);
+        const config = get().config;
+        if (!config.apiKey) {
+          throw new Error('请先配置API密钥');
         }
 
-        return translationService.translateBatch(texts, signal, contextBefore, contextAfter, terms);
+        const textToTranslate = texts.join('\n');
+        const sharedPrompt = generateSharedPrompt(contextBefore, contextAfter, terms);
+        const directPrompt = generateDirectPrompt(
+          textToTranslate,
+          sharedPrompt,
+          config.sourceLanguage,
+          config.targetLanguage
+        );
+
+        // 重试策略：逐次提高温度 + 强调格式要求
+        const retryTemperatures = [0.3, 0.6, 0.9];
+        const formatEmphasis = [
+          '',
+          '\n\nIMPORTANT: Ensure your response is valid JSON with "direct" field for EVERY entry.',
+          '\n\nCRITICAL: You MUST return valid JSON with "direct" field for EVERY single line. Do NOT skip any entries.'
+        ];
+
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const promptWithEmphasis = directPrompt + formatEmphasis[attempt - 1];
+
+          const llmResult = await callLLM(
+            {
+              baseURL: config.baseURL,
+              apiKey: config.apiKey,
+              model: config.model,
+              rpm: config.rpm
+            },
+            [{ role: 'user', content: promptWithEmphasis }],
+            {
+              signal,
+              temperature: retryTemperatures[attempt - 1],
+              maxRetries: 1
+            }
+          );
+
+          const directContent = llmResult.content;
+          const directTokensUsed = llmResult.tokensUsed;
+          const repairedDirectJson = jsonrepair(directContent);
+          const directResult: Record<string, { direct: string }> = JSON.parse(repairedDirectJson);
+
+          try {
+            validateTranslationResult(directResult, texts);
+            return { translations: directResult, tokensUsed: directTokensUsed };
+          } catch (error) {
+            console.error(`[translationConfigStore] 批次翻译失败（第${attempt}次尝试）:`, error);
+            if (attempt === 3) throw error;
+          }
+        }
+        throw new Error('翻译失败');
       },
 
       /**
@@ -230,7 +263,6 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
        * 完成翻译
        */
       completeTranslation: async (taskId: string) => {
-        await translationService.completeTranslation(taskId);
         set({
           isTranslating: false,
           currentTaskId: '',
@@ -275,3 +307,27 @@ export const useTranslationProgress = () => useTranslationConfigStore((state) =>
  * 获取已使用 tokens
  */
 export const useTranslationTokensUsed = () => useTranslationConfigStore((state) => state.tokensUsed);
+
+/**
+ * 验证 LLM 返回的翻译结果是否完整
+ * @param result LLM 返回的翻译结果
+ * @param originalTexts 原文数组
+ * @throws Error 验证失败时抛出错误
+ */
+function validateTranslationResult(
+  result: Record<string, { direct: string }>,
+  originalTexts: string[]
+): void {
+  const expectedKeys = originalTexts.map((_, i) => String(i + 1));
+  const actualKeys = Object.keys(result);
+
+  for (const key of expectedKeys) {
+    if (!actualKeys.includes(key)) {
+      throw new Error(`翻译结果缺少键 "${key}"`);
+    }
+    const entry = result[key];
+    if (!entry || typeof entry !== 'object' || !('direct' in entry)) {
+      throw new Error(`翻译结果 "${key}" 格式无效`);
+    }
+  }
+}
