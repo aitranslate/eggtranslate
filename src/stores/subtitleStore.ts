@@ -11,7 +11,8 @@ import { useMemo } from 'react';
 import { SubtitleEntry, SubtitleFileMetadata, Term, TranslationStatus, FilePhases, PhaseProgress, WorkflowType, SplitAlignStatus } from '@/types';
 import { loadFromFile as loadFromFileOriginal, convertTaskToMetadata, removeMp3Data } from '@/services/SubtitleFileManager';
 import { runTranscriptionPipeline } from '@/services/transcriptionPipeline';
-import { executeTranslation } from '@/services/TranslationOrchestrator';
+import { executeTranslation, saveTranslationHistory } from '@/services/TranslationOrchestrator';
+import { useHistoryStore } from './historyStore';
 import { generateStableFileId } from '@/utils/taskIdGenerator';
 import { mapSourcePartsToBoundaries, boundariesToRanges } from '@/utils/sourceSplitBoundaries';
 import { formatTime, parseTime } from '@/utils/timeUtils';
@@ -257,7 +258,15 @@ export const useSubtitleStore = create<SubtitleStore>()(
           if (file.fileType === 'srt') {
             get().setWorkflow(fileId, 'translate');
           }
-          await get().startTranslation(fileId);
+          const result = await get().startTranslation(fileId);
+          if (result) {
+            await saveTranslationHistory(
+              file.taskId,
+              file.name,
+              result.tokens,
+              useHistoryStore.getState().addHistory
+            );
+          }
         } catch (error) {
           console.error('[subtitleStore] processNext task failed:', error);
         } finally {
