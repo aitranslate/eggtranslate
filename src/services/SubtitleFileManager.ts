@@ -90,6 +90,8 @@ export async function loadFromFile(
       fileType: 'srt',
       fileSize: file.size,
       selectedKeytermGroupId,
+      entryCount: entries.length,
+      translatedCount: entries.filter(e => e.translatedText).length,
     };
 
     return {
@@ -120,6 +122,8 @@ export async function loadFromFile(
       fileSize: file.size,
       duration,
       selectedKeytermGroupId,
+      entryCount: 0,
+      translatedCount: 0,
     };
 
     return {
@@ -162,9 +166,6 @@ export async function removeMp3Data(taskId: string): Promise<void> {
 export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
   const fileId = generateStableFileId(task.taskId);
   const entries = task.subtitle_entries || [];
-
-  const entryCount = entries.length;
-  const translatedCount = entries.filter(e => e.translatedText).length;
   const isSrt = (task.fileType || 'srt') === 'srt';
   const isTranslated = (task.phases?.translating?.tokens || 0) > 0;
 
@@ -176,8 +177,8 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
     fileSize: task.fileSize || 0,
     lastModified: Date.now(),
     duration: task.duration,
-    entryCount,
-    translatedCount,
+    entryCount: task.entryCount ?? entries.length,
+    translatedCount: task.translatedCount ?? entries.filter((e) => e.translatedText).length,
     phases: task.phases || createInitialPhases(isSrt, isTranslated),
     tokensUsed: (task.phases?.translating?.tokens || 0) + (task.phases?.splitting?.tokens || 0),
     entriesVersion: 0,

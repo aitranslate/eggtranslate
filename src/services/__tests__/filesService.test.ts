@@ -41,6 +41,8 @@ const makeSingleTask = (overrides: Partial<SingleTask> = {}): SingleTask => ({
   fileType: 'srt',
   fileSize: 100,
   selectedKeytermGroupId: overrides.selectedKeytermGroupId ?? null,
+  entryCount: 0,
+  translatedCount: 0,
   ...overrides,
 });
 

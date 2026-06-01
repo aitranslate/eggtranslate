@@ -63,7 +63,13 @@ export const useFilesStore = create<FilesState>()(
       selectedFileId: null,
 
       addTask: (task) => {
-        set((state) => ({ tasks: [...state.tasks, task] }));
+        set((state) => ({
+          tasks: [...state.tasks, {
+            ...task,
+            entryCount: task.entryCount ?? task.subtitle_entries?.length ?? 0,
+            translatedCount: task.translatedCount ?? task.subtitle_entries?.filter((e) => e.translatedText).length ?? 0,
+          }],
+        }));
       },
 
       removeTask: (taskId) => {
@@ -87,6 +93,10 @@ export const useFilesStore = create<FilesState>()(
         set((state) => {
           const newTasks = state.tasks.map((t) => {
             if (t.taskId !== file.taskId) return t;
+            const oldEntry = t.subtitle_entries?.find((e) => e.id === entryId);
+            const wasTranslated = !!oldEntry?.translatedText;
+            const willBeTranslated = !!(translatedText ?? oldEntry?.translatedText);
+            const delta = (wasTranslated === willBeTranslated) ? 0 : (willBeTranslated ? 1 : -1);
             return {
               ...t,
               subtitle_entries: (t.subtitle_entries || []).map((e) => {
@@ -101,6 +111,7 @@ export const useFilesStore = create<FilesState>()(
                   words: words ?? e.words,
                 };
               }),
+              translatedCount: t.translatedCount + delta,
             };
           });
           return { tasks: newTasks };
@@ -113,9 +124,13 @@ export const useFilesStore = create<FilesState>()(
         set((state) => {
           const newTasks = state.tasks.map((t) => {
             if (t.taskId !== file.taskId) return t;
+            const removed = t.subtitle_entries?.find((e) => e.id === entryId);
+            const wasTranslated = !!removed?.translatedText;
             return {
               ...t,
               subtitle_entries: (t.subtitle_entries || []).filter((e) => e.id !== entryId),
+              entryCount: Math.max(0, t.entryCount - 1),
+              translatedCount: Math.max(0, t.translatedCount - (wasTranslated ? 1 : 0)),
             };
           });
           return { tasks: newTasks };
@@ -129,17 +144,28 @@ export const useFilesStore = create<FilesState>()(
           const newTasks = state.tasks.map((t) => {
             if (t.taskId !== file.taskId) return t;
             const entries = [...(t.subtitle_entries || [])];
+            let delta = 0;
             for (const update of updates) {
               const idx = entries.findIndex((e) => e.id === update.id);
               if (idx !== -1) {
-                entries[idx] = {
+                const wasTranslated = !!entries[idx].translatedText;
+                const next = {
                   ...entries[idx],
                   text: update.text,
                   translatedText: update.translatedText ?? entries[idx].translatedText,
                 };
+                const willBeTranslated = !!next.translatedText;
+                if (wasTranslated !== willBeTranslated) {
+                  delta += willBeTranslated ? 1 : -1;
+                }
+                entries[idx] = next;
               }
             }
-            return { ...t, subtitle_entries: entries };
+            return {
+              ...t,
+              subtitle_entries: entries,
+              translatedCount: Math.max(0, t.translatedCount + delta),
+            };
           });
           return { tasks: newTasks };
         });

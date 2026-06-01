@@ -70,6 +70,8 @@ const makeTask = (file: SubtitleFileMetadata): SingleTask => ({
   fileRef: file.fileRef,
   selectedKeytermGroupId: file.selectedKeytermGroupId ?? null,
   index: 0,
+  entryCount: 0,
+  translatedCount: 0,
 });
 
 describe('transcriptionService.startTranscription', () => {

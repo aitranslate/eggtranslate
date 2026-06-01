@@ -93,6 +93,10 @@ export interface SingleTask {
 
   /** 该文件要使用的热词分组 ID；null 表示不使用热词 */
   selectedKeytermGroupId: string | null;
+
+  /** 派生状态缓存：避免每次 updateEntry 触发整数组 O(n) filter */
+  entryCount: number;
+  translatedCount: number;
 }
 
 // 批量任务列表类型

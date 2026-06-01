@@ -48,6 +48,8 @@ const makeFile = (taskId: string, translated: boolean = false): SingleTask => ({
   subtitle_entries: [],
   index: 0,
   selectedKeytermGroupId: null,
+  entryCount: 0,
+  translatedCount: 0,
   phases: {
     workflow: 'translate',
     converting: { status: 'completed', progress: 100, tokens: 0 },
