@@ -1117,13 +1117,13 @@ export const useSubtitleStore = create<SubtitleStore>()(
 // ============================================
 
 export const useFiles = () => {
-  const tasks = useSubtitleStore((state) => state.tasks, useShallow);
+  const tasks = useSubtitleStore(useShallow((state) => state.tasks));
   return useMemo(() => tasks.map(convertTaskToMetadata), [tasks]);
 };
 
 export const useSelectedFile = () => {
   const selectedFileId = useSubtitleStore((state) => state.selectedFileId);
-  const tasks = useSubtitleStore((state) => state.tasks, useShallow);
+  const tasks = useSubtitleStore(useShallow((state) => state.tasks));
   return useMemo(() => {
     if (!selectedFileId) return null;
     const task = tasks.find(t => generateStableFileId(t.taskId) === selectedFileId);
@@ -1132,7 +1132,7 @@ export const useSelectedFile = () => {
 };
 
 export const useFile = (fileId: string) => {
-  const tasks = useSubtitleStore((state) => state.tasks, useShallow);
+  const tasks = useSubtitleStore(useShallow((state) => state.tasks));
   return useMemo(() => {
     const task = tasks.find(t => generateStableFileId(t.taskId) === fileId);
     return task ? convertTaskToMetadata(task) : undefined;
@@ -1140,7 +1140,7 @@ export const useFile = (fileId: string) => {
 };
 
 export const useQueueState = () => {
-  const taskQueue = useSubtitleStore((state) => state.taskQueue, useShallow);
+  const taskQueue = useSubtitleStore(useShallow((state) => state.taskQueue));
   const activeTaskId = useSubtitleStore((state) => state.activeTaskId);
   return useMemo(() => ({ taskQueue, activeTaskId }), [taskQueue, activeTaskId]);
 };
