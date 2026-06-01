@@ -23,6 +23,15 @@ export {
 export { useQueueStore } from './queueStore';
 
 // ============================================
+// Services (新)
+// ============================================
+
+export { addFile, removeFile, selectFile, clearAll } from '@/services/filesService';
+export { startTranscription } from '@/services/transcriptionService';
+export { startTranslation } from '@/services/translationService';
+export { enqueueTask, dequeueTask, enqueueAllUncompleted, processNext } from '@/services/queueService';
+
+// ============================================
 // SubtitleStore (旧 - 拆分完成后将删除)
 // ============================================
 
