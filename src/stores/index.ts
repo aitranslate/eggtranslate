@@ -6,14 +6,31 @@
  */
 
 // ============================================
-// SubtitleStore
+// FilesStore (新)
+// ============================================
+
+export {
+  useFilesStore,
+  useFiles,
+  useFile,
+  useSelectedFile
+} from './filesStore';
+
+// ============================================
+// QueueStore (新)
+// ============================================
+
+export { useQueueStore } from './queueStore';
+
+// ============================================
+// SubtitleStore (旧 - 拆分完成后将删除)
 // ============================================
 
 export {
   useSubtitleStore,
-  useFiles,
-  useSelectedFile,
-  useFile
+  useFiles as useFilesLegacy,
+  useSelectedFile as useSelectedFileLegacy,
+  useFile as useFileLegacy
 } from './subtitleStore';
 
 // ============================================
