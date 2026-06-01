@@ -53,14 +53,11 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   const keytermGroups = useTranscriptionStore((state) => state.keytermGroups);
   const setSelectedKeytermGroupId = useFilesStore((state) => state.setSelectedKeytermGroupId);
 
-  // 计算 displayPhases（与 StepperProgress 一致）
+  // 计算 displayPhases（与 StepperProgress 一致：永远不展示 converting）
   const displayPhases = useMemo(() => {
     const basePhases = file.fileType === 'srt'
       ? ALL_PHASES.filter(p => p !== 'converting' && p !== 'transcribing')
-      : ALL_PHASES;
-    if (file.fileType === 'srt') {
-      return aiSegmentationEnabled ? basePhases : basePhases.filter(p => p !== 'splitting');
-    }
+      : ALL_PHASES.filter(p => p !== 'converting');
     return aiSegmentationEnabled ? basePhases : basePhases.filter(p => p !== 'splitting');
   }, [file.fileType, aiSegmentationEnabled]);
 
