@@ -172,47 +172,6 @@ class TranslationService {
   }
 
   /**
-   * 更新翻译进度
-   * 注意：phase 持久化已由 subtitleStore 的 persist 中间件自动处理，
-   * 此方法仅保留接口兼容性。
-   */
-  async updateProgress(
-    current: number,
-    total: number,
-    phase: 'direct' | 'splitting' | 'completed',
-    status: string,
-    taskId?: string,
-    newTokens?: number
-  ): Promise<void> {
-    // subtitleStore.updatePhase 已通过 persist 中间件自动处理 localforage
-    // 无需额外的 localforage 操作
-  }
-
-  /**
-   * 重置翻译进度
-   * 注意：phase 持久化已由 subtitleStore 的 persist 中间件自动处理
-   */
-  async resetProgress(): Promise<void> {
-    // subtitleStore 的 persist 中间件自动处理持久化
-  }
-
-  /**
-   * 完成翻译任务
-   * 注意：phase 持久化已由 subtitleStore 的 persist 中间件自动处理
-   */
-  async completeTranslation(taskId: string): Promise<void> {
-    // subtitleStore 的 persist 中间件自动处理持久化
-  }
-
-  /**
-   * 清空当前任务
-   * 注意：数据管理已由 subtitleStore 统一处理
-   */
-  async clearTask(): Promise<void> {
-    // subtitleStore.clearAll 已处理所有数据清理
-  }
-
-  /**
    * 验证翻译结果
    * @param result LLM 返回的翻译结果
    * @param originalTexts 原文数组
