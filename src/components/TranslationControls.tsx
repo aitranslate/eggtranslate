@@ -16,7 +16,7 @@ import { API_CONSTANTS } from '@/constants/api';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { getRelevantTerms, formatTermsForPrompt } from '@/utils/termsHelpers';
 import type { SubtitleEntry, Term, TranslationStatus } from '@/types';
-import { useTranslationConfigStore, useSubtitleStore } from '@/stores';
+import { useTranslationConfigStore, useFilesStore } from '@/stores';
 
 interface TranslationControlsProps {
   className?: string;
@@ -46,7 +46,7 @@ export const TranslationControls: React.FC<TranslationControlsProps> = ({
     completeTranslation
   } = useTranslationConfigStore();
 
-  const { updateEntry: updateEntryInStore } = useSubtitleStore();
+  const updateEntryInStore = useFilesStore((state) => state.updateEntry);
 
   const terms = useTermsStore((state) => state.terms);
   const addHistory = useHistoryStore((state) => state.addHistory);

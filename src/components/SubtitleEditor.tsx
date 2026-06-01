@@ -4,7 +4,7 @@ import { Edit3, Save, X, Search, Filter, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { SubtitleEntry } from '@/types';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-import { useSubtitleStore, useFile } from '@/stores/subtitleStore';
+import { useFilesStore, useFile } from '@/stores/filesStore';
 
 const EMPTY_ENTRIES: SubtitleEntry[] = [];
 
@@ -20,14 +20,14 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   fileId
 }) => {
   const file = useFile(fileId);
-  const updateEntry = useSubtitleStore((state) => state.updateEntry);
-  const deleteEntry = useSubtitleStore((state) => state.deleteEntry);
+  const updateEntry = useFilesStore((state) => state.updateEntry);
+  const deleteEntry = useFilesStore((state) => state.deleteEntry);
 
   // 直接从 tasks 订阅 entries（同步、响应式）
   const taskId = file?.taskId;
-  const fileEntries = useSubtitleStore((state) => {
+  const fileEntries = useFilesStore((state) => {
     if (!taskId) return EMPTY_ENTRIES;
-    const task = state.tasks.find(t => t.taskId === taskId);
+    const task = state.tasks.find((t) => t.taskId === taskId);
     return task?.subtitle_entries ?? EMPTY_ENTRIES;
   });
 
