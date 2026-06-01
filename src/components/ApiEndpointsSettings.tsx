@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Key, Plus, HelpCircle } from 'lucide-react';
+import { SettingsHint } from './SettingsHint';
 
 interface ApiKeysSettingsProps {
   keys: string;
@@ -46,6 +47,8 @@ export const ApiEndpointsSettings: React.FC<ApiKeysSettingsProps> = ({
           {keyList.length > 0 ? `已配置 ${keyList.length} 个` : '请添加 API KEY'}
         </div>
       </div>
+
+      <SettingsHint>用于调用 AssemblyAI 转录服务。多个 KEY 用 | 分隔，失败时自动轮询。</SettingsHint>
 
       {/* 输入框和添加按钮 */}
       <div className="flex gap-2">

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FolderOpen, Plus, X, Trash2, Edit2, Check } from 'lucide-react';
 import type { KeytermGroup } from '@/types/transcription';
+import { SettingsHint } from './SettingsHint';
 
 interface KeytermGroupsSettingsProps {
   groups: KeytermGroup[];
@@ -99,6 +100,7 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
     <div className="space-y-6">
       <div className="space-y-3">
         <h3 className="apple-heading-small">热词提示</h3>
+        <SettingsHint>上传时优先识别这些词，提高转录准确率。</SettingsHint>
 
         {/* 分组标签：蓝底 = 选中 = 默认 */}
         <div className="flex flex-wrap gap-2">

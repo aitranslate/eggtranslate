@@ -2,6 +2,7 @@ import React from 'react';
 import { TranslationConfig } from '@/types';
 import { LanguageSelector } from './LanguageSelector';
 import { ApiTestForm } from './ApiTestForm';
+import { SettingsHint } from '../SettingsHint';
 
 interface TranslationSettingsProps {
   config: TranslationConfig;
@@ -17,21 +18,21 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
   return (
     <>
       {/* API 配置 */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <h3 className="apple-heading-small">API 配置</h3>
-        </div>
+      <div className="space-y-3">
+        <h3 className="apple-heading-small">API 配置</h3>
+        <SettingsHint>用于调用 LLM 翻译服务。点击下方测试连接按钮可验证配置是否可用。</SettingsHint>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
           <ApiTestForm config={config} onConfigChange={onConfigChange} testResult={testResult} />
         </div>
       </div>
 
       {/* 语言配置 */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         <h3 className="apple-heading-small">语言配置</h3>
+        <SettingsHint>源语言留空表示自动检测；目标语言是翻译输出的语言。</SettingsHint>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
           <LanguageSelector
             label="源语言"
             value={config.sourceLanguage}
@@ -46,10 +47,11 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
       </div>
 
       {/* 翻译参数 */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         <h3 className="apple-heading-small">翻译参数</h3>
+        <SettingsHint>上下文携带前后相邻句，提高术语和语气一致性；批次/线程/RPM 控制请求速率。</SettingsHint>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-1">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               前置上下文
@@ -107,7 +109,7 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               RPM 限制 (每分钟请求数)

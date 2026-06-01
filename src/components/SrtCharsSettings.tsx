@@ -2,6 +2,7 @@ import React from 'react';
 import { useSubtitleLengthPreset, useSetSubtitleLengthPreset, useAiSegmentationEnabled, useSetAiSegmentationEnabled } from '@/stores/transcriptionStore';
 import { PRESET_LABELS } from '@/utils/subtitleLengthPresets';
 import type { SubtitleLengthPreset } from '@/types/transcription';
+import { SettingsHint } from './SettingsHint';
 
 const PRESETS: SubtitleLengthPreset[] = ['short', 'standard', 'loose'];
 
@@ -28,6 +29,7 @@ export const SrtCharsSettings: React.FC = () => {
           />
         </button>
       </div>
+      <SettingsHint>智能分割长句，让字幕更易读；下方选择字幕长度偏好。</SettingsHint>
 
       {aiEnabled && (
         <div className="space-y-2">
