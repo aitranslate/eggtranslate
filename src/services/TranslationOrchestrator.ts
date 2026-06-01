@@ -3,7 +3,7 @@
  * 负责协调整个翻译流程，包括批处理、进度更新、历史记录保存
  */
 
-import type { SubtitleEntry, TranslationStatus } from '@/types';
+import type { SubtitleEntry, Term, TranslationStatus, TranslationHistoryEntry } from '@/types';
 import { useSubtitleStore } from '@/stores/subtitleStore';
 import toast from 'react-hot-toast';
 import { API_CONSTANTS } from '@/constants/api';
@@ -15,7 +15,7 @@ export interface BatchInfo {
   textsToTranslate: string[];
   contextBeforeTexts: string;
   contextAfterTexts: string;
-  relevantTerms: any[];  // 改为传递术语数组
+  relevantTerms: Term[];  // 改为传递术语数组
 }
 
 export interface TranslationConfig {
@@ -32,7 +32,7 @@ export interface TranslationCallbacks {
     contextBefore?: string,
     contextAfter?: string,
     terms?: string
-  ) => Promise<{ translations: Record<string, any>; tokensUsed: number }>;
+  ) => Promise<{ translations: Record<string, { direct: string }>; tokensUsed: number }>;
   updateEntry: (
     id: number,
     text: string,
@@ -47,8 +47,8 @@ export interface TranslationCallbacks {
     taskId: string,
     newTokens?: number  // 新增参数：用于传递本次翻译使用的 tokens
   ) => Promise<void>;
-  getRelevantTerms: (batchText: string, before: string, after: string) => any[];
-  formatTermsForPrompt: (terms: any[]) => string;  // 新增
+  getRelevantTerms: (batchText: string, before: string, after: string) => Term[];
+  formatTermsForPrompt: (terms: Term[]) => string;  // 新增
 }
 
 export interface TranslationOptions {
@@ -137,7 +137,7 @@ export async function processBatch(
   controller: AbortController,
   callbacks: TranslationCallbacks,
   taskId: string,
-  formatTermsForPrompt: (terms: any[]) => string,  // 新增参数
+  formatTermsForPrompt: (terms: Term[]) => string,  // 新增参数
   updateProgressCallback: (completed: number, tokensUsed?: number) => Promise<void>
 ): Promise<{ batchIndex: number; success: boolean }> {
   console.log(`[TranslationOrchestrator] 开始处理批次 ${batch.batchIndex + 1}，包含 ${batch.untranslatedEntries.length} 个未翻译条目`);
@@ -202,8 +202,8 @@ export async function processBatch(
     }
 
     return { batchIndex: batch.batchIndex, success: true };
-  } catch (error: any) {
-    if (error.name !== 'AbortError') {
+  } catch (error) {
+    if (error instanceof Error && error.name !== 'AbortError') {
       const appError = toAppError(error);
       console.error(`[TranslationOrchestrator] 批次 ${batch.batchIndex + 1} 翻译失败:`, appError.message);
       toast.error(`批次 ${batch.batchIndex + 1} 翻译失败`);
@@ -302,7 +302,7 @@ export async function saveTranslationHistory(
   taskId: string,
   filename: string,
   tokensUsed: number,
-  addHistoryEntry: (entry: any) => Promise<void>
+  addHistoryEntry: (entry: Omit<TranslationHistoryEntry, 'timestamp'>) => Promise<void>
 ): Promise<void> {
   try {
     await new Promise(resolve => setTimeout(resolve, API_CONSTANTS.HISTORY_SAVE_DELAY_MS));
