@@ -57,54 +57,62 @@ export function enqueueAllUncompleted(): void {
 }
 
 export async function processNext(): Promise<void> {
-  const queue = useQueueStore.getState();
-  if (queue.taskQueue.length === 0) {
-    useQueueStore.getState().setActiveTaskId(null);
-    return;
-  }
-
-  const fileId = queue.taskQueue[0];
-  useQueueStore.getState().setTaskQueue(queue.taskQueue.slice(1));
-  useQueueStore.getState().setActiveTaskId(fileId);
-
-  const file = useFilesStore.getState().getFile(fileId);
-  if (!file) {
-    processNext().catch((err) => console.error('[queueService] processNext failed:', err));
-    return;
-  }
-
+  const fileId = await startTask();
+  if (!fileId) return;
   try {
-    const isAudioVideo = file.fileType === 'audio' || file.fileType === 'video';
-    const needsTranscription = isAudioVideo && file.phases.transcribing.status !== 'completed';
-
-    if (needsTranscription) {
-      useFilesStore.getState().setWorkflow(fileId, 'full');
-      await startTranscription(fileId);
-
-      const afterTranscribe = useFilesStore.getState().getFile(fileId);
-      if (!afterTranscribe || afterTranscribe.phases.transcribing.status !== 'completed') {
-        return;
-      }
-    }
-
-    if (file.fileType === 'srt') {
-      useFilesStore.getState().setWorkflow(fileId, 'translate');
-    }
-    const result = await startTranslation(fileId);
-    if (result) {
-      await saveTranslationHistory(
-        file.taskId,
-        file.name,
-        result.tokens,
-        useHistoryStore.getState().addHistory
-      );
-    }
+    const file = useFilesStore.getState().getFile(fileId);
+    if (file) await runTask(file);
   } catch (error) {
     console.error('[queueService] processNext task failed:', error);
   } finally {
-    if (useQueueStore.getState().activeTaskId === fileId) {
-      useQueueStore.getState().setActiveTaskId(null);
-      processNext().catch((err) => console.error('[queueService] processNext failed:', err));
+    await finishTask(fileId);
+  }
+}
+
+async function startTask(): Promise<string | null> {
+  const queue = useQueueStore.getState();
+  if (queue.taskQueue.length === 0) {
+    useQueueStore.getState().setActiveTaskId(null);
+    return null;
+  }
+  const fileId = queue.taskQueue[0];
+  useQueueStore.getState().setTaskQueue(queue.taskQueue.slice(1));
+  useQueueStore.getState().setActiveTaskId(fileId);
+  return fileId;
+}
+
+async function runTask(file: SubtitleFileMetadata): Promise<void> {
+  const fileId = file.id;
+  const isAudioVideo = file.fileType === 'audio' || file.fileType === 'video';
+  const needsTranscription = isAudioVideo && file.phases.transcribing.status !== 'completed';
+
+  if (needsTranscription) {
+    useFilesStore.getState().setWorkflow(fileId, 'full');
+    await startTranscription(fileId);
+
+    const afterTranscribe = useFilesStore.getState().getFile(fileId);
+    if (!afterTranscribe || afterTranscribe.phases.transcribing.status !== 'completed') {
+      return;
     }
+  }
+
+  if (file.fileType === 'srt') {
+    useFilesStore.getState().setWorkflow(fileId, 'translate');
+  }
+  const result = await startTranslation(fileId);
+  if (result) {
+    await saveTranslationHistory(
+      file.taskId,
+      file.name,
+      result.tokens,
+      useHistoryStore.getState().addHistory
+    );
+  }
+}
+
+async function finishTask(fileId: string): Promise<void> {
+  if (useQueueStore.getState().activeTaskId === fileId) {
+    useQueueStore.getState().setActiveTaskId(null);
+    await processNext();
   }
 }
