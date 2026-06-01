@@ -2,6 +2,7 @@ import { useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SubtitleFileMetadata, ALL_PHASES, type ProgressPhase } from '@/types';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
+import { useFilesStore } from '@/stores/filesStore';
 import { getCardBadge } from '@/utils/badgeHelper';
 import { FileIcon } from './FileIcon';
 import { StepperProgress } from './StepperProgress';
@@ -43,6 +44,11 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
 
   // 获取 aiSegmentationEnabled 配置
   const aiSegmentationEnabled = useTranscriptionStore(state => state.aiSegmentationEnabled);
+
+  // 热词选择
+  const keytermsEnabled = useTranscriptionStore((state) => state.keytermsEnabled);
+  const keytermGroups = useTranscriptionStore((state) => state.keytermGroups);
+  const setSelectedKeytermGroupId = useFilesStore((state) => state.setSelectedKeytermGroupId);
 
   // 计算 displayPhases（与 StepperProgress 一致）
   const displayPhases = useMemo(() => {
@@ -135,6 +141,13 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
         <span className={`px-2.5 py-1 rounded-md text-xs font-medium flex-shrink-0 ${badgeClass}`}>
           {badgeText}
         </span>
+        <KeytermDropdown
+          fileId={file.id}
+          fileSelectedGroupId={file.selectedKeytermGroupId}
+          keytermGroups={keytermGroups.map(g => ({ id: g.id, name: g.name }))}
+          keytermsEnabled={keytermsEnabled}
+          onChange={(groupId) => setSelectedKeytermGroupId(file.id, groupId)}
+        />
       </div>
 
       {/* 2. Progress area (stepper) */}
@@ -164,10 +177,58 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   );
 };
 
+interface KeytermDropdownProps {
+  fileId: string;
+  fileSelectedGroupId: string | null;
+  keytermGroups: { id: string; name: string }[];
+  keytermsEnabled: boolean;
+  onChange: (groupId: string | null) => void;
+}
+
+const KeytermDropdown: React.FC<KeytermDropdownProps> = ({
+  fileSelectedGroupId,
+  keytermGroups,
+  keytermsEnabled,
+  onChange,
+}) => {
+  const selectedGroup = keytermGroups.find((g) => g.id === fileSelectedGroupId);
+  const displayText = selectedGroup ? selectedGroup.name : '不使用';
+
+  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    onChange(e.target.value === '' ? null : e.target.value);
+  };
+
+  return (
+    <div
+      className="flex items-center gap-1.5 flex-shrink-0"
+      title={!keytermsEnabled ? '请到设置中开启热词功能' : undefined}
+    >
+      <span className="text-xs text-gray-500">热词:</span>
+      <select
+        value={fileSelectedGroupId ?? ''}
+        onChange={handleChange}
+        disabled={!keytermsEnabled}
+        aria-label={`热词分组 (${displayText})`}
+        className={`text-xs px-2 py-1 rounded-md border border-gray-200 bg-white text-gray-700 focus:outline-none focus:border-blue-500 transition-colors ${
+          !keytermsEnabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-gray-300'
+        }`}
+      >
+        <option value="">不使用</option>
+        {keytermGroups.map((group) => (
+          <option key={group.id} value={group.id}>
+            {group.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+};
+
 export const SubtitleFileItemMemo = memo(SubtitleFileItem, (prevProps, nextProps) => {
   const fileKeys: (keyof SubtitleFileMetadata)[] = [
     'id', 'name', 'fileSize', 'duration',
     'entryCount', 'translatedCount', 'tokensUsed',
+    'selectedKeytermGroupId',
   ];
 
   for (const key of fileKeys) {
