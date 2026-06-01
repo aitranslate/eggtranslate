@@ -121,12 +121,12 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId, onTool
     onTooltipVisibleChange?.(phase !== null);
   };
 
-  // 决定显示哪些阶段节点（根据文件类型过滤）
+  // 决定显示哪些阶段节点（converting 节点已交给 TranscodingIndicator 在顶部统一展示）
   const displayPhases = useMemo(() => {
     if (file?.fileType === 'srt') {
       return ALL_PHASES.filter(p => p !== 'converting' && p !== 'transcribing');
     }
-    return ALL_PHASES;
+    return ALL_PHASES.filter(p => p !== 'converting');
   }, [file?.fileType]);
 
   // 根据 aiSegmentationEnabled 过滤 splitting
