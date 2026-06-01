@@ -5,16 +5,15 @@ import type { KeytermGroup } from '@/types/transcription';
 interface KeytermGroupsSettingsProps {
   groups: KeytermGroup[];
   onGroupsChange: (groups: KeytermGroup[]) => void;
-  keytermsEnabled: boolean;
-  onKeytermsEnabledChange: (enabled: boolean) => void;
+  /** 当前选中的默认热词组（v2 不再有全局开关，这就是"默认"） */
+  defaultKeytermGroupId: string | null;
   onDefaultGroupChange?: (groupId: string | null) => void;
 }
 
 export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
   groups,
   onGroupsChange,
-  keytermsEnabled,
-  onKeytermsEnabledChange,
+  defaultKeytermGroupId,
   onDefaultGroupChange
 }) => {
   const [activeGroupId, setActiveGroupId] = useState(groups[0]?.id || '');
@@ -94,16 +93,6 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
       <div className="space-y-3">
         <div className="flex justify-between items-center">
           <h3 className="apple-heading-small">热词提示</h3>
-          <button
-            onClick={() => onKeytermsEnabledChange(!keytermsEnabled)}
-            className={`w-12 h-6 rounded-full transition-colors ${
-              keytermsEnabled ? 'bg-blue-500' : 'bg-gray-300'
-            }`}
-          >
-            <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
-              keytermsEnabled ? 'translate-x-6' : 'translate-x-0.5'
-            }`} />
-          </button>
         </div>
 
         {/* 分组标签 */}
@@ -118,7 +107,12 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
               }`}
               onClick={() => {
                 setActiveGroupId(group.id);
-                onDefaultGroupChange?.(group.id);
+                // 点击已选中的分组 → 取消默认（设为 null）
+                if (defaultKeytermGroupId === group.id) {
+                  onDefaultGroupChange?.(null);
+                } else {
+                  onDefaultGroupChange?.(group.id);
+                }
               }}
             >
               <FolderOpen className="h-4 w-4" />

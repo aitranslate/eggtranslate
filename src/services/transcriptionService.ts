@@ -23,26 +23,34 @@ export async function startTranscription(fileId: string): Promise<void> {
     return;
   }
 
+  // 立即把 phase 标为 active，让 UI（badge、stepper 节点）即时反映。
+  // 任何失败路径都会在 catch / early-return 之前把状态标为 failed，
+  // 避免出现"按钮 处理中 但 phase 还是 未开始"的不一致状态。
+  useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'active', progress: -1, tokens: 0 });
+
   try {
     // MP3 必须在 addFile 阶段就转好并持久化。
     // 找不到说明状态不一致（不该出现），直接报错让用户重传。
     const mp3Blob = await localforage.getItem<Blob>(`mp3_data:${file.taskId}`);
     if (!mp3Blob) {
+      useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed', progress: 0 });
       toast.error('MP3 缓存丢失，请重新上传文件');
       return;
     }
 
     const { apiKeys } = useTranscriptionStore.getState();
     if (!apiKeys.trim()) {
+      useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed', progress: 0 });
       toast.error('请先在设置中配置 AssemblyAI API Key');
       return;
     }
 
-    const { keytermGroups, keytermsEnabled } = useTranscriptionStore.getState();
+    const { keytermGroups } = useTranscriptionStore.getState();
     const task = useFilesStore.getState().tasks.find((t) => t.taskId === file.taskId);
     const groupId = task?.selectedKeytermGroupId;
+    // 任务级热词选择优先级最高：只要任务卡片选了热词组，就用，
+    // 不受全局 keytermsEnabled 开关影响（开关只控制 UI 是否显示下拉）
     const allKeyterms = (() => {
-      if (!keytermsEnabled) return [];
       if (!groupId) return [];
       const group = keytermGroups.find((g) => g.id === groupId);
       return group?.keyterms ?? [];
@@ -57,21 +65,20 @@ export async function startTranscription(fileId: string): Promise<void> {
       allKeyterms,
       {
         onConverting: () => {},
-        onUploading: () => {
-          useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'active', progress: -1, tokens: 0 });
-        },
+        onUploading: () => {},
         onTranscribing: () => {
-          useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'active', progress: -1, tokens: 0 });
+          useFilesStore.getState().updatePhase(fileId, 'transcribing', {
+            status: 'active',
+            progress: -1,
+            tokens: 0,
+          });
         },
         onProgress: (percent) => {
           useFilesStore.getState().updatePhase(fileId, 'transcribing', { progress: percent });
         },
         onCompleted: () => {},
         onError: () => {
-          const phases = useFilesStore.getState().getFile(fileId)?.phases;
-          if (phases?.transcribing.status === 'active') {
-            useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed', progress: 0 });
-          }
+          // 状态由 catch 块统一处理
         }
       }
     );

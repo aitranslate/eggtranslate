@@ -48,8 +48,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   // 获取 aiSegmentationEnabled 配置
   const aiSegmentationEnabled = useTranscriptionStore(state => state.aiSegmentationEnabled);
 
-  // 热词选择
-  const keytermsEnabled = useTranscriptionStore((state) => state.keytermsEnabled);
+  // 热词选择（无全局开关，per-task 选择即生效）
   const keytermGroups = useTranscriptionStore((state) => state.keytermGroups);
   const setSelectedKeytermGroupId = useFilesStore((state) => state.setSelectedKeytermGroupId);
 
@@ -169,7 +168,6 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
             fileId={file.id}
             fileSelectedGroupId={file.selectedKeytermGroupId}
             keytermGroups={keytermGroups.map(g => ({ id: g.id, name: g.name }))}
-            keytermsEnabled={keytermsEnabled}
             onChange={(groupId) => setSelectedKeytermGroupId(file.id, groupId)}
           />
         }
@@ -189,14 +187,12 @@ interface KeytermDropdownProps {
   fileId: string;
   fileSelectedGroupId: string | null;
   keytermGroups: { id: string; name: string }[];
-  keytermsEnabled: boolean;
   onChange: (groupId: string | null) => void;
 }
 
 const KeytermDropdown: React.FC<KeytermDropdownProps> = ({
   fileSelectedGroupId,
   keytermGroups,
-  keytermsEnabled,
   onChange,
 }) => {
   const selectedGroup = keytermGroups.find((g) => g.id === fileSelectedGroupId);
@@ -207,19 +203,13 @@ const KeytermDropdown: React.FC<KeytermDropdownProps> = ({
   };
 
   return (
-    <div
-      className="flex items-center gap-1.5 flex-shrink-0"
-      title={!keytermsEnabled ? '请到设置中开启热词功能' : undefined}
-    >
+    <div className="flex items-center gap-1.5 flex-shrink-0">
       <span className="text-xs text-gray-500">热词:</span>
       <select
         value={fileSelectedGroupId ?? ''}
         onChange={handleChange}
-        disabled={!keytermsEnabled}
         aria-label={`热词分组 (${displayText})`}
-        className={`text-xs px-2 py-1 rounded-md border border-gray-200 bg-white text-gray-700 focus:outline-none focus:border-blue-500 transition-colors ${
-          !keytermsEnabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-gray-300'
-        }`}
+        className="text-xs px-2 py-1 rounded-md border border-gray-200 bg-white text-gray-700 focus:outline-none focus:border-blue-500 cursor-pointer hover:border-gray-300 transition-colors"
       >
         <option value="">不使用</option>
         {keytermGroups.map((group) => (

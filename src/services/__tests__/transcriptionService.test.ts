@@ -75,7 +75,6 @@ describe('transcriptionService.startTranscription', () => {
     useTranscriptionStore.setState({
       apiKeys: 'test-key',
       keytermGroups: [],
-      keytermsEnabled: false,
     });
     vi.clearAllMocks();
   });
@@ -166,7 +165,6 @@ describe('transcriptionService.startTranscription', () => {
     });
     useTranscriptionStore.setState({
       apiKeys: 'test-key',
-      keytermsEnabled: true,
       keytermGroups: [
         { id: 'group-medical', name: '医学', keyterms: ['Aortic stenosis', 'Echocardiogram'] },
         { id: 'group-legal', name: '法律', keyterms: ['Voir dire', 'Habeas corpus'] },
@@ -195,7 +193,6 @@ describe('transcriptionService.startTranscription', () => {
     });
     useTranscriptionStore.setState({
       apiKeys: 'test-key',
-      keytermsEnabled: true,
       keytermGroups: [{ id: 'g1', name: 'G1', keyterms: ['term1'] }],
     });
 
@@ -212,7 +209,8 @@ describe('transcriptionService.startTranscription', () => {
     expect(callArgs[1]).toEqual([]);
   });
 
-  it('sends no keyterms when keytermsEnabled is false (master switch off)', async () => {
+  it('per-task keyterm selection wins regardless of any global state', async () => {
+    // 新设计：无全局 keytermsEnabled 开关。只要任务卡片选了组，就用。
     useFilesStore.setState({
       tasks: [makeTask(makeFile({
         convertingStatus: 'completed',
@@ -221,7 +219,6 @@ describe('transcriptionService.startTranscription', () => {
     });
     useTranscriptionStore.setState({
       apiKeys: 'test-key',
-      keytermsEnabled: false,
       keytermGroups: [{ id: 'g1', name: 'G1', keyterms: ['term1'] }],
     });
 
@@ -235,7 +232,7 @@ describe('transcriptionService.startTranscription', () => {
 
     expect(runTranscriptionPipeline).toHaveBeenCalled();
     const callArgs = vi.mocked(runTranscriptionPipeline).mock.calls[0];
-    expect(callArgs[1]).toEqual([]);
+    expect(callArgs[1]).toEqual(['term1']);
   });
 
   it('sends empty array when selectedKeytermGroupId points to non-existent group', async () => {
@@ -247,7 +244,6 @@ describe('transcriptionService.startTranscription', () => {
     });
     useTranscriptionStore.setState({
       apiKeys: 'test-key',
-      keytermsEnabled: true,
       keytermGroups: [{ id: 'g1', name: 'G1', keyterms: ['term1'] }],
     });
 

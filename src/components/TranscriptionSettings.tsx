@@ -5,8 +5,6 @@ import { KeytermGroupsSettings } from './KeytermGroupsSettings';
 import {
   useKeytermGroups,
   useUpdateKeytermGroups,
-  useKeytermsEnabled,
-  useSetKeytermsEnabled,
   useApiKeys,
   useSetApiKeys,
   useTranscriptionStore
@@ -17,8 +15,7 @@ export const TranscriptionSettings: React.FC = () => {
   const setApiKeys = useSetApiKeys();
   const keytermGroups = useKeytermGroups();
   const updateKeytermGroups = useUpdateKeytermGroups();
-  const keytermsEnabled = useKeytermsEnabled();
-  const setKeytermsEnabled = useSetKeytermsEnabled();
+  const defaultKeytermGroupId = useTranscriptionStore((state) => state.defaultKeytermGroupId);
   const setDefaultKeytermGroupId = useTranscriptionStore((state) => state.setDefaultKeytermGroupId);
 
   return (
@@ -31,8 +28,7 @@ export const TranscriptionSettings: React.FC = () => {
       <KeytermGroupsSettings
         groups={keytermGroups}
         onGroupsChange={updateKeytermGroups}
-        keytermsEnabled={keytermsEnabled}
-        onKeytermsEnabledChange={setKeytermsEnabled}
+        defaultKeytermGroupId={defaultKeytermGroupId}
         onDefaultGroupChange={setDefaultKeytermGroupId}
       />
     </div>

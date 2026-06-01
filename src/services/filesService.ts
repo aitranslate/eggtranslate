@@ -18,10 +18,7 @@ import localforage from 'localforage';
 import toast from 'react-hot-toast';
 
 export async function addFile(file: File): Promise<string | null> {
-  const transcriptionStore = useTranscriptionStore.getState();
-  const defaultKeytermGroupId = transcriptionStore.keytermsEnabled
-    ? transcriptionStore.defaultKeytermGroupId
-    : null;
+  const { defaultKeytermGroupId } = useTranscriptionStore.getState();
 
   // 音视频文件：转码 + 持久化 + 上传完成才加入 store（用 toast 持续提示）
   if (file.type.startsWith('audio/') || file.type.startsWith('video/') || /\.(mp3|m4a|wav|mp4|mov|webm|mkv)$/i.test(file.name)) {
