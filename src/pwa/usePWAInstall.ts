@@ -54,11 +54,15 @@ function isIOSSafari(): boolean {
 
 function isRecentlyDismissed(): boolean {
   if (typeof localStorage === 'undefined') return false;
-  const raw = localStorage.getItem(PWA_DISMISS_STORAGE_KEY);
-  if (!raw) return false;
-  const ts = Number(raw);
-  if (!Number.isFinite(ts)) return false;
-  return Date.now() - ts < PWA_DISMISS_TTL_MS;
+  try {
+    const raw = localStorage.getItem(PWA_DISMISS_STORAGE_KEY);
+    if (!raw) return false;
+    const ts = Number(raw);
+    if (!Number.isFinite(ts)) return false;
+    return Date.now() - ts < PWA_DISMISS_TTL_MS;
+  } catch {
+    return false;
+  }
 }
 
 export function usePWAInstall(): UsePWAInstallResult {
@@ -77,6 +81,12 @@ export function usePWAInstall(): UsePWAInstallResult {
     };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = () => setDismissed(true);
+    window.addEventListener('appinstalled', handler);
+    return () => window.removeEventListener('appinstalled', handler);
   }, []);
 
   useEffect(() => {

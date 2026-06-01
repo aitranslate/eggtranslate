@@ -222,4 +222,24 @@ describe('usePWAInstall', () => {
 
     expect(result.current.isIOS).toBe(false);
   });
+
+  it('hides banner when appinstalled event fires (user installed from another tab)', async () => {
+    const { result } = renderHook(() => usePWAInstall());
+
+    act(() => {
+      window.dispatchEvent(makeBeforeInstallPromptEvent());
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(PWA_BANNER_DELAY_MS);
+    });
+
+    expect(result.current.shouldShow).toBe(true);
+
+    act(() => {
+      window.dispatchEvent(new Event('appinstalled'));
+    });
+
+    expect(result.current.shouldShow).toBe(false);
+  });
 });
