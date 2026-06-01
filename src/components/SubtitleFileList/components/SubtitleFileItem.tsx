@@ -1,4 +1,4 @@
-import { useCallback, useMemo, memo } from 'react';
+import { useCallback, useMemo, memo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SubtitleFileMetadata, ALL_PHASES, type ProgressPhase } from '@/types';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
@@ -41,6 +41,9 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   const isTranscribing = file.phases.converting.status === 'active' ||
     file.phases.transcribing.status === 'active';
   const isBusy = isTranscribing || isActive || isQueued;
+
+  // Tooltip 悬停时把整张卡片提升到最上层，避免被下方的 task card 遮挡
+  const [isTooltipVisible, setIsTooltipVisible] = useState(false);
 
   // 获取 aiSegmentationEnabled 配置
   const aiSegmentationEnabled = useTranscriptionStore(state => state.aiSegmentationEnabled);
@@ -89,7 +92,10 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
       whileHover={{ y: -2, boxShadow: '0 8px 24px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)' }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}
       className="relative bg-white rounded-2xl p-5 flex flex-col gap-5"
-      style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.03), 0 0 0 1px rgba(0,0,0,0.02)' }}
+      style={{
+        boxShadow: '0 2px 12px rgba(0,0,0,0.03), 0 0 0 1px rgba(0,0,0,0.02)',
+        zIndex: isTooltipVisible ? 50 : 'auto',
+      }}
     >
       {/* 完成时一次性脉冲光圈 */}
       <AnimatePresence>
@@ -144,7 +150,10 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
       </div>
 
       {/* 2. Progress area (stepper) */}
-      <StepperProgress fileId={file.id} />
+      <StepperProgress
+        fileId={file.id}
+        onTooltipVisibleChange={setIsTooltipVisible}
+      />
 
       {/* 3. Footer: action buttons (keyterm dropdown slots into secondary group) */}
       <FileActionButtons

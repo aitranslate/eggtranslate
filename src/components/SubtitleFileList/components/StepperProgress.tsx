@@ -9,6 +9,7 @@ import { ALL_PHASES, type ProgressPhase, type PhaseProgress, type FilePhases } f
 
 interface StepperProgressProps {
   fileId: string;
+  onTooltipVisibleChange?: (visible: boolean) => void;
 }
 
 const CIRCLE_SIZE = 24;
@@ -110,10 +111,15 @@ const ConnectingLine: React.FC<{
   );
 };
 
-export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId }) => {
+export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId, onTooltipVisibleChange }) => {
   const file = useFile(fileId);
   const aiSegmentationEnabled = useTranscriptionStore(state => state.aiSegmentationEnabled);
   const [hoveredPhase, setHoveredPhase] = useState<ProgressPhase | null>(null);
+
+  const setHover = (phase: ProgressPhase | null) => {
+    setHoveredPhase(phase);
+    onTooltipVisibleChange?.(phase !== null);
+  };
 
   // 决定显示哪些阶段节点（根据文件类型过滤）
   const displayPhases = useMemo(() => {
@@ -211,8 +217,8 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId }) => {
                       ? { duration: 2, repeat: Infinity, ease: 'easeOut' }
                       : { duration: 0.3 }
                   }
-                  onMouseEnter={() => setHoveredPhase(phase)}
-                  onMouseLeave={() => setHoveredPhase(null)}
+                  onMouseEnter={() => setHover(phase)}
+                  onMouseLeave={() => setHover(null)}
                 >
                   {isCompleted && (
                     <motion.div
