@@ -9,6 +9,7 @@ interface PhaseTooltipCardProps {
   totalEntries?: number;
   language?: string;
   errorMessage?: string;
+  keytermGroupName?: string;
   isVisible: boolean;
 }
 
@@ -22,6 +23,7 @@ export const PhaseTooltipCard: React.FC<PhaseTooltipCardProps> = ({
   totalEntries,
   language,
   errorMessage,
+  keytermGroupName,
   isVisible,
 }) => {
   return (
@@ -82,7 +84,7 @@ export const PhaseTooltipCard: React.FC<PhaseTooltipCardProps> = ({
           )}
 
           {/* 第二行信息 */}
-          {(language || entryCount !== undefined || tokens !== undefined) && (
+          {(language || entryCount !== undefined || tokens !== undefined || keytermGroupName) && (
             <div style={{
               fontSize: 12,
               color: '#1D1D1F',
@@ -97,6 +99,11 @@ export const PhaseTooltipCard: React.FC<PhaseTooltipCardProps> = ({
               )}
               {tokens !== undefined && tokens > 0 && (
                 <span>{formatNumber(tokens)} tokens</span>
+              )}
+              {keytermGroupName && (
+                <span style={{ background: '#F5F5F7', padding: '2px 6px', borderRadius: 4 }}>
+                  🔑 {keytermGroupName}
+                </span>
               )}
             </div>
           )}

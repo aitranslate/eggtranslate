@@ -234,7 +234,7 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
           </div>
         ) : (
           <div className="text-sm text-gray-500 p-3 bg-gray-50 rounded-lg">
-            没有选中默认分组（新任务的 keyterms 留空）
+            未选默认分组
           </div>
         )}
       </div>

@@ -250,6 +250,7 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId, onTool
                   totalEntries={phaseState.totalEntries}
                   language={phaseState.language}
                   errorMessage={phaseState.errorMessage}
+                  keytermGroupName={phaseState.keytermGroupName}
                   isVisible={hoveredPhase === phase}
                 />
 

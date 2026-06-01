@@ -50,13 +50,18 @@ export async function startTranscription(fileId: string): Promise<void> {
     const groupId = task?.selectedKeytermGroupId;
     // 任务级热词选择优先级最高：只要任务卡片选了热词组，就用，
     // 不受全局 keytermsEnabled 开关影响（开关只控制 UI 是否显示下拉）
-    const allKeyterms = (() => {
-      if (!groupId) return [];
-      const group = keytermGroups.find((g) => g.id === groupId);
-      return group?.keyterms ?? [];
-    })();
+    const selectedKeytermGroup = groupId
+      ? keytermGroups.find((g) => g.id === groupId)
+      : null;
+    const allKeyterms = selectedKeytermGroup?.keyterms ?? [];
 
     useFilesStore.getState().setWorkflow(fileId, 'transcribe');
+    // 记录该次转录使用的热词组名，UI 卡片可展示
+    if (selectedKeytermGroup) {
+      useFilesStore.getState().updatePhase(fileId, 'transcribing', {
+        keytermGroupName: selectedKeytermGroup.name,
+      });
+    }
 
     const mp3File = new File([mp3Blob], 'audio.mp3', { type: 'audio/mpeg' });
 

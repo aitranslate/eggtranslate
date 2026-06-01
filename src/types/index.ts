@@ -131,6 +131,7 @@ export interface PhaseProgress {
   errorMessage?: string;   // 失败时的错误信息
   entryCount?: number;    // 该阶段处理的条目数（语音识别/翻译/断句）
   totalEntries?: number;  // 总条目数
+  keytermGroupName?: string; // 该阶段使用的热词分组名（仅转录/翻译时记录）
 }
 
 // ProgressPhase: 阶段名称类型
