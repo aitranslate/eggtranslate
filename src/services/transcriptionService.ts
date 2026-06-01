@@ -43,7 +43,14 @@ export async function startTranscription(fileId: string): Promise<void> {
     }
 
     const { keytermGroups, keytermsEnabled } = useTranscriptionStore.getState();
-    const allKeyterms = keytermsEnabled ? keytermGroups.flatMap((g) => g.keyterms) : [];
+    const task = useFilesStore.getState().tasks.find((t) => t.taskId === file.taskId);
+    const groupId = task?.selectedKeytermGroupId;
+    const allKeyterms = (() => {
+      if (!keytermsEnabled) return [];
+      if (!groupId) return [];
+      const group = keytermGroups.find((g) => g.id === groupId);
+      return group?.keyterms ?? [];
+    })();
 
     useFilesStore.getState().setWorkflow(fileId, 'transcribe');
 
