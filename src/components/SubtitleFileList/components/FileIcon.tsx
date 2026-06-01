@@ -6,7 +6,7 @@ interface FileIconProps {
   className?: string;
 }
 
-export const getFileIconComponent = (type?: FileType): typeof FileText => {
+const getFileIconComponent = (type?: FileType): typeof FileText => {
   switch (type) {
     case 'audio':
       return Music;
