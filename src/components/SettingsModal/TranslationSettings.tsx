@@ -5,7 +5,7 @@ import { ApiTestForm } from './ApiTestForm';
 
 interface TranslationSettingsProps {
   config: TranslationConfig;
-  onConfigChange: (field: keyof TranslationConfig, value: any) => void;
+  onConfigChange: (field: keyof TranslationConfig, value: string | number | undefined) => void;
   testResult: { success: boolean; message: string } | null;
 }
 
