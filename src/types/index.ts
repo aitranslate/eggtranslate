@@ -90,6 +90,9 @@ export interface SingleTask {
   fileSize?: number;                  // File size in bytes
   duration?: number;                  // Audio duration in seconds
   fileRef?: File;                     // 音视频原始文件引用（不持久化）
+
+  /** 该文件要使用的热词分组 ID；null 表示不使用热词 */
+  selectedKeytermGroupId: string | null;
 }
 
 // 批量任务列表类型

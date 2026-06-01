@@ -11,6 +11,7 @@ import { generateTaskId, generateStableFileId } from '@/utils/taskIdGenerator';
 
 export interface LoadFileOptions {
   existingFilesCount: number;
+  defaultKeytermGroupId?: string | null;
 }
 
 export interface LoadFileResult {
@@ -71,6 +72,7 @@ export async function loadFromFile(
   const index = options.existingFilesCount;
   const taskId = generateTaskId();
   const fileId = generateStableFileId(taskId);
+  const selectedKeytermGroupId = options.defaultKeytermGroupId ?? null;
 
   // 音视频文件立即获取 duration（不需要转码）
   const duration = fileType !== 'srt' ? await getMediaDuration(file) : undefined;
@@ -87,6 +89,7 @@ export async function loadFromFile(
       index,
       fileType: 'srt',
       fileSize: file.size,
+      selectedKeytermGroupId,
     };
 
     return {
@@ -101,7 +104,8 @@ export async function loadFromFile(
         translatedCount: entries.filter(e => e.translatedText).length,
         phases: createInitialPhases(true, false, 'translate'),
         tokensUsed: 0,
-        entriesVersion: 0
+        entriesVersion: 0,
+        selectedKeytermGroupId,
       },
       task: newTask
     };
@@ -115,6 +119,7 @@ export async function loadFromFile(
       fileType,
       fileSize: file.size,
       duration,
+      selectedKeytermGroupId,
     };
 
     return {
@@ -131,6 +136,7 @@ export async function loadFromFile(
         phases: createInitialPhases(false, false),
         tokensUsed: 0,
         entriesVersion: 0,
+        selectedKeytermGroupId,
         fileRef: file
       },
       task: newTask
@@ -175,6 +181,7 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
     phases: task.phases || createInitialPhases(isSrt, isTranslated),
     tokensUsed: (task.phases?.translating?.tokens || 0) + (task.phases?.splitting?.tokens || 0),
     entriesVersion: 0,
+    selectedKeytermGroupId: task.selectedKeytermGroupId ?? null,
     fileRef: task.fileRef
   };
 }

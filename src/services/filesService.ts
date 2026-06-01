@@ -8,6 +8,7 @@
 
 import { useFilesStore } from '@/stores/filesStore';
 import { useQueueStore } from '@/stores/queueStore';
+import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { loadFromFile, removeMp3Data } from './SubtitleFileManager';
 import { toAppError } from '@/utils/errors';
@@ -15,8 +16,15 @@ import toast from 'react-hot-toast';
 
 export async function addFile(file: File): Promise<string> {
   try {
+    // 默认从设置中获取热词分组
+    const transcriptionStore = useTranscriptionStore.getState();
+    const defaultKeytermGroupId = transcriptionStore.keytermsEnabled
+      ? transcriptionStore.defaultKeytermGroupId
+      : null;
+
     const result = await loadFromFile(file, {
       existingFilesCount: useFilesStore.getState().tasks.length,
+      defaultKeytermGroupId,
     });
     const taskWithRef = { ...result.task, fileRef: file };
     useFilesStore.getState().addTask(taskWithRef);
