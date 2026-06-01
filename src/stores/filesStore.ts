@@ -9,11 +9,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 import { useMemo } from 'react';
 import { SubtitleEntry, SubtitleFileMetadata, TranslationStatus, FilePhases, PhaseProgress, WorkflowType, SplitAlignStatus } from '@/types';
-import { useTranscriptionStore } from './transcriptionStore';
-import { removeMp3Data, convertTaskToMetadata } from '@/services/SubtitleFileManager';
+import { convertTaskToMetadata } from '@/services/SubtitleFileManager';
 import { generateStableFileId } from '@/utils/taskIdGenerator';
-import { toAppError } from '@/utils/errors';
-import toast from 'react-hot-toast';
 import localforage from 'localforage';
 import type { SingleTask } from '@/types';
 
