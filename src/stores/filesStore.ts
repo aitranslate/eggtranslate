@@ -240,24 +240,25 @@ export const useFilesStore = create<FilesState>()(
       },
       onRehydrateStorage: () => (state, error) => {
         if (error || !state) return;
-        // 检测中断：active → failed
-        let mutated = false;
-        for (const task of state.tasks) {
-          if (task.phases) {
-            for (const phase of ['converting', 'transcribing', 'translating', 'splitting'] as const) {
-              if (task.phases[phase]?.status === 'active') {
-                task.phases[phase] = {
-                  status: 'failed',
-                  progress: task.phases[phase].progress || 0,
-                  tokens: task.phases[phase].tokens || 0,
-                } as PhaseProgress;
-                mutated = true;
-              }
+        // 检测中断：active → failed。构造新对象，不直接 mutation 传入的 state
+        const recoveredTasks = state.tasks.map((task) => {
+          if (!task.phases) return task;
+          let taskChanged = false;
+          const newPhases = { ...task.phases };
+          for (const phase of ['converting', 'transcribing', 'translating', 'splitting'] as const) {
+            if (newPhases[phase]?.status === 'active') {
+              newPhases[phase] = {
+                status: 'failed',
+                progress: newPhases[phase].progress || 0,
+                tokens: newPhases[phase].tokens || 0,
+              } as PhaseProgress;
+              taskChanged = true;
             }
           }
-        }
-        if (mutated) {
-          useFilesStore.setState({ tasks: [...state.tasks] });
+          return taskChanged ? { ...task, phases: newPhases } : task;
+        });
+        if (recoveredTasks.some((t, i) => t !== state.tasks[i])) {
+          useFilesStore.setState({ tasks: recoveredTasks });
         }
       },
     }
