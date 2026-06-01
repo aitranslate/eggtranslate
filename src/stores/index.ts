@@ -32,17 +32,6 @@ export { startTranslation } from '@/services/translationService';
 export { enqueueTask, dequeueTask, enqueueAllUncompleted, processNext } from '@/services/queueService';
 
 // ============================================
-// SubtitleStore (旧 - 拆分完成后将删除)
-// ============================================
-
-export {
-  useSubtitleStore,
-  useFiles as useFilesLegacy,
-  useSelectedFile as useSelectedFileLegacy,
-  useFile as useFileLegacy
-} from './subtitleStore';
-
-// ============================================
 // TranslationConfigStore
 // ============================================
 
