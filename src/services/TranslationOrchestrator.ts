@@ -8,6 +8,7 @@ import { useFilesStore } from '@/stores/filesStore';
 import toast from 'react-hot-toast';
 import { API_CONSTANTS } from '@/constants/api';
 import { toAppError } from '@/utils/errors';
+import { logger } from '@/utils/logger';
 
 export interface BatchInfo {
   batchIndex: number;
@@ -140,7 +141,7 @@ export async function processBatch(
   formatTermsForPrompt: (terms: Term[]) => string,  // 新增参数
   updateProgressCallback: (completed: number, tokensUsed?: number) => Promise<void>
 ): Promise<{ batchIndex: number; success: boolean }> {
-  console.log(`[TranslationOrchestrator] 开始处理批次 ${batch.batchIndex + 1}，包含 ${batch.untranslatedEntries.length} 个未翻译条目`);
+  logger.info(`开始处理批次 ${batch.batchIndex + 1}，包含 ${batch.untranslatedEntries.length} 个未翻译条目`);
   try {
     // 使用 formatTermsForPrompt 格式化术语
     const termsText = formatTermsForPrompt(batch.relevantTerms);
@@ -198,14 +199,14 @@ export async function processBatch(
       // 传递本次翻译使用的 tokens
       await updateProgressCallback(batchUpdates.length, translationResult.tokensUsed);
 
-      console.log(`[TranslationOrchestrator] 批次 ${batch.batchIndex + 1} 翻译成功，更新了 ${batchUpdates.length} 个条目，消耗 ${translationResult.tokensUsed} tokens`);
+      logger.info(`批次 ${batch.batchIndex + 1} 翻译成功，更新了 ${batchUpdates.length} 个条目，消耗 ${translationResult.tokensUsed} tokens`);
     }
 
     return { batchIndex: batch.batchIndex, success: true };
   } catch (error) {
     if (error instanceof Error && error.name !== 'AbortError') {
       const appError = toAppError(error);
-      console.error(`[TranslationOrchestrator] 批次 ${batch.batchIndex + 1} 翻译失败:`, appError.message);
+      logger.error(`批次 ${batch.batchIndex + 1} 翻译失败:`, appError.message);
       toast.error(`批次 ${batch.batchIndex + 1} 翻译失败`);
       // 抛出错误以触发快速失败
       throw error;
@@ -329,6 +330,6 @@ export async function saveTranslationHistory(
     }
   } catch (error) {
     const appError = toAppError(error, '保存历史记录失败');
-    console.error('[TranslationOrchestrator]', appError.message, appError);
+    logger.error(appError.message, appError);
   }
 }

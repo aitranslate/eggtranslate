@@ -17,6 +17,7 @@ import { formatTime, parseTime } from '@/utils/timeUtils';
 import { countUnits } from '@/utils/textUnitCounter';
 import { getSourceLimit, getTargetLimit } from '@/utils/subtitleLengthPresets';
 import { toAppError } from '@/utils/errors';
+import { logger } from '@/utils/logger';
 import {
   getRelevantTerms as getRelevantTermsUtil,
   formatTermsForPrompt as formatTermsForPromptUtil
@@ -32,7 +33,7 @@ export async function startTranslation(
 
   // 如果翻译已完成，跳过
   if (file.phases.translating.status === 'completed' && file.phases.splitting.status === 'completed') {
-    console.log('[translationService] 翻译和断句对齐都已完成，跳过');
+    logger.info('翻译和断句对齐都已完成，跳过');
     return null;
   }
 
@@ -101,7 +102,7 @@ export async function startTranslation(
     );
 
     if (controller.signal.aborted) {
-      console.log('[translationService] 翻译已中止（文件已删除）');
+      logger.info('翻译已中止（文件已删除）');
       return null;
     }
 
@@ -111,7 +112,7 @@ export async function startTranslation(
 
     const aiSegmentationEnabled = useTranscriptionStore.getState().aiSegmentationEnabled;
     if (!aiSegmentationEnabled) {
-      console.log('[translationService] AI 断句对齐已关闭，跳过');
+      logger.info('AI 断句对齐已关闭，跳过');
       toast.success(`${file.name} 翻译完成`);
       const tokens = useFilesStore.getState().getFile(fileId)?.tokensUsed || 0;
       const finalTask = useFilesStore.getState().tasks.find(t => t.taskId === file.taskId);
@@ -166,11 +167,11 @@ export async function startTranslation(
       );
 
       if (entriesToProcess.length === 0) {
-        console.log('[translationService] 无需拆分的字幕');
+        logger.info('无需拆分的字幕');
         useFilesStore.getState().updatePhase(fileId, 'splitting', { status: 'completed', progress: 100 });
         splitSucceeded = true;
       } else {
-        console.log('[translationService] 开始 LLM 断句对齐...');
+        logger.info('开始 LLM 断句对齐...');
 
         // 恢复断句对齐进度（断点续跑时保持已有进度）
         const restoredSplitProgress = file.phases.splitting.progress > 0 ? file.phases.splitting.progress : 0;
@@ -288,7 +289,7 @@ export async function startTranslation(
 
             const translations = alignParsed.translations || [];
             if (translations.length !== parsed.sourceParts.length) {
-              console.warn(`[translationService] 对齐结果数量不匹配，跳过条目 ${entry.id}`);
+              logger.warn(`对齐结果数量不匹配，跳过条目 ${entry.id}`);
               return { success: false, tokens: entryTokens };
             }
 
@@ -382,7 +383,7 @@ export async function startTranslation(
 
             return { success: true, tokens: entryTokens };
           } catch (error) {
-            console.warn(`[translationService] 原子 split+align 失败，条目 ${entry.id}:`, error);
+            logger.warn(`原子 split+align 失败，条目 ${entry.id}:`, error);
             return { success: false, tokens: 0 };
           }
         };
@@ -439,10 +440,10 @@ export async function startTranslation(
           tokens: totalTokens,
         });
         splitSucceeded = true;
-        console.log('[translationService] LLM 断句对齐完成');
+        logger.info('LLM 断句对齐完成');
       }
     } catch (splitAlignError) {
-      console.warn('[translationService] LLM 断句对齐失败，保留原始翻译:', splitAlignError);
+      logger.warn('LLM 断句对齐失败，保留原始翻译:', splitAlignError);
       useFilesStore.getState().updatePhase(fileId, 'splitting', { status: 'failed', progress: 0 });
     }
 
@@ -456,11 +457,11 @@ export async function startTranslation(
     const finalTask = useFilesStore.getState().tasks.find(t => t.taskId === file.taskId);
     const lastEntries = finalTask?.subtitle_entries || entries;
     const finalPhases = useFilesStore.getState().getFile(fileId)?.phases;
-    console.log(`[translationService] 任务完成，总消耗 ${finalTokens} tokens`);
+    logger.info(`任务完成，总消耗 ${finalTokens} tokens`);
     return { tokens: finalTokens, entries: lastEntries, phases: finalPhases! };
   } catch (error) {
     const appError = toAppError(error, '翻译失败');
-    console.error('[translationService]', appError.message, appError);
+    logger.error(appError.message, appError);
     toast.error(`翻译失败: ${appError.message}`);
 
     const phases = useFilesStore.getState().getFile(fileId)?.phases;

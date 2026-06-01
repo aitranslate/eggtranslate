@@ -11,6 +11,7 @@ import { jsonrepair } from 'jsonrepair';
 import { generateSharedPrompt, generateDirectPrompt } from '@/utils/translationPrompts';
 import toast from 'react-hot-toast';
 import { toAppError } from '@/utils/errors';
+import { logger } from '@/utils/logger';
 
 // ============================================
 // 类型定义
@@ -126,7 +127,7 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
           return true;
         } catch (error) {
           const appError = toAppError(error, '连接测试失败');
-          console.error('[translationConfigStore]', appError.message, appError);
+          logger.error(appError.message, appError);
           toast.error(`连接测试失败: ${appError.message}`);
           return false;
         }
@@ -234,7 +235,7 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
             validateTranslationResult(directResult, texts);
             return { translations: directResult, tokensUsed: directTokensUsed };
           } catch (error) {
-            console.error(`[translationConfigStore] 批次翻译失败（第${attempt}次尝试）:`, error);
+            logger.error(`批次翻译失败（第${attempt}次尝试）:`, error);
             if (attempt === 3) throw error;
           }
         }

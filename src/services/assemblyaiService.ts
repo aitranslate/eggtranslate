@@ -6,6 +6,7 @@ import { useTranscriptionStore } from "@/stores/transcriptionStore";
 import { convertToMP3 } from "@/utils/convertToMP3";
 import { type AssemblyAISentence } from "@/utils/subtitleSegmentation";
 import { semanticSegment } from "@/utils/semanticSegmentation";
+import { logger } from "@/utils/logger";
 
 /**
  * AssemblyAI 转录服务
@@ -54,7 +55,7 @@ export class AssemblyAIService {
         const mp3Blob = await convertToMP3(mediaFile);
         audioFile = new File([mp3Blob], 'audio.mp3', { type: 'audio/mpeg' });
       } catch (convertError) {
-        console.warn('[AssemblyAI] MP3 转码失败，使用原文件上传:', convertError);
+        logger.warn('MP3 转码失败，使用原文件上传:', convertError);
         audioFile = mediaFile;
       }
 
@@ -80,7 +81,7 @@ export class AssemblyAIService {
 
     } catch (error) {
       const appError = toAppError(error, 'ASR 转录失败');
-      console.error('[AssemblyAI]', appError.message, appError);
+      logger.error(appError.message, appError);
       throw appError;
     }
   }
@@ -104,16 +105,16 @@ export class AssemblyAIService {
       onProgress?.('converting', 5);
       let audioFile: File;
       try {
-        console.log('[AssemblyAI] 开始 MP3 转码，原文件大小:', (mediaFile.size / 1024 / 1024).toFixed(2), 'MB');
+        logger.info('开始 MP3 转码，原文件大小:', (mediaFile.size / 1024 / 1024).toFixed(2), 'MB');
         const mp3Blob = await convertToMP3(mediaFile);
         audioFile = new File([mp3Blob], 'audio.mp3', { type: 'audio/mpeg' });
-        console.log('[AssemblyAI] MP3 转码完成，新文件大小:', (audioFile.size / 1024 / 1024).toFixed(2), 'MB');
+        logger.info('MP3 转码完成，新文件大小:', (audioFile.size / 1024 / 1024).toFixed(2), 'MB');
       } catch (convertError) {
-        console.warn('[AssemblyAI] MP3 转码失败，使用原文件上传:', convertError);
+        logger.warn('MP3 转码失败，使用原文件上传:', convertError);
         audioFile = mediaFile;
       }
 
-      console.log('[AssemblyAI] 开始上传并转录（获取单词级别时间戳）...');
+      logger.info('开始上传并转录（获取单词级别时间戳）...');
       onProgress?.('transcribing', 10);
 
       const transcript = await client.transcripts.transcribe({
@@ -123,7 +124,7 @@ export class AssemblyAIService {
         keyterms_prompt: options.keyterms || ASSEMBLYAI_CONFIG.defaultKeyterms
       });
 
-      console.log('[AssemblyAI] 转录完成，语言代码:', transcript.language_code);
+      logger.info('转录完成，语言代码:', transcript.language_code);
 
       // 3. 轮询状态直到完成
       while (transcript.status === 'queued' || transcript.status === 'processing') {
@@ -137,7 +138,7 @@ export class AssemblyAIService {
         throw new Error(`Transcription failed: ${transcript.error}`);
       }
 
-      console.log('[AssemblyAI] 转录完成，开始智能断句...');
+      logger.info('转录完成，开始智能断句...');
 
       // 4. 转换单词级别时间戳为标准格式
       const languageCode = transcript.language_code || 'en';
@@ -152,7 +153,7 @@ export class AssemblyAIService {
       onProgress?.('segmenting', 80);
       const segments = semanticSegment(words, 'transcribe_translate');
 
-      console.log('[AssemblyAI] 语义断句完成，共', segments.length, '个句子，语言代码:', languageCode);
+      logger.info('语义断句完成，共', segments.length, '个句子，语言代码:', languageCode);
 
       onProgress?.('completed', 100);
 
@@ -172,7 +173,7 @@ export class AssemblyAIService {
 
     } catch (error) {
       const appError = toAppError(error, 'ASR 转录失败');
-      console.error('[AssemblyAI]', appError.message, appError);
+      logger.error(appError.message, appError);
       throw appError;
     }
   }

@@ -4,6 +4,7 @@
  * 主线程：AudioContext.decodeAudioData（浏览器限制必须在主线程）
  * Worker：降采样 + MP3 编码（纯计算，不阻塞 UI）
  */
+import { logger } from '@/utils/logger';
 
 type AudioContextCtor = typeof AudioContext;
 interface AudioContextWindow {
@@ -74,7 +75,7 @@ export async function convertToMP3(
 
     return result;
   } catch (error) {
-    console.error('转码失败:', error);
+    logger.error('转码失败:', error);
     throw error;
   } finally {
     await audioCtx.close();

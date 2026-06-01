@@ -4,6 +4,7 @@
  */
 
 import { toAppError } from '@/utils/errors';
+import { logger } from '@/utils/logger';
 
 /**
  * 导出文本文件
@@ -28,7 +29,7 @@ export const downloadTextFile = (
     URL.revokeObjectURL(url);
   } catch (error) {
     const appError = toAppError(error, '文件导出失败');
-    console.error('[fileExport]', appError.message, appError);
+    logger.error(appError.message, appError);
     throw appError;
   }
 };
@@ -78,7 +79,7 @@ export const downloadZipFile = (blob: Blob, filename: string): void => {
     URL.revokeObjectURL(url);
   } catch (error) {
     const appError = toAppError(error, 'ZIP文件导出失败');
-    console.error('[fileExport]', appError.message, appError);
+    logger.error(appError.message, appError);
     throw appError;
   }
 };

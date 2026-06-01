@@ -10,6 +10,7 @@ import { startTranscription } from './transcriptionService';
 import { startTranslation } from './translationService';
 import { saveTranslationHistory } from './TranslationOrchestrator';
 import type { SubtitleFileMetadata } from '@/types';
+import { logger } from '@/utils/logger';
 
 function isTaskCompleted(file: SubtitleFileMetadata): boolean {
   const isSrt = file.fileType === 'srt' || !file.fileType;
@@ -32,7 +33,7 @@ export function enqueueTask(fileId: string): void {
     // Defer to microtask so synchronous callers can observe the enqueued item
     // before processing starts and removes it from the head of the queue.
     queueMicrotask(() => {
-      processNext().catch((err) => console.error('[queueService] processNext failed:', err));
+      processNext().catch((err) => logger.error('processNext failed:', err));
     });
   }
 }
@@ -43,7 +44,7 @@ export function dequeueTask(fileId: string): void {
 
   if (queue.activeTaskId === fileId) {
     useQueueStore.getState().setActiveTaskId(null);
-    processNext().catch((err) => console.error('[queueService] processNext failed:', err));
+    processNext().catch((err) => logger.error('processNext failed:', err));
   }
 }
 
@@ -63,7 +64,7 @@ export async function processNext(): Promise<void> {
     const file = useFilesStore.getState().getFile(fileId);
     if (file) await runTask(file);
   } catch (error) {
-    console.error('[queueService] processNext task failed:', error);
+    logger.error('processNext task failed:', error);
   } finally {
     await finishTask(fileId);
   }

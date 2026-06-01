@@ -13,6 +13,7 @@ import {
   ErrorContext,
   LogLevel
 } from '@/utils/errors';
+import { logger } from '@/utils/logger';
 
 /**
  * 错误处理选项
@@ -75,22 +76,22 @@ export function useErrorHandler() {
 
     switch (level) {
       case LogLevel.DEBUG:
-        console.debug('[DEBUG]', message, error);
+        logger.debug('[DEBUG]', message, error);
         break;
       case LogLevel.INFO:
-        console.info('[INFO]', message, error);
+        logger.info('[INFO]', message, error);
         break;
       case LogLevel.WARN:
-        console.warn('[WARN]', message, error);
+        logger.warn('[WARN]', message, error);
         break;
       case LogLevel.ERROR:
-        console.error('[ERROR]', message, error);
+        logger.error('[ERROR]', message, error);
         break;
     }
 
     // 记录额外上下文
     if (context?.details) {
-      console.log('[ERROR Details]', context.details);
+      logger.error('[ERROR Details]', context.details);
     }
   }, []);
 

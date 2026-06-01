@@ -6,6 +6,7 @@ import { getSourceLimit, getTargetLimit } from '@/utils/subtitleLengthPresets';
 import { jsonrepair } from 'jsonrepair';
 import type { SubtitleLengthPreset, LLMSourceSplitResult, LLMAlignResult } from '@/types/transcription';
 import type { SubtitleEntry } from '@/types';
+import { logger } from '@/utils/logger';
 
 const OBVIOUS_OVERLONG_RATIO = 1.5;
 
@@ -34,7 +35,7 @@ function safeParseJSON<T>(content: string): T {
     return JSON.parse(content);
   } catch {
     // 使用 jsonrepair 修复（处理 ```json ... ``` 等情况）
-    console.warn('[llmSplitAlign] LLM 返回非标准 JSON，使用 jsonrepair 修复');
+    logger.warn('LLM 返回非标准 JSON，使用 jsonrepair 修复');
     const repaired = jsonrepair(content);
     return JSON.parse(repaired);
   }

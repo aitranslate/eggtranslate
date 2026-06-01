@@ -8,6 +8,7 @@ import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { runTranscriptionPipeline } from './transcriptionPipeline';
 import { convertToMP3 } from '@/utils/convertToMP3';
 import { toAppError } from '@/utils/errors';
+import { logger } from '@/utils/logger';
 import toast from 'react-hot-toast';
 import localforage from 'localforage';
 
@@ -16,7 +17,7 @@ export async function startTranscription(fileId: string): Promise<void> {
   if (!file || file.fileType === 'srt') return;
 
   if (file.phases.transcribing.status === 'completed') {
-    console.log('[transcriptionService] 转录已完成，跳过');
+    logger.info('转录已完成，跳过');
     return;
   }
 
@@ -27,7 +28,7 @@ export async function startTranscription(fileId: string): Promise<void> {
       const savedMp3 = await localforage.getItem<Blob>(`mp3_data:${file.taskId}`);
       if (savedMp3) {
         mediaFile = new File([savedMp3], 'audio.mp3', { type: 'audio/mpeg' });
-        console.log('[transcriptionService] 从 IndexedDB 恢复 MP3 用于转录');
+        logger.info('从 IndexedDB 恢复 MP3 用于转录');
       }
     }
 
@@ -57,7 +58,7 @@ export async function startTranscription(fileId: string): Promise<void> {
     let mp3Blob: Blob;
 
     if (file.phases.converting.status === 'completed') {
-      console.log('[transcriptionService] 转码已完成，使用已保存的 MP3');
+      logger.info('转码已完成，使用已保存的 MP3');
       mp3Blob = await localforage.getItem<Blob>(`mp3_data:${file.taskId}`);
       if (!mp3Blob) {
         toast.error('MP3 数据丢失，请重新上传');
@@ -69,7 +70,7 @@ export async function startTranscription(fileId: string): Promise<void> {
         mp3Blob = await convertToMP3(mediaFile);
       } catch (error) {
         const appError = toAppError(error, '音频转码失败');
-        console.error('[transcriptionService]', appError.message, appError);
+        logger.error(appError.message, appError);
         toast.error(`转码失败: ${appError.message}`);
         useFilesStore.getState().updatePhase(fileId, 'converting', { status: 'failed', progress: 0 });
         return;
@@ -144,7 +145,7 @@ export async function startTranscription(fileId: string): Promise<void> {
     toast.success(`转录完成！生成 ${result.entries.length} 条字幕`);
   } catch (error) {
     const appError = toAppError(error, '转录失败');
-    console.error('[transcriptionService]', appError.message, appError);
+    logger.error(appError.message, appError);
     toast.error(`转录失败: ${appError.message}`);
 
     const phases = useFilesStore.getState().getFile(fileId)?.phases;

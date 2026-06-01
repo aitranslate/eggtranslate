@@ -12,6 +12,7 @@ import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { loadFromFile, removeMp3Data } from './SubtitleFileManager';
 import { toAppError } from '@/utils/errors';
+import { logger } from '@/utils/logger';
 import toast from 'react-hot-toast';
 
 export async function addFile(file: File): Promise<string> {
@@ -31,7 +32,7 @@ export async function addFile(file: File): Promise<string> {
     return result.metadata.id;
   } catch (error) {
     const appError = toAppError(error, '文件加载失败');
-    console.error('[filesService]', appError.message, appError);
+    logger.error(appError.message, appError);
     toast.error(`文件加载失败: ${appError.message}`);
     throw error;
   }
@@ -60,7 +61,7 @@ export async function removeFile(fileId: string, _file?: File): Promise<void> {
     toast.success('文件已删除');
   } catch (error) {
     const appError = toAppError(error, '删除文件失败');
-    console.error('[filesService]', appError.message, appError);
+    logger.error(appError.message, appError);
     toast.error('删除文件失败');
   }
 }
@@ -83,7 +84,7 @@ export async function clearAll(): Promise<void> {
     }
   } catch (error) {
     const appError = toAppError(error, '清空数据失败');
-    console.error('[filesService]', appError.message, appError);
+    logger.error(appError.message, appError);
     toast.error('清空数据失败');
   }
 }

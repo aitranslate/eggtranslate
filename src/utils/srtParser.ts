@@ -1,6 +1,7 @@
 import SRTParser2 from 'srt-parser-2';
 import { SubtitleEntry } from '@/types';
 import { toAppError } from '@/utils/errors';
+import { logger } from '@/utils/logger';
 
 // SRTParser2 返回的类型接口
 interface SRTParserResult {
@@ -35,7 +36,7 @@ export const parseSRT = (srtContent: string): SubtitleEntry[] => {
     }));
   } catch (error) {
     const appError = toAppError(error, 'SRT解析失败');
-    console.error('[srtParser]', appError.message, appError);
+    logger.error(appError.message, appError);
     throw new Error('无效的SRT文件格式');
   }
 };

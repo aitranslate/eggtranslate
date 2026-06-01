@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import './index.css'
 import App from './App.tsx'
+import { logger } from '@/utils/logger'
 
 // zustand/persist 中间件自动加载 terms、history 和 subtitle
 async function initializeApp() {
@@ -18,7 +19,7 @@ initializeApp().then(() => {
     </StrictMode>,
   )
 }).catch(error => {
-  console.error('[main] 应用初始化失败', error)
+  logger.error('应用初始化失败', error)
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <ErrorBoundary>
