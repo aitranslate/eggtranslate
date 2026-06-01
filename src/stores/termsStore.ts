@@ -1,10 +1,10 @@
 import { create } from 'zustand';
-import { Term } from '@/types';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import type { Term } from '@/types';
 import localforage from 'localforage';
 
 interface TermsState {
   terms: Term[];
-  loadTerms: () => Promise<void>;
   addTerm: (term: Term) => Promise<void>;
   updateTerm: (index: number, term: Term) => Promise<void>;
   deleteTerm: (index: number) => Promise<void>;
@@ -12,34 +12,47 @@ interface TermsState {
   clearTerms: () => Promise<void>;
 }
 
-export const useTermsStore = create<TermsState>((set, get) => ({
-  terms: [],
-  loadTerms: async () => {
-    const terms = await localforage.getItem<Term[]>('terms_list') || [];
-    set({ terms });
-  },
-  addTerm: async (term) => {
-    const newTerms = [...get().terms, term];
-    set({ terms: newTerms });
-    await localforage.setItem('terms_list', newTerms);
-  },
-  updateTerm: async (index, term) => {
-    const newTerms = [...get().terms];
-    newTerms[index] = term;
-    set({ terms: newTerms });
-    await localforage.setItem('terms_list', newTerms);
-  },
-  deleteTerm: async (index) => {
-    const newTerms = get().terms.filter((_, i) => i !== index);
-    set({ terms: newTerms });
-    await localforage.setItem('terms_list', newTerms);
-  },
-  saveTerms: async (terms) => {
-    set({ terms });
-    await localforage.setItem('terms_list', terms);
-  },
-  clearTerms: async () => {
-    set({ terms: [] });
-    await localforage.setItem('terms_list', []);
-  },
-}));
+export const useTermsStore = create<TermsState>()(
+  persist(
+    (set, get) => ({
+      terms: [],
+
+      addTerm: async (term) => {
+        set({ terms: [...get().terms, term] });
+      },
+
+      updateTerm: async (index, term) => {
+        const newTerms = [...get().terms];
+        newTerms[index] = term;
+        set({ terms: newTerms });
+      },
+
+      deleteTerm: async (index) => {
+        set({ terms: get().terms.filter((_, i) => i !== index) });
+      },
+
+      saveTerms: async (terms) => {
+        set({ terms });
+      },
+
+      clearTerms: async () => {
+        set({ terms: [] });
+      },
+    }),
+    {
+      name: 'terms_list',
+      storage: createJSONStorage(() => localforage),
+      version: 1,
+      // 迁移：旧格式是 Term[] 直接存储，新格式是 {state: {terms: Term[]}}
+      migrate: (persistedState: unknown, version: number) => {
+        if (version === 0 && Array.isArray(persistedState)) {
+          return { terms: persistedState as Term[] };
+        }
+        if (persistedState && typeof persistedState === 'object' && 'terms' in persistedState) {
+          return persistedState as { terms: Term[] };
+        }
+        return { terms: [] };
+      },
+    }
+  )
+);

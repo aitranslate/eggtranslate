@@ -4,16 +4,9 @@ import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import './index.css'
 import App from './App.tsx'
 
-import { useTermsStore } from './stores/termsStore'
-import { useHistoryStore } from './stores/historyStore'
-
-// 应用启动时加载数据到 Zustand
-// subtitleStore 使用 persist 中间件，自动从 localforage 恢复
+// zustand/persist 中间件自动加载 terms、history 和 subtitle
 async function initializeApp() {
-  await Promise.all([
-    useTermsStore.getState().loadTerms(),
-    useHistoryStore.getState().loadHistory(),
-  ]);
+  await Promise.resolve();
 }
 
 initializeApp().then(() => {
