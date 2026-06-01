@@ -113,7 +113,7 @@ const ConnectingLine: React.FC<{
 export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId }) => {
   const file = useFile(fileId);
   const aiSegmentationEnabled = useTranscriptionStore(state => state.aiSegmentationEnabled);
-  const [showTooltip, setShowTooltip] = useState(false);
+  const [hoveredPhase, setHoveredPhase] = useState<ProgressPhase | null>(null);
 
   // 决定显示哪些阶段节点（根据文件类型过滤）
   const displayPhases = useMemo(() => {
@@ -211,8 +211,8 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId }) => {
                       ? { duration: 2, repeat: Infinity, ease: 'easeOut' }
                       : { duration: 0.3 }
                   }
-                  onMouseEnter={() => setShowTooltip(true)}
-                  onMouseLeave={() => setShowTooltip(false)}
+                  onMouseEnter={() => setHoveredPhase(phase)}
+                  onMouseLeave={() => setHoveredPhase(null)}
                 >
                   {isCompleted && (
                     <motion.div
@@ -244,7 +244,7 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId }) => {
                   totalEntries={phaseState.totalEntries}
                   language={phaseState.language}
                   errorMessage={phaseState.errorMessage}
-                  isVisible={showTooltip}
+                  isVisible={hoveredPhase === phase}
                 />
 
                 <span
