@@ -83,6 +83,35 @@ setSelectedKeytermGroupId: (fileId: string, groupId: string | null) => void;
 
 实现：找到 task，更新 `selectedKeytermGroupId` 字段。
 
+### 新增全局默认（设置层）
+
+在 `useTranscriptionStore` 新增字段：
+```ts
+defaultKeytermGroupId: string | null;  // 新任务的默认值
+setDefaultKeytermGroupId: (id: string | null) => void;
+```
+
+**语义：**
+- 用户在设置中"选中"某个分组（无论是查看还是编辑）时，这个分组的 ID 存到这里
+- 新建任务时，如果 `keytermsEnabled === true` 且 `defaultKeytermGroupId` 非空 → `selectedKeytermGroupId = defaultKeytermGroupId`
+- 否则 → `selectedKeytermGroupId = null`
+- **已存在的任务保留自己的 `selectedKeytermGroupId`，不受全局默认影响**
+
+### 文件添加时默认值（`filesService.addFile`）
+
+```ts
+const transcriptionStore = useTranscriptionStore.getState();
+const defaultGroupId = transcriptionStore.keytermsEnabled
+  ? transcriptionStore.defaultKeytermGroupId
+  : null;
+
+const taskWithRef = {
+  ...result.task,
+  fileRef: file,
+  selectedKeytermGroupId: defaultGroupId,  // ← 新增字段
+};
+```
+
 ## UI 变化
 
 ### 任务卡片头部（SubtitleFileItem）
