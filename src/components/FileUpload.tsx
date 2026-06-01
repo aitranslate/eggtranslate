@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useRef } from 'react';
 import { Upload, FileText } from 'lucide-react';
-import { useSubtitleStore } from '@/stores/subtitleStore';
+import { addFile } from '@/services/filesService';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -10,7 +10,6 @@ interface FileUploadProps {
 }
 
 export const FileUpload: React.FC<FileUploadProps> = ({ className }) => {
-  const addFile = useSubtitleStore((state) => state.addFile);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -31,7 +30,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ className }) => {
         context: { operation: '加载文件', fileName: file.name }
       });
     }
-  }, [addFile, handleError]);
+  }, [handleError]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

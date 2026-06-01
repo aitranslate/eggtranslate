@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useRef } from 'react';
 import { Upload, FileText, CheckCircle } from 'lucide-react';
-import { useSubtitleStore } from '@/stores/subtitleStore';
+import { addFile } from '@/services/filesService';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -10,7 +10,6 @@ interface BatchFileUploadProps {
 }
 
 export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) => {
-  const addFile = useSubtitleStore((state) => state.addFile);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,7 +37,7 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
     } finally {
       setIsUploading(false);
     }
-  }, [addFile, handleError]);
+  }, [handleError]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
