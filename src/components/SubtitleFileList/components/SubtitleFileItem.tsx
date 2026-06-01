@@ -146,35 +146,35 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
       {/* 2. Progress area (stepper) */}
       <StepperProgress fileId={file.id} />
 
-      {/* 3. Footer: keyterm dropdown + action buttons */}
-      <div className="flex items-center justify-between border-t pt-4" style={{ borderColor: '#E5E5EA' }}>
-        <KeytermDropdown
-          fileId={file.id}
-          fileSelectedGroupId={file.selectedKeytermGroupId}
-          keytermGroups={keytermGroups.map(g => ({ id: g.id, name: g.name }))}
-          keytermsEnabled={keytermsEnabled}
-          onChange={(groupId) => setSelectedKeytermGroupId(file.id, groupId)}
-        />
-        <FileActionButtons
-          file={file}
-          isTranslating={isActive}
-          translationStats={{
-            percentage: (file.entryCount ?? 0) > 0
-              ? Math.round(((file.translatedCount ?? 0) / (file.entryCount ?? 1)) * 100)
-              : 0,
-          }}
-          isQueued={isQueued}
-          queuePosition={queuePosition}
-          isActive={isActive}
-          onTranscribeAndTranslate={() => onTranscribeAndTranslate(file)}
-          onTranscribe={() => onTranscribe(file.id)}
-          onDequeue={() => onDequeue(file.id)}
-          onStartTranslation={() => onStartTranslation(file)}
-          onEdit={() => onEdit(file)}
-          onExport={handleExport}
-          onDelete={handleDelete}
-        />
-      </div>
+      {/* 3. Footer: action buttons (keyterm dropdown slots into secondary group) */}
+      <FileActionButtons
+        file={file}
+        isTranslating={isActive}
+        translationStats={{
+          percentage: (file.entryCount ?? 0) > 0
+            ? Math.round(((file.translatedCount ?? 0) / (file.entryCount ?? 1)) * 100)
+            : 0,
+        }}
+        isQueued={isQueued}
+        queuePosition={queuePosition}
+        isActive={isActive}
+        keytermDropdown={
+          <KeytermDropdown
+            fileId={file.id}
+            fileSelectedGroupId={file.selectedKeytermGroupId}
+            keytermGroups={keytermGroups.map(g => ({ id: g.id, name: g.name }))}
+            keytermsEnabled={keytermsEnabled}
+            onChange={(groupId) => setSelectedKeytermGroupId(file.id, groupId)}
+          />
+        }
+        onTranscribeAndTranslate={() => onTranscribeAndTranslate(file)}
+        onTranscribe={() => onTranscribe(file.id)}
+        onDequeue={() => onDequeue(file.id)}
+        onStartTranslation={() => onStartTranslation(file)}
+        onEdit={() => onEdit(file)}
+        onExport={handleExport}
+        onDelete={handleDelete}
+      />
     </motion.div>
   );
 };

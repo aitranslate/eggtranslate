@@ -20,6 +20,7 @@ interface FileActionButtonsProps {
   onEdit: () => void;
   onExport: () => void;
   onDelete: () => void;
+  keytermDropdown?: React.ReactNode;
 }
 
 export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
@@ -36,6 +37,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
   onEdit,
   onExport,
   onDelete,
+  keytermDropdown,
 }) => {
   const isTranscribing = useMemo(() =>
     file.phases.converting.status === 'active' ||
@@ -75,9 +77,10 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
   const showTranslateButton = true;
 
   return (
-    <div className="flex items-center gap-3">
-      {/* Secondary actions: edit, export, delete */}
+    <div className="flex items-center justify-between border-t pt-4" style={{ borderColor: '#E5E5EA' }}>
+      {/* Secondary actions: keyterm dropdown, edit, export, delete */}
       <div className="flex items-center gap-2">
+        {keytermDropdown}
         <button
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
           className="flex items-center justify-center w-8 h-8 rounded-md transition-all duration-200 hover:bg-gray-100 text-gray-500 hover:text-gray-900"
