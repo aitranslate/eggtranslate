@@ -5,11 +5,19 @@
  * Worker：降采样 + MP3 编码（纯计算，不阻塞 UI）
  */
 
+type AudioContextCtor = typeof AudioContext;
+interface AudioContextWindow {
+  AudioContext: AudioContextCtor;
+  webkitAudioContext: AudioContextCtor;
+}
+
 export async function convertToMP3(
   file: File,
   onProgress?: (progress: number) => void
 ): Promise<Blob> {
-  const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const w = window as unknown as AudioContextWindow;
+  const AudioContextCtor = w.AudioContext || w.webkitAudioContext;
+  const audioCtx = new AudioContextCtor();
 
   try {
     // 1. 主线程解码（浏览器 API，无法移到 Worker）
