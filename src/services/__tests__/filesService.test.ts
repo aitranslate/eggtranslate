@@ -40,6 +40,7 @@ const makeSingleTask = (overrides: Partial<SingleTask> = {}): SingleTask => ({
   index: 0,
   fileType: 'srt',
   fileSize: 100,
+  selectedKeytermGroupId: overrides.selectedKeytermGroupId ?? null,
   ...overrides,
 });
 

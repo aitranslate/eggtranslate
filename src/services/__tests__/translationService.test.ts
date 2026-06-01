@@ -23,6 +23,7 @@ const makeFile = (
   fileSize: 100,
   subtitle_entries: [],
   index: 0,
+  selectedKeytermGroupId: null,
   phases: {
     workflow: 'translate',
     converting: { status: 'completed', progress: 100, tokens: 0 },
