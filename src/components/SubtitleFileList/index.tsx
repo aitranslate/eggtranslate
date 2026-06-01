@@ -194,12 +194,3 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     </div>
   );
 };
-
-function formatTime(ms: number): string {
-  const date = new Date(ms);
-  const hours = String(Math.floor(ms / 3600000)).padStart(2, '0');
-  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-  const seconds = String(date.getUTCSeconds()).padStart(2, '0');
-  const milliseconds = String(date.getUTCMilliseconds()).padStart(3, '0');
-  return `${hours}:${minutes}:${seconds}.${milliseconds}`;
-}
