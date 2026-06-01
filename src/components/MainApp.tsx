@@ -14,6 +14,7 @@ import { SettingsModal } from './SettingsModal';
 import { TermsManager } from './TermsManager';
 import { HistoryModal } from './HistoryModal';
 import { HelpButton } from './HelpButton';
+import { PWAInstallBanner } from './PWAInstallBanner';
 import { GuideModal } from './GuideModal';
 import { useFiles } from '@/stores/filesStore';
 import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
@@ -197,6 +198,7 @@ export const MainApp: React.FC = () => {
         fileId={editingFileId || ''}
       />
       <HelpButton onClick={() => setIsGuideOpen(true)} />
+      <PWAInstallBanner />
     </div>
   );
 };
