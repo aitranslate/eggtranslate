@@ -195,7 +195,7 @@ describe('transcriptionService.startTranscription', () => {
       tasks: [makeTask(makeFile({
         fileRef: mediaFile,
         selectedKeytermGroupId: 'group-medical'
-      }))] as any,
+      }))],
     });
     useTranscriptionStore.setState({
       apiKeys: 'test-key',
@@ -226,7 +226,7 @@ describe('transcriptionService.startTranscription', () => {
       tasks: [makeTask(makeFile({
         fileRef: mediaFile,
         selectedKeytermGroupId: null
-      }))] as any,
+      }))],
     });
     useTranscriptionStore.setState({
       apiKeys: 'test-key',
@@ -253,7 +253,7 @@ describe('transcriptionService.startTranscription', () => {
       tasks: [makeTask(makeFile({
         fileRef: mediaFile,
         selectedKeytermGroupId: 'g1'
-      }))] as any,
+      }))],
     });
     useTranscriptionStore.setState({
       apiKeys: 'test-key',
@@ -280,7 +280,7 @@ describe('transcriptionService.startTranscription', () => {
       tasks: [makeTask(makeFile({
         fileRef: mediaFile,
         selectedKeytermGroupId: 'non-existent-id'
-      }))] as any,
+      }))],
     });
     useTranscriptionStore.setState({
       apiKeys: 'test-key',
