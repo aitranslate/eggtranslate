@@ -1,6 +1,6 @@
 // 导入 SubtitleEntry 类型以避免循环依赖
 import type { SubtitleEntry } from './index';
-import type { FilePhases } from './progress';
+import type { FilePhases } from './index';
 
 // 热词分组
 export interface KeytermGroup {

@@ -1,8 +1,9 @@
 // 翻译状态类型
 export type TranslationStatus = 'pending' | 'completed';
 
-// 文件类型（从 transcription.ts 导出）
-export type { FileType } from './transcription';
+// 文件类型（从 transcription.ts 导入并导出）
+import type { FileType } from './transcription';
+export type { FileType };
 
 // 单词级时间戳
 export interface SubtitleWord {
