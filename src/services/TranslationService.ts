@@ -95,7 +95,7 @@ class TranslationService {
     contextBefore = '',
     contextAfter = '',
     terms = ''
-  ): Promise<{ translations: Record<string, any>; tokensUsed: number }> {
+  ): Promise<{ translations: Record<string, { direct: string }>; tokensUsed: number }> {
     if (!this.config.apiKey) {
       throw new Error('请先配置API密钥');
     }
@@ -112,7 +112,7 @@ class TranslationService {
     // 第一步：直译（带验证重试）
     let directContent: string;
     let directTokensUsed: number;
-    let directResult: any;
+    let directResult: Record<string, { direct: string }>;
 
     // 验证失败时重试（最多3次机会）
     // 重试策略：逐次提高温度 + 强调格式要求
@@ -219,7 +219,7 @@ class TranslationService {
    * @throws Error 验证失败时抛出错误
    */
   private validateTranslationResult(
-    result: Record<string, any>,
+    result: Record<string, { direct: string }>,
     originalTexts: string[]
   ): void {
     const expectedKeys = originalTexts.map((_, i) => String(i + 1));
