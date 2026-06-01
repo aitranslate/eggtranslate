@@ -6,7 +6,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { KeytermGroup, SubtitleLengthPreset } from '@/types/transcription';
-import localforage from 'localforage';
 
 interface TranscriptionStore {
   apiKeys: string;
@@ -36,7 +35,7 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
 
       updateKeytermGroups: async (groups) => {
         set({ keytermGroups: groups });
-        await localforage.setItem('transcription_config', { keytermGroups: groups });
+        // zustand/persist 中间件已自动持久化到 'transcription-storage'
       },
 
       setKeytermsEnabled: (enabled) => {
