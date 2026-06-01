@@ -3,7 +3,7 @@ import { useTranslationConfigStore, useTranslationConfig } from '@/stores/transl
 import { useKeytermGroups, useUpdateKeytermGroups } from '@/stores/transcriptionStore';
 import { TranslationSettings } from './SettingsModal/TranslationSettings';
 import { TranscriptionSettings } from './TranscriptionSettings';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, TestTube, Settings as SettingsIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -121,22 +121,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+        onClick={onClose}
       >
-        <div className="flex items-center justify-between mb-6">
+      <motion.div
+        initial={{ scale: 0.92, y: 24, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        exit={{ scale: 0.95, y: 8, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 280, damping: 28 }}
+        className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05, duration: 0.3 }}
+          className="flex items-center justify-between mb-6"
+        >
           <h2 className="apple-heading-medium">设置</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors active:scale-90"
           >
             <X className="h-5 w-5 text-gray-500" />
           </button>
-        </div>
+        </motion.div>
 
         {/* 标签页切换 */}
         <div className="flex gap-2 mb-6 bg-gray-100 p-1 rounded-xl">
@@ -177,7 +192,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 <button
                   onClick={onTestConnection}
                   disabled={isTesting || !formData.apiKey}
-                  className="apple-button apple-button-secondary px-6 py-2.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="apple-button apple-button-secondary px-6 py-2.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97]"
                 >
                   <TestTube className={`h-4 w-4 ${isTesting ? 'animate-spin' : ''}`} />
                   <span>{isTesting ? '测试中...' : '测试连接'}</span>
@@ -187,13 +202,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 <div className="flex gap-3">
                   <button
                     onClick={onClose}
-                    className="apple-button apple-button-ghost px-6 py-2.5 text-sm"
+                    className="apple-button apple-button-ghost px-6 py-2.5 text-sm active:scale-[0.97]"
                   >
                     取消
                   </button>
                   <button
                     onClick={onSave}
-                    className="apple-button px-6 py-2.5 text-sm"
+                    className="apple-button px-6 py-2.5 text-sm active:scale-[0.97]"
                   >
                     <Save className="h-4 w-4" />
                     <span>保存设置</span>
@@ -206,6 +221,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           )}
         </div>
       </motion.div>
-    </div>
+      </motion.div>
+    </AnimatePresence>
   );
 };

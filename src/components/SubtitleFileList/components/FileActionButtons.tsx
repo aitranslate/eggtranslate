@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { Languages, Mic, Wand2, Edit3, Download, Trash2 } from 'lucide-react';
 import { SubtitleFileMetadata } from '@/types';
 import { canRetranscribe } from '@/utils/fileUtils';
@@ -84,31 +85,40 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
         >
           <Edit3 className="w-4 h-4" />
         </button>
-        <button
+        <motion.button
           onClick={(e) => { e.stopPropagation(); onExport(); }}
           disabled={(file.entryCount ?? 0) === 0 || isBusy}
-          className="flex items-center justify-center w-8 h-8 rounded-md transition-all duration-200 hover:bg-gray-100 text-gray-500 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed"
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.92 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+          className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed"
           title="导出"
         >
           <Download className="w-4 h-4" />
-        </button>
-        <button
+        </motion.button>
+        <motion.button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="flex items-center justify-center w-8 h-8 rounded-md transition-all duration-200 hover:bg-red-50 text-red-500 hover:text-red-600"
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.92 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+          className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-red-50 text-red-500 hover:text-red-600"
           title="删除"
         >
           <Trash2 className="w-4 h-4" />
-        </button>
+        </motion.button>
       </div>
 
       {/* Primary actions */}
       <div className="flex items-center gap-3">
         {/* Transcribe only (audio/video, when retranscribe is possible) */}
         {showTranscribeButton && (
-          <button
+          <motion.button
             onClick={(e) => { e.stopPropagation(); onTranscribe(); }}
             disabled={!canTranscribe}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            whileHover={canTranscribe ? { scale: 1.03 } : undefined}
+            whileTap={canTranscribe ? { scale: 0.96 } : undefined}
+            transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               background: canTranscribe ? '#EBF3FF' : '#F2F2F7',
               color: canTranscribe ? '#0066FF' : '#86868B',
@@ -117,12 +127,12 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
             onMouseLeave={(e) => { if (canTranscribe) (e.currentTarget.style.background = '#EBF3FF'); }}
           >
             仅转录
-          </button>
+          </motion.button>
         )}
 
         {/* Primary button: translate or transcribe-and-translate */}
         {showTranslateButton && (
-          <button
+          <motion.button
             onClick={(e) => {
               e.stopPropagation();
               if (isQueued) {
@@ -163,7 +173,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
                 {isAudioVideo && !isTranscriptionDone ? '一键转译' : '开始翻译'}
               </>
             )}
-          </button>
+          </motion.button>
         )}
       </div>
     </div>

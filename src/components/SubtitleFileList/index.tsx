@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trash2 } from 'lucide-react';
+import { Stagger } from '../motion/Stagger';
 import toast from 'react-hot-toast';
 import { downloadZipFile } from '@/utils/fileExport';
 import { exportTaskZip, getBaseName } from '@/services/SubtitleExporter';
@@ -131,7 +132,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
             </div>
           </div>
 
-          <div className="space-y-4">
+          <Stagger className="space-y-4" stagger={0.07}>
             <AnimatePresence>
               {files.map((file, index) => {
                 const isQueued = taskQueue.includes(file.id);
@@ -157,7 +158,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                 );
               })}
             </AnimatePresence>
-          </div>
+          </Stagger>
         </div>
       </motion.div>
 

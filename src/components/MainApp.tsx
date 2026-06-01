@@ -4,6 +4,7 @@ import {
   BookOpen,
   History
 } from 'lucide-react';
+import { motion, useScroll, useTransform } from 'framer-motion';
 import { FileUpload } from './FileUpload';
 import { BatchFileUpload } from './BatchFileUpload';
 import { SubtitleFileList } from './SubtitleFileList';
@@ -20,6 +21,7 @@ import { useHistory } from '@/contexts/HistoryContext';
 import { SubtitleFileMetadata } from '@/types';
 import { useTerms } from '@/contexts/TermsContext';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { FadeIn } from './motion/FadeIn';
 
 // 滚动动画观察器 Hook
 const useScrollAnimation = () => {
@@ -131,30 +133,37 @@ export const MainApp: React.FC = () => {
 
       {/* 主内容区域 */}
       <main className="apple-container apple-section">
-        {/* Hero 区域 - 欢迎标题 */}
-        <div className="apple-animate-on-scroll text-center mb-16 pt-8">
-          <h2 className="apple-heading-hero mb-4">
-            字幕翻译，重新定义
-          </h2>
-          <p className="apple-body-large max-w-2xl mx-auto mb-8">
-            支持音视频转录、SRT 翻译、术语管理。本地处理，隐私安全。
-          </p>
-        </div>
+        {/* Hero 区域 - 字符级 stagger 入场 + scroll parallax */}
+        <ParallaxHero>
+          <div className="text-center mb-16 pt-8">
+            <SplitHeading
+              text="字幕翻译，重新定义"
+              className="apple-heading-hero mb-4"
+            />
+            <FadeIn delay={0.5} y={8}>
+              <p className="apple-body-large max-w-2xl mx-auto mb-8">
+                支持音视频转录、SRT 翻译、术语管理。本地处理，隐私安全。
+              </p>
+            </FadeIn>
+          </div>
+        </ParallaxHero>
 
         {/* 上传区域 - 突出显示 */}
-        <div className="apple-animate-on-scroll apple-delay-100 mb-16">
-          <div className="apple-card-large p-12">
-            <BatchFileUpload />
+        <FadeIn delay={0.7} y={24}>
+          <div className="mb-16">
+            <div className="apple-card-large p-12">
+              <BatchFileUpload />
+            </div>
           </div>
-        </div>
+        </FadeIn>
 
         {/* 文件列表 */}
         {files.length > 0 && (
-          <div className="apple-animate-on-scroll apple-delay-200">
+          <FadeIn delay={0.9} y={16}>
             <SubtitleFileList
               onEditFile={handleEditFile}
             />
-          </div>
+          </FadeIn>
         )}
       </main>
 
@@ -189,5 +198,37 @@ export const MainApp: React.FC = () => {
       />
       <HelpButton onClick={() => setIsGuideOpen(true)} />
     </div>
+  );
+};
+
+/** Hero 滚动视差：背景渐变在滚动时缓慢上移 */
+const ParallaxHero: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollY } = useScroll();
+  const y = useTransform(scrollY, [0, 400], [0, -40]);
+  return (
+    <motion.div ref={ref} style={{ y }}>
+      {children}
+    </motion.div>
+  );
+};
+
+/** 字符级 stagger：每个字依次浮入 */
+const SplitHeading: React.FC<{ text: string; className?: string }> = ({ text, className }) => {
+  return (
+    <h2 className={className}>
+      {text.split('').map((char, i) => (
+        <motion.span
+          key={i}
+          initial={{ opacity: 0, y: 24, filter: 'blur(8px)' }}
+          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          transition={{ delay: i * 0.04, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="inline-block"
+          style={{ whiteSpace: char === ' ' ? 'pre' : 'normal' }}
+        >
+          {char}
+        </motion.span>
+      ))}
+    </h2>
   );
 };

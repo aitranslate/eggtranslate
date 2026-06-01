@@ -28,10 +28,10 @@ export const PhaseTooltipCard: React.FC<PhaseTooltipCardProps> = ({
     <AnimatePresence>
       {isVisible && (
         <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2, ease: 'easeOut' }}
+          initial={{ opacity: 0, y: 8, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 4, scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 380, damping: 26 }}
           style={{
             position: 'absolute',
             top: 'calc(100% + 8px)',
@@ -68,8 +68,13 @@ export const PhaseTooltipCard: React.FC<PhaseTooltipCardProps> = ({
           {progress !== undefined && progress > 0 && progress < 100 && (
             <div style={{ marginBottom: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                <div style={{ flex: 1, height: 4, background: '#E5E5EA', borderRadius: 2 }}>
-                  <div style={{ width: `${progress}%`, height: '100%', background: '#0066FF', borderRadius: 2 }} />
+                <div style={{ flex: 1, height: 4, background: '#E5E5EA', borderRadius: 2, overflow: 'hidden' }}>
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                    style={{ height: '100%', background: '#0066FF', borderRadius: 2 }}
+                  />
                 </div>
                 <span style={{ fontSize: 11, color: '#0066FF', fontWeight: 600 }}>{progress}%</span>
               </div>

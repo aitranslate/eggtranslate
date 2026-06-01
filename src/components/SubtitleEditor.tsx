@@ -125,11 +125,19 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+    <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+        className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+      >
+      <motion.div
+        initial={{ scale: 0.92, y: 24, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        exit={{ scale: 0.95, y: 8, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 280, damping: 28 }}
         className="relative max-w-4xl w-full max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden"
       >
         {/* Header */}
@@ -307,6 +315,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
           </div>
         </div>
       </motion.div>
-    </div>
+      </motion.div>
+    </AnimatePresence>
   );
 };

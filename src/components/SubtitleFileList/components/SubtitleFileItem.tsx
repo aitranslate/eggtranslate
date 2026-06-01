@@ -1,5 +1,5 @@
 import { useCallback, useMemo, memo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { SubtitleFileMetadata, ALL_PHASES, type ProgressPhase } from '@/types';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { getCardBadge } from '@/utils/badgeHelper';
@@ -76,11 +76,28 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-2xl p-5 flex flex-col gap-5 transition-all duration-400 hover:shadow-lg hover:-translate-y-0.5"
+      variants={{
+        hidden: { opacity: 0, y: 20 },
+        show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 220, damping: 24 } },
+      }}
+      whileHover={{ y: -2, boxShadow: '0 8px 24px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)' }}
+      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+      className="relative bg-white rounded-2xl p-5 flex flex-col gap-5"
       style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.03), 0 0 0 1px rgba(0,0,0,0.02)' }}
     >
+      {/* 完成时一次性脉冲光圈 */}
+      <AnimatePresence>
+        {badgeInfo.color === 'green' && (
+          <motion.div
+            key="pulse"
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: [0.6, 1.6, 1.6], opacity: [0.6, 0, 0] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.2, times: [0, 0.6, 1], ease: 'easeOut' }}
+            className="pointer-events-none absolute -top-1 -right-1 w-10 h-10 rounded-full bg-emerald-400/40"
+          />
+        )}
+      </AnimatePresence>
       {/* 1. Header: file info + status badge */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3.5 min-w-0 flex-1">

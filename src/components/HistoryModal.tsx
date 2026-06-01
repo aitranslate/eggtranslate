@@ -16,6 +16,7 @@ import { downloadZipFile } from '@/utils/fileExport';
 import { TranslationHistoryEntry } from '@/types';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { CountUp } from './motion/CountUp';
 
 interface HistoryModalProps {
   isOpen: boolean;
@@ -114,14 +115,30 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
     : null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <>
+    <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+        onClick={onClose}
       >
-        <div className="flex items-center justify-between mb-6">
+      <motion.div
+        initial={{ scale: 0.92, y: 24, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        exit={{ scale: 0.95, y: 8, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 280, damping: 28 }}
+        className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05, duration: 0.3 }}
+          className="flex items-center justify-between mb-6"
+        >
           <div className="flex items-center gap-3">
             <h2 className="apple-heading-medium">翻译历史</h2>
             <span className="px-2.5 py-1 bg-purple-100 text-purple-700 text-sm rounded-full font-medium">
@@ -130,38 +147,49 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors active:scale-95"
           >
             <X className="h-5 w-5 text-gray-500" />
           </button>
-        </div>
+        </motion.div>
 
-        {/* 统计信息 */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-          <div className="bg-gray-50 rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-            <div className="text-sm text-gray-600">总记录数</div>
-          </div>
-          <div className="bg-gray-50 rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-blue-600">{stats.totalTokens.toLocaleString()}</div>
-            <div className="text-sm text-gray-600">总Token数</div>
-          </div>
-          <div className="bg-gray-50 rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-emerald-600">
-              {history.length > 0 ? Math.round(stats.totalTokens / stats.total).toLocaleString() : 0}
-            </div>
-            <div className="text-sm text-gray-600">平均Token</div>
-          </div>
-          <div className="bg-gray-50 rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-purple-600">
-              {history.reduce((sum, entry) => sum + entry.completedCount, 0).toLocaleString()}
-            </div>
-            <div className="text-sm text-gray-600">总字幕数</div>
-          </div>
-        </div>
+        {/* 统计信息 - 数字 CountUp */}
+        <motion.div
+          initial="hidden"
+          animate="show"
+          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } } }}
+          className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6"
+        >
+          {[
+            { value: stats.total, color: 'text-gray-900', label: '总记录数' },
+            { value: stats.totalTokens, color: 'text-blue-600', label: '总Token数' },
+            { value: history.length > 0 ? Math.round(stats.totalTokens / stats.total) : 0, color: 'text-emerald-600', label: '平均Token' },
+            { value: history.reduce((sum, entry) => sum + entry.completedCount, 0), color: 'text-purple-600', label: '总字幕数' },
+          ].map((stat, i) => (
+            <motion.div
+              key={i}
+              variants={{
+                hidden: { opacity: 0, y: 12 },
+                show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 240, damping: 22 } },
+              }}
+              whileHover={{ y: -2, boxShadow: '0 6px 16px rgba(0,0,0,0.06)' }}
+              className="bg-gray-50 rounded-xl p-4 text-center cursor-default"
+            >
+              <div className={`text-2xl font-bold ${stat.color}`}>
+                <CountUp value={stat.value} duration={1.0} />
+              </div>
+              <div className="text-sm text-gray-600 mt-0.5">{stat.label}</div>
+            </motion.div>
+          ))}
+        </motion.div>
 
         {/* 搜索和操作 */}
-        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-6">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.3 }}
+          className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-6"
+        >
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
@@ -176,28 +204,33 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
           <button
             onClick={onClear}
             disabled={history.length === 0}
-            className="apple-button apple-button-ghost text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="apple-button apple-button-ghost text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
           >
             <Trash2 className="h-4 w-4" />
             <span>清空历史</span>
           </button>
-        </div>
+        </motion.div>
 
         {/* 历史记录列表 */}
         <div className="space-y-3">
           <AnimatePresence>
             {filteredHistory.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center py-12 text-gray-500"
+              >
                 {searchTerm ? '没有找到匹配的记录' : '暂无历史记录'}
-              </div>
+              </motion.div>
             ) : (
-              filteredHistory.map((entry) => (
+              filteredHistory.map((entry, idx) => (
                 <motion.div
                   key={entry.taskId}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="border border-gray-200 rounded-xl p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0, transition: { delay: 0.25 + idx * 0.04 } }}
+                  exit={{ opacity: 0, y: -10, transition: { duration: 0.2 } }}
+                  whileHover={{ y: -2, boxShadow: '0 6px 16px rgba(0,0,0,0.05)' }}
+                  className="border border-gray-200 rounded-xl p-4 bg-gray-50"
                 >
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div className="flex-1 space-y-2">
@@ -230,20 +263,18 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
 
                     {/* 操作按钮 */}
                     <div className="flex items-center gap-2">
-                      {/* 导出按钮 */}
                       <button
                         onClick={() => onExport(entry)}
                         disabled={!entry.subtitle_entries?.length}
-                        className="apple-button apple-button-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="apple-button apple-button-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                       >
                         <Download className="h-3 w-3" />
                         <span>导出</span>
                       </button>
 
-                      {/* 删除按钮 */}
                       <button
                         onClick={() => onDelete(entry.taskId)}
-                        className="apple-button apple-button-ghost text-red-600 hover:bg-red-50 text-sm"
+                        className="apple-button apple-button-ghost text-red-600 hover:bg-red-50 text-sm active:scale-95"
                       >
                         <Trash2 className="h-3 w-3" />
                         <span>删除</span>
@@ -256,6 +287,8 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
           </AnimatePresence>
         </div>
       </motion.div>
+      </motion.div>
+    </AnimatePresence>
 
       {/* 清空历史确认对话框 */}
       <ConfirmDialog
@@ -281,6 +314,6 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
         confirmText="确认删除"
         confirmButtonClass="bg-red-500 hover:bg-red-600 text-white"
       />
-    </div>
+    </>
   );
 };

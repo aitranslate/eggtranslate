@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useRef } from 'react';
 import { Upload, FileText, CheckCircle } from 'lucide-react';
 import { useSubtitleStore } from '@/stores/subtitleStore';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 
@@ -72,21 +72,22 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         className="w-full"
       >
         {/* 批量上传区域 - Apple 风格 */}
-        <div
-          className={`
-            relative w-full p-12 border-2 border-dashed rounded-2xl transition-all duration-300
-            ${isDragging
-              ? 'border-blue-500 bg-blue-50 scale-[1.02]'
-              : 'border-gray-300 hover:border-blue-400 bg-gray-50/50'
-            }
-            ${isUploading ? 'pointer-events-none opacity-50' : ''}
-          `}
+        <motion.div
+          className="relative w-full p-12 border-2 border-dashed rounded-2xl bg-gray-50/50 border-gray-300"
+          animate={isDragging
+            ? { scale: 1.02, backgroundColor: 'rgba(0, 102, 255, 0.04)', borderColor: '#0066FF' }
+            : { scale: 1, backgroundColor: 'rgba(249, 250, 251, 0.5)', borderColor: '#d1d5db' }
+          }
+          whileHover={!isDragging ? { borderColor: '#60a5fa' } : undefined}
+          transition={{ type: 'spring', stiffness: 300, damping: 25 }}
           onDrop={onDrop}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
+          style={{ pointerEvents: isUploading ? 'none' : 'auto', opacity: isUploading ? 0.5 : 1 }}
         >
           <input
             ref={fileInputRef}
@@ -100,11 +101,19 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
 
           <div className="flex flex-col items-center justify-center space-y-6">
             {isUploading ? (
-              <div className="animate-spin rounded-full h-16 w-16 border-2 border-blue-500 border-t-transparent"></div>
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="animate-spin rounded-full h-16 w-16 border-2 border-blue-500 border-t-transparent"
+              />
             ) : (
-              <div className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center">
+              <motion.div
+                animate={isDragging ? { y: -4, scale: 1.05 } : { y: 0, scale: 1 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+                className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/20"
+              >
                 <Upload className="h-8 w-8 text-white" />
-              </div>
+              </motion.div>
             )}
 
             <div className="text-center">
@@ -124,7 +133,20 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
               <span>支持多文件上传</span>
             </div>
           </div>
-        </div>
+
+          {/* 拖入时的遮罩高亮 */}
+          <AnimatePresence>
+            {isDragging && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-blue-500 ring-offset-2 ring-offset-white"
+              />
+            )}
+          </AnimatePresence>
+        </motion.div>
 
       </motion.div>
     </div>

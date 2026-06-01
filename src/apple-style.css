@@ -39,6 +39,12 @@
   /* 动画 */
   --apple-transition-fast: 0.3s ease;
   --apple-transition-smooth: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  --apple-ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --apple-ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --apple-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --apple-duration-quick: 120ms;
+  --apple-duration-base: 200ms;
+  --apple-duration-slow: 350ms;
 
   /* 阴影系统 */
   --apple-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);

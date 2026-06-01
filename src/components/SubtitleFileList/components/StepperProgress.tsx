@@ -70,6 +70,7 @@ const ConnectingLine: React.FC<{
 }> = ({ prevStatus, nextStatus }) => {
   const isActive = shouldLineBeActive(prevStatus, nextStatus);
   const isCompleted = prevStatus === 'completed' && nextStatus === 'completed';
+  const isFailed = prevStatus === 'failed' || nextStatus === 'failed';
 
   return (
     <div
@@ -97,13 +98,14 @@ const ConnectingLine: React.FC<{
           style={{
             height: '100%',
             borderRadius: 1,
-            backgroundColor: BRAND_BLUE,
+            backgroundColor: isFailed ? '#FF3B30' : BRAND_BLUE,
+            transformOrigin: 'left center',
           }}
           initial={{ width: '0%' }}
           animate={{
-            width: isActive ? '100%' : '0%',
+            width: isActive || isCompleted ? '100%' : '0%',
           }}
-          transition={{ duration: 0.6, ease: 'easeOut' }}
+          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
         />
       </div>
     </div>
