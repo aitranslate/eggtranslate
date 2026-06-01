@@ -24,7 +24,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ className }) => {
 
     try {
       await addFile(file);
-      toast.success(`成功加载 ${file.name}`);
+      // 成功/失败 toast 由 addFile 内部统一处理（"上传成功" / "加载失败"）
     } catch (err) {
       handleError(err, {
         context: { operation: '加载文件', fileName: file.name }

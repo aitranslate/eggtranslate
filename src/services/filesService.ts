@@ -77,13 +77,13 @@ async function addMediaFile(file: File, defaultKeytermGroupId: string | null): P
     };
     useFilesStore.getState().addTask(finalTask);
 
-    // 4) 上传成功 toast（覆盖 loading toast）
-    toast.success(`上传成功：${file.name}`, { id: toastId });
+    // 4) 上传成功 toast（覆盖 loading toast，4s 后自动消失）
+    toast.success(`上传成功：${file.name}`, { id: toastId, duration: 4000 });
     return result.metadata.id;
   } catch (error) {
     const appError = toAppError(error, '上传失败');
     logger.error(appError.message, appError);
-    toast.error(`上传失败：${file.name}（${appError.message}）`, { id: toastId });
+    toast.error(`上传失败：${file.name}（${appError.message}）`, { id: toastId, duration: 4000 });
     return null;
   }
 }

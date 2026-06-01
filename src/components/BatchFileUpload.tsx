@@ -29,7 +29,7 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
     try {
       setIsUploading(true);
       await addFile(file);
-      toast.success(`成功加载 ${file.name}`);
+      // 成功/失败 toast 由 addFile 内部统一处理
     } catch (err) {
       handleError(err, {
         context: { operation: '加载文件', fileName: file.name }
