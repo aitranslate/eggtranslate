@@ -38,7 +38,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   const handleStartAll = useCallback(() => {
     if (files.length === 0) return;
     enqueueAllUncompleted();
-  }, [files, enqueueAllUncompleted]);
+  }, [files]);
 
   const handleSettingsClose = useCallback(() => {
     setIsSettingsOpen(false);
@@ -60,7 +60,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     } finally {
       setShowClearConfirm(false);
     }
-  }, [clearAll, handleError]);
+  }, [handleError]);
 
   const handleDeleteFile = useCallback(async (file: SubtitleFileMetadata) => {
     setFileToDelete(file);
@@ -79,7 +79,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     } finally {
       setFileToDelete(null);
     }
-  }, [fileToDelete, removeFile, handleError]);
+  }, [fileToDelete, handleError]);
 
   const handleExport = useCallback(async (file: SubtitleFileMetadata) => {
     try {
