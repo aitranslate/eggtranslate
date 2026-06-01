@@ -8,10 +8,6 @@ vi.mock('../transcriptionPipeline', () => ({
   runTranscriptionPipeline: vi.fn(),
 }));
 
-vi.mock('@/utils/convertToMP3', () => ({
-  convertToMP3: vi.fn(),
-}));
-
 vi.mock('localforage', () => ({
   default: {
     getItem: vi.fn().mockResolvedValue(null),
@@ -21,7 +17,6 @@ vi.mock('localforage', () => ({
 }));
 
 import { runTranscriptionPipeline } from '../transcriptionPipeline';
-import { convertToMP3 } from '@/utils/convertToMP3';
 import localforage from 'localforage';
 
 const makeFile = (overrides: {
@@ -88,7 +83,6 @@ describe('transcriptionService.startTranscription', () => {
   it('returns early when file not found', async () => {
     await startTranscription('non-existent');
     expect(runTranscriptionPipeline).not.toHaveBeenCalled();
-    expect(convertToMP3).not.toHaveBeenCalled();
   });
 
   it('returns early for SRT file', async () => {
@@ -105,7 +99,6 @@ describe('transcriptionService.startTranscription', () => {
     });
     await startTranscription('file_t1');
     expect(runTranscriptionPipeline).not.toHaveBeenCalled();
-    expect(convertToMP3).not.toHaveBeenCalled();
   });
 
   it('returns early when API key is not configured', async () => {
@@ -115,43 +108,6 @@ describe('transcriptionService.startTranscription', () => {
     useTranscriptionStore.setState({ apiKeys: '' });
     await startTranscription('file_t1');
     expect(runTranscriptionPipeline).not.toHaveBeenCalled();
-  });
-
-  it('uses fileRef when available, converts to MP3, runs pipeline, writes entries', async () => {
-    const mediaFile = new File([''], 'test.mp3', { type: 'audio/mpeg' });
-    useFilesStore.setState({
-      tasks: [makeTask(makeFile({ fileRef: mediaFile }))],
-    });
-    useTranscriptionStore.setState({ apiKeys: 'test-key' });
-
-    const mp3Blob = new Blob(['mp3 data'], { type: 'audio/mpeg' });
-    vi.mocked(convertToMP3).mockResolvedValue(mp3Blob);
-    vi.mocked(runTranscriptionPipeline).mockResolvedValue({
-      entries: [
-        {
-          id: 1,
-          startTime: '00:00:00,000',
-          endTime: '00:00:02,000',
-          text: 'hello',
-          translatedText: '',
-          translationStatus: 'pending',
-        },
-      ],
-      language: 'en',
-    });
-
-    await startTranscription('file_t1');
-
-    expect(convertToMP3).toHaveBeenCalledWith(mediaFile);
-    expect(runTranscriptionPipeline).toHaveBeenCalled();
-
-    const after = useFilesStore.getState().tasks[0];
-    expect(after.phases.converting.status).toBe('completed');
-    expect(after.phases.transcribing.status).toBe('completed');
-    expect(after.phases.transcribing.language).toBe('en');
-    expect(after.subtitle_entries).toHaveLength(1);
-    const firstEntry: SubtitleEntry = after.subtitle_entries[0];
-    expect(firstEntry.text).toBe('hello');
   });
 
   it('uses existing MP3 from IndexedDB when converting already completed', async () => {
@@ -170,7 +126,6 @@ describe('transcriptionService.startTranscription', () => {
 
     await startTranscription('file_t1');
 
-    expect(convertToMP3).not.toHaveBeenCalled();
     expect(runTranscriptionPipeline).toHaveBeenCalled();
 
     const after = useFilesStore.getState().tasks[0];
@@ -203,10 +158,9 @@ describe('transcriptionService.startTranscription', () => {
   });
 
   it('sends keyterms from the selected group only (not all groups)', async () => {
-    const mediaFile = new File([''], 'test.mp3', { type: 'audio/mpeg' });
     useFilesStore.setState({
       tasks: [makeTask(makeFile({
-        fileRef: mediaFile,
+        convertingStatus: 'completed',
         selectedKeytermGroupId: 'group-medical'
       }))],
     });
@@ -219,8 +173,7 @@ describe('transcriptionService.startTranscription', () => {
       ],
     });
 
-    const mp3Blob = new Blob(['mp3 data'], { type: 'audio/mpeg' });
-    vi.mocked(convertToMP3).mockResolvedValue(mp3Blob);
+    vi.mocked(localforage.getItem).mockResolvedValue(new Blob(['mp3 data']));
     vi.mocked(runTranscriptionPipeline).mockResolvedValue({
       entries: [],
       language: 'en',
@@ -234,10 +187,9 @@ describe('transcriptionService.startTranscription', () => {
   });
 
   it('sends no keyterms when selectedKeytermGroupId is null', async () => {
-    const mediaFile = new File([''], 'test.mp3', { type: 'audio/mpeg' });
     useFilesStore.setState({
       tasks: [makeTask(makeFile({
-        fileRef: mediaFile,
+        convertingStatus: 'completed',
         selectedKeytermGroupId: null
       }))],
     });
@@ -247,7 +199,7 @@ describe('transcriptionService.startTranscription', () => {
       keytermGroups: [{ id: 'g1', name: 'G1', keyterms: ['term1'] }],
     });
 
-    vi.mocked(convertToMP3).mockResolvedValue(new Blob());
+    vi.mocked(localforage.getItem).mockResolvedValue(new Blob(['mp3']));
     vi.mocked(runTranscriptionPipeline).mockResolvedValue({
       entries: [],
       language: 'en',
@@ -261,10 +213,9 @@ describe('transcriptionService.startTranscription', () => {
   });
 
   it('sends no keyterms when keytermsEnabled is false (master switch off)', async () => {
-    const mediaFile = new File([''], 'test.mp3', { type: 'audio/mpeg' });
     useFilesStore.setState({
       tasks: [makeTask(makeFile({
-        fileRef: mediaFile,
+        convertingStatus: 'completed',
         selectedKeytermGroupId: 'g1'
       }))],
     });
@@ -274,7 +225,7 @@ describe('transcriptionService.startTranscription', () => {
       keytermGroups: [{ id: 'g1', name: 'G1', keyterms: ['term1'] }],
     });
 
-    vi.mocked(convertToMP3).mockResolvedValue(new Blob());
+    vi.mocked(localforage.getItem).mockResolvedValue(new Blob(['mp3']));
     vi.mocked(runTranscriptionPipeline).mockResolvedValue({
       entries: [],
       language: 'en',
@@ -288,10 +239,9 @@ describe('transcriptionService.startTranscription', () => {
   });
 
   it('sends empty array when selectedKeytermGroupId points to non-existent group', async () => {
-    const mediaFile = new File([''], 'test.mp3', { type: 'audio/mpeg' });
     useFilesStore.setState({
       tasks: [makeTask(makeFile({
-        fileRef: mediaFile,
+        convertingStatus: 'completed',
         selectedKeytermGroupId: 'non-existent-id'
       }))],
     });
@@ -301,7 +251,7 @@ describe('transcriptionService.startTranscription', () => {
       keytermGroups: [{ id: 'g1', name: 'G1', keyterms: ['term1'] }],
     });
 
-    vi.mocked(convertToMP3).mockResolvedValue(new Blob());
+    vi.mocked(localforage.getItem).mockResolvedValue(new Blob(['mp3']));
     vi.mocked(runTranscriptionPipeline).mockResolvedValue({
       entries: [],
       language: 'en',

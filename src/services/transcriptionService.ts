@@ -9,7 +9,6 @@
 import { useFilesStore } from '@/stores/filesStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { runTranscriptionPipeline } from './transcriptionPipeline';
-import { convertToMP3 } from '@/utils/convertToMP3';
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import toast from 'react-hot-toast';
@@ -25,21 +24,11 @@ export async function startTranscription(fileId: string): Promise<void> {
   }
 
   try {
-    // MP3 已在 addFile 阶段持久化；这里取出来用
-    let mp3Blob = await localforage.getItem<Blob>(`mp3_data:${file.taskId}`);
-    if (!mp3Blob && file.fileRef) {
-      // 兜底：MP3 缓存缺失（极少见，比如老数据）→ 现场转一次
-      logger.warn('[startTranscription] MP3 缓存缺失，临时转码');
-      mp3Blob = await convertToMP3(file.fileRef);
-      await localforage.setItem(`mp3_data:${file.taskId}`, mp3Blob);
-      useFilesStore.getState().updatePhase(fileId, 'converting', {
-        status: 'completed',
-        progress: 100,
-        tokens: 0,
-      });
-    }
+    // MP3 必须在 addFile 阶段就转好并持久化。
+    // 找不到说明状态不一致（不该出现），直接报错让用户重传。
+    const mp3Blob = await localforage.getItem<Blob>(`mp3_data:${file.taskId}`);
     if (!mp3Blob) {
-      toast.error('文件引用丢失，请重新上传');
+      toast.error('MP3 缓存丢失，请重新上传文件');
       return;
     }
 
