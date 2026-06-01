@@ -120,15 +120,15 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   }, [file, fileEntries, updateEntry, deleteEntry]);
 
   const translationStats = useMemo(() => {
-    const total = file.entryCount ?? fileEntries.length;
-    const translated = file.translatedCount ?? fileEntries.filter((e) => e.translatedText).length;
+    const total = file?.entryCount ?? fileEntries.length;
+    const translated = file?.translatedCount ?? fileEntries.filter((e) => e.translatedText).length;
     return {
       total,
       translated,
       untranslated: total - translated,
       percentage: total > 0 ? Math.round((translated / total) * 100) : 0,
     };
-  }, [file.entryCount, file.translatedCount, fileEntries]);
+  }, [file?.entryCount, file?.translatedCount, fileEntries]);
 
   const editingEntry = useMemo(
     () => editingId === null ? null : fileEntries.find((e) => e.id === editingId) ?? null,
