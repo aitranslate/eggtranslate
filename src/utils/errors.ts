@@ -189,5 +189,5 @@ export interface ErrorContext {
   operation?: string;      // 操作名称（如"翻译文件"、"加载配置"）
   fileName?: string;       // 相关文件名
   endpoint?: string;       // API 端点
-  details?: Record<string, any>; // 额外详情
+  details?: Record<string, unknown>; // 额外详情
 }
