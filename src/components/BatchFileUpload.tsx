@@ -11,7 +11,6 @@ interface BatchFileUploadProps {
 
 export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) => {
   const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { handleError } = useErrorHandler();
@@ -27,15 +26,13 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
     }
 
     try {
-      setIsUploading(true);
+      // 不锁住组件：addFile 内部用 toast 反馈进度，
+      // 用户可以继续拖拽/选择新文件（多个上传可并行）
       await addFile(file);
-      // 成功/失败 toast 由 addFile 内部统一处理
     } catch (err) {
       handleError(err, {
         context: { operation: '加载文件', fileName: file.name }
       });
-    } finally {
-      setIsUploading(false);
     }
   }, [handleError]);
 
@@ -86,7 +83,6 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
           onDrop={onDrop}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
-          style={{ pointerEvents: isUploading ? 'none' : 'auto', opacity: isUploading ? 0.5 : 1 }}
         >
           <input
             ref={fileInputRef}
@@ -95,32 +91,23 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
             multiple
             onChange={onFileSelect}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            disabled={isUploading}
           />
 
           <div className="flex flex-col items-center justify-center space-y-6">
-            {isUploading ? (
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="animate-spin rounded-full h-16 w-16 border-2 border-blue-500 border-t-transparent"
-              />
-            ) : (
-              <motion.div
-                animate={isDragging ? { y: -4, scale: 1.05 } : { y: 0, scale: 1 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 18 }}
-                className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/20"
-              >
-                <Upload className="h-8 w-8 text-white" />
-              </motion.div>
-            )}
+            <motion.div
+              animate={isDragging ? { y: -4, scale: 1.05 } : { y: 0, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 18 }}
+              className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/20"
+            >
+              <Upload className="h-8 w-8 text-white" />
+            </motion.div>
 
             <div className="text-center">
               <h3 className="text-2xl font-semibold text-gray-900 mb-3">
                 {isDragging ? '放开文件即可上传' : '拖拽上传 SRT 字幕或音视频文件'}
               </h3>
               <p className="text-gray-600 text-lg mb-2">
-                {isUploading ? '正在加载...' : '拖拽多个文件到此处或点击选择文件'}
+                拖拽多个文件到此处或点击选择文件
               </p>
               <p className="text-sm text-gray-500">
                 支持 .srt .mp3 .wav .m4a .mp4 .webm .ogg 等格式
@@ -129,7 +116,7 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
 
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <FileText className="h-4 w-4" />
-              <span>支持多文件上传</span>
+              <span>支持多文件上传（可并行）</span>
             </div>
           </div>
 
