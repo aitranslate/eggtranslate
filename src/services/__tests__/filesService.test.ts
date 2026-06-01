@@ -3,6 +3,7 @@ import { useFilesStore } from '@/stores/filesStore';
 import { useQueueStore } from '@/stores/queueStore';
 import { addFile, removeFile, selectFile, clearAll } from '../filesService';
 import { loadFromFile, removeMp3Data } from '@/services/SubtitleFileManager';
+import type { SingleTask, SubtitleFileMetadata } from '@/types';
 
 vi.mock('@/services/SubtitleFileManager', async () => {
   const actual = await vi.importActual<typeof import('@/services/SubtitleFileManager')>(
@@ -25,6 +26,23 @@ vi.mock('@/stores/translationConfigStore', () => ({
   },
 }));
 
+const makeSingleTask = (overrides: Partial<SingleTask> = {}): SingleTask => ({
+  taskId: 't1',
+  subtitle_filename: 'test.srt',
+  subtitle_entries: [],
+  phases: {
+    workflow: 'translate',
+    converting: { status: 'completed', progress: 100, tokens: 0 },
+    transcribing: { status: 'completed', progress: 100, tokens: 0 },
+    translating: { status: 'upcoming', progress: 0, tokens: 0 },
+    splitting: { status: 'upcoming', progress: 0, tokens: 0 },
+  },
+  index: 0,
+  fileType: 'srt',
+  fileSize: 100,
+  ...overrides,
+});
+
 describe('filesService', () => {
   beforeEach(() => {
     useFilesStore.setState({ tasks: [], selectedFileId: null });
@@ -33,10 +51,10 @@ describe('filesService', () => {
   });
 
   it('addFile calls SubtitleFileManager and adds task', async () => {
-    const mockTask = { taskId: 't1', subtitle_filename: 'test.srt', subtitle_entries: [] };
+    const mockTask = makeSingleTask({ taskId: 't1' });
     vi.mocked(loadFromFile).mockResolvedValue({
-      metadata: { id: 'file-1', taskId: 't1', name: 'test.srt' } as any,
-      task: mockTask as any,
+      metadata: { id: 'file-1', taskId: 't1', name: 'test.srt' } as unknown as SubtitleFileMetadata & { fileRef?: File },
+      task: mockTask,
     });
 
     const fakeFile = new File(['test'], 'test.srt', { type: 'text/plain' });
@@ -49,14 +67,13 @@ describe('filesService', () => {
 
   it('removeFile cleans MP3 data and removes task', async () => {
     useFilesStore.setState({
-      tasks: [{
+      tasks: [makeSingleTask({
         taskId: 't1',
         subtitle_filename: 'a.srt',
-        subtitle_entries: [],
         fileType: 'srt',
         fileSize: 100,
         duration: undefined,
-      }] as any,
+      })],
     });
 
     const fakeFile = new File(['test'], 'a.srt', { type: 'text/plain' });
@@ -72,7 +89,7 @@ describe('filesService', () => {
   });
 
   it('clearAll empties tasks and queue', async () => {
-    useFilesStore.setState({ tasks: [{ taskId: 't1' }] as any });
+    useFilesStore.setState({ tasks: [makeSingleTask({ taskId: 't1' })] });
     useQueueStore.setState({ taskQueue: ['f1'], activeTaskId: 'f1' });
 
     await clearAll();

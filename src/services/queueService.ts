@@ -9,11 +9,9 @@ import { useHistoryStore } from '@/stores/historyStore';
 import { startTranscription } from './transcriptionService';
 import { startTranslation } from './translationService';
 import { saveTranslationHistory } from './TranslationOrchestrator';
+import type { SubtitleFileMetadata } from '@/types';
 
-function isTaskCompleted(file: {
-  phases: { translating: { status: string }; splitting: { status: string }; transcribing: { status: string } };
-  fileType?: string;
-}): boolean {
+function isTaskCompleted(file: SubtitleFileMetadata): boolean {
   const isSrt = file.fileType === 'srt' || !file.fileType;
   return (
     file.phases.translating.status === 'completed' &&
@@ -27,7 +25,7 @@ export function enqueueTask(fileId: string): void {
   if (queue.taskQueue.includes(fileId) || queue.activeTaskId === fileId) return;
   const file = useFilesStore.getState().getFile(fileId);
   if (!file) return;
-  if (isTaskCompleted(file as any)) return;
+  if (isTaskCompleted(file)) return;
 
   useQueueStore.getState().setTaskQueue([...queue.taskQueue, fileId]);
   if (useQueueStore.getState().activeTaskId === null) {
@@ -52,7 +50,7 @@ export function dequeueTask(fileId: string): void {
 export function enqueueAllUncompleted(): void {
   const files = useFilesStore.getState().getAllFiles();
   for (const file of files) {
-    if (!isTaskCompleted(file as any)) {
+    if (!isTaskCompleted(file)) {
       enqueueTask(file.id);
     }
   }

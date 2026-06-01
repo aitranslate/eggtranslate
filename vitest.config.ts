@@ -1,6 +1,6 @@
 /// <reference types="vitest" />
 import path from 'path';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   resolve: {
@@ -12,5 +12,6 @@ export default defineConfig({
     environment: 'node',
     globals: false, // We import describe/it/expect from 'vitest' explicitly
     include: ['src/**/__tests__/**/*.test.ts', 'src/**/*.test.ts'],
+    setupFiles: ['./src/test/setup.ts'],
   },
 });
