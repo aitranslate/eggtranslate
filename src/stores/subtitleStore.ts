@@ -20,6 +20,10 @@ import { countUnits } from '@/utils/textUnitCounter';
 import { getSourceLimit, getTargetLimit } from '@/utils/subtitleLengthPresets';
 import { toAppError } from '@/utils/errors';
 import { convertToMP3 } from '@/utils/convertToMP3';
+import {
+  getRelevantTerms as getRelevantTermsUtil,
+  formatTermsForPrompt as formatTermsForPromptUtil
+} from '@/utils/termsHelpers';
 import type { ProgressPhase } from '@/types';
 import toast from 'react-hot-toast';
 import localforage from 'localforage';
@@ -630,28 +634,9 @@ export const useSubtitleStore = create<SubtitleStore>()(
               },
               getRelevantTerms: (batchText: string, before: string, after: string): Term[] => {
                 const allTerms = useTermsStore.getState().terms;
-                if (allTerms.length === 0) return [];
-
-                const fullText = `${before} ${batchText} ${after}`;
-                const cleanedFullText = fullText.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
-
-                const processedTerms = allTerms.map((term: Term) => ({
-                  ...term,
-                  cleanedOriginal: term.original.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
-                }));
-
-                return processedTerms
-                  .filter(term => term.cleanedOriginal && cleanedFullText.includes(term.cleanedOriginal))
-                  .map(({ original, translation, notes }) => ({ original, translation, notes }));
+                return getRelevantTermsUtil(allTerms, batchText, before, after);
               },
-              formatTermsForPrompt: (terms: Term[]): string => {
-                return terms.map(term => {
-                  if (term.notes) {
-                    return `${term.original} -> ${term.translation} // ${term.notes}`;
-                  }
-                  return `${term.original} -> ${term.translation}`;
-                }).join('\n');
-              }
+              formatTermsForPrompt: (terms: Term[]): string => formatTermsForPromptUtil(terms)
             }
           );
 
