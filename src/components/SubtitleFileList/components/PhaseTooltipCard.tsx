@@ -101,9 +101,7 @@ export const PhaseTooltipCard: React.FC<PhaseTooltipCardProps> = ({
                 <span>{formatNumber(tokens)} tokens</span>
               )}
               {keytermGroupName && (
-                <span style={{ background: '#F5F5F7', padding: '2px 6px', borderRadius: 4 }}>
-                  🔑 {keytermGroupName}
-                </span>
+                <span>热词组: {keytermGroupName}</span>
               )}
             </div>
           )}
