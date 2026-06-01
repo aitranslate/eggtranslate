@@ -47,6 +47,7 @@ interface FilesState {
   // Phase setter
   updatePhase: (fileId: string, phase: keyof Omit<FilePhases, 'workflow'>, update: Partial<PhaseProgress>) => void;
   setWorkflow: (fileId: string, workflow: WorkflowType) => void;
+  setSelectedKeytermGroupId: (fileId: string, groupId: string | null) => void;
 
   // Getters
   getFile: (fileId: string) => SubtitleFileMetadata | undefined;
@@ -186,6 +187,16 @@ export const useFilesStore = create<FilesState>()(
         }));
       },
 
+      setSelectedKeytermGroupId: (fileId, groupId) => {
+        const file = get().getFile(fileId);
+        if (!file) return;
+        set((state) => ({
+          tasks: state.tasks.map((t) =>
+            t.taskId === file.taskId ? { ...t, selectedKeytermGroupId: groupId } : t
+          ),
+        }));
+      },
+
       getFile: (fileId) => {
         const task = get().tasks.find((t) => generateStableFileId(t.taskId) === fileId);
         return task ? convertTaskToMetadata(task) : undefined;
@@ -212,10 +223,18 @@ export const useFilesStore = create<FilesState>()(
       name: 'subtitle_tasks',
       storage: createJSONStorage(() => localforage),
       partialize: (state) => ({ tasks: state.tasks, selectedFileId: state.selectedFileId }),
-      version: 2,
+      version: 3,
       migrate: (persistedState: unknown, version: number) => {
         if (persistedState && typeof persistedState === 'object' && 'tasks' in persistedState) {
-          return persistedState as { tasks: SingleTask[]; selectedFileId: string | null };
+          const state = persistedState as { tasks: SingleTask[]; selectedFileId: string | null };
+          if (version < 3) {
+            // 旧任务没有 selectedKeytermGroupId 字段，默认为 null
+            return {
+              ...state,
+              tasks: state.tasks.map((t) => ({ ...t, selectedKeytermGroupId: null })),
+            };
+          }
+          return state;
         }
         return { tasks: [], selectedFileId: null };
       },
