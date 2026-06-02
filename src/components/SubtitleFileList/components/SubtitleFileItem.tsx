@@ -93,7 +93,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
       }}
       whileHover={{ y: -2, boxShadow: '0 8px 24px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)' }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-      className="relative bg-white rounded-2xl p-5 flex flex-col gap-5"
+      className="relative bg-white rounded-2xl p-3 md:p-3.5 flex flex-col gap-3 md:gap-5"
       style={{
         boxShadow: '0 2px 12px rgba(0,0,0,0.03), 0 0 0 1px rgba(0,0,0,0.02)',
         zIndex: isTooltipVisible ? 50 : 'auto',
@@ -102,12 +102,14 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
       {/* 1. Header: file info + status badge */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3.5 min-w-0 flex-1">
-          <FileIcon type={file.fileType} />
+          <FileIcon type={file.fileType} size={20} className="md:hidden" />
+          <FileIcon type={file.fileType} size={24} className="hidden md:inline-flex lg:hidden" />
+          <FileIcon type={file.fileType} size={32} className="hidden lg:inline-flex" />
           <div className="min-w-0 flex-1">
-            <h4 className="text-sm font-semibold text-gray-900 truncate" title={file.name}>
+            <h4 className="text-xs md:text-sm font-semibold text-gray-900 truncate" title={file.name}>
               {file.name}
             </h4>
-            <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-1.5">
+            <div className="text-[10px] md:text-xs text-gray-500 mt-0.5 flex items-center gap-1.5">
               {file.fileType === 'srt' ? (
                 <span>{file.entryCount ?? 0} 条字幕</span>
               ) : (
