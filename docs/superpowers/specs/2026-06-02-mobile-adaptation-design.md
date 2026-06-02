@@ -19,6 +19,8 @@
 - B. 上传区（手机紧凑 + 移动端拍照/录音入口）
 - C. 文件卡 footer（手机 2 行堆叠）
 - D. Modal 弹窗（手机全屏 + 底部 sticky 操作栏）
+  - 主目标：SettingsModal、HistoryModal、TermsManager、SubtitleEditor
+  - 次目标：ConfirmDialog、GuideModal（结构相同，可一并改）
 
 **不包含**（本次范围外）：
 - 客户端 UI 重构（iOS 卡片风、B 三栏布局等——见 [[project-mobile-adaptation]] 方向决策）
@@ -97,8 +99,7 @@
 
 **修改**：
 - ✏️ `src/components/BatchFileUpload.tsx`：外层 padding、icon 尺寸、字号全部加响应式 class
-- ➕ 新增 props（可选）：`onCameraCapture` / `onMicRecord`（未来用，本期不实现具体功能）
-- 🔧 拍照/录音的 input 元素加 `hidden` + `sm:hidden` 切换
+- 🔧 拍照/录音的 input 元素用 `<input type="file" capture="...">` 直接触发，无需新 props
 
 ---
 
@@ -162,8 +163,10 @@
 - ✏️ `src/components/HistoryModal.tsx`：同上
 - ✏️ `src/components/TermsManager.tsx`：同上
 - ✏️ `src/components/SubtitleEditor.tsx`：同上（最关键——内容最多）
+- ✏️ `src/components/ConfirmDialog.tsx`：同上（结构简单）
+- ✏️ `src/components/GuideModal.tsx`：同上（结构简单）
 
-**统一抽象**（可选，不强求）：如果 4 个 modal 的响应式 class 完全相同，可抽 `ResponsiveModal` 包装组件减少重复。
+**统一抽象**（可选，不强求）：如果 6 个 modal 的响应式 class 完全相同，可抽 `ResponsiveModal` 包装组件减少重复。
 
 ---
 
