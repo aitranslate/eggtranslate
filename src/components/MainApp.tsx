@@ -2,7 +2,8 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Settings,
   BookOpen,
-  History
+  History,
+  Menu
 } from 'lucide-react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { FileUpload } from './FileUpload';
@@ -15,6 +16,7 @@ import { TermsManager } from './TermsManager';
 import { HistoryModal } from './HistoryModal';
 import { HelpButton } from './HelpButton';
 import { PWAInstallBanner } from './PWAInstallBanner';
+import { MobileMenu } from './MobileMenu';
 import { GuideModal } from './GuideModal';
 import { useFiles } from '@/stores/filesStore';
 import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
@@ -54,6 +56,7 @@ export const MainApp: React.FC = () => {
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [isEditingModalOpen, setIsEditingModalOpen] = useState(false);
   const files = useFiles();
@@ -82,10 +85,11 @@ export const MainApp: React.FC = () => {
         <div className="apple-navbar-content">
           <div className="flex items-center gap-2">
             <h1 className="apple-heading-small">蛋蛋字幕翻译</h1>
-            <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 rounded-full">v1.2</span>
+            <span className="hidden md:inline-block px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 rounded-full">v1.2</span>
           </div>
 
-          <div className={`flex items-center gap-6 ${isEditingModalOpen ? 'pointer-events-none opacity-50' : ''}`}>
+          {/* 桌面端：水平按钮组（≥768px 显示） */}
+          <div className={`hidden md:flex items-center gap-3 ${isEditingModalOpen ? 'pointer-events-none opacity-50' : ''}`}>
             <button
               onClick={() => setIsTermsOpen(true)}
               className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors"
@@ -129,6 +133,15 @@ export const MainApp: React.FC = () => {
               )}
             </button>
           </div>
+
+          {/* 移动端：汉堡按钮（<768px 显示） */}
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className={`md:hidden w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 ${isEditingModalOpen ? 'pointer-events-none opacity-50' : ''}`}
+            aria-label="打开菜单"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
         </div>
       </nav>
 
@@ -199,6 +212,16 @@ export const MainApp: React.FC = () => {
       />
       <HelpButton onClick={() => setIsGuideOpen(true)} />
       <PWAInstallBanner />
+      <MobileMenu
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
+        termsCount={terms.length}
+        historyCount={history.length}
+        isSettingsRequired={!isConfigured}
+        onOpenTerms={() => setIsTermsOpen(true)}
+        onOpenHistory={() => setIsHistoryOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+      />
     </div>
   );
 };
