@@ -73,7 +73,7 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
       >
         {/* 批量上传区域 - Apple 风格 */}
         <motion.div
-          className="relative w-full p-12 border-2 border-dashed rounded-2xl bg-gray-50/50 border-gray-300"
+          className="relative w-full p-5 sm:p-8 lg:p-12 border-2 border-dashed rounded-2xl bg-gray-50/50 border-gray-300"
           animate={isDragging
             ? { scale: 1.02, backgroundColor: 'rgba(0, 102, 255, 0.04)', borderColor: '#0066FF' }
             : { scale: 1, backgroundColor: 'rgba(249, 250, 251, 0.5)', borderColor: '#d1d5db' }
@@ -97,19 +97,19 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
             <motion.div
               animate={isDragging ? { y: -4, scale: 1.05 } : { y: 0, scale: 1 }}
               transition={{ type: 'spring', stiffness: 400, damping: 18 }}
-              className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/20"
+              className="w-10 h-10 sm:w-12 sm:h-12 lg:w-16 lg:h-16 rounded-full bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/20"
             >
-              <Upload className="h-8 w-8 text-white" />
+              <Upload className="h-5 w-5 sm:h-6 sm:w-6 lg:h-8 lg:w-8 text-white" />
             </motion.div>
 
             <div className="text-center">
-              <h3 className="text-2xl font-semibold text-gray-900 mb-3">
-                {isDragging ? '放开文件即可上传' : '拖拽上传 SRT 字幕或音视频文件'}
+              <h3 className="text-base sm:text-lg lg:text-2xl font-semibold text-gray-900 mb-2 sm:mb-3">
+                {isDragging ? '放开文件即可上传' : '点击或拖拽上传文件'}
               </h3>
-              <p className="text-gray-600 text-lg mb-2">
-                拖拽多个文件到此处或点击选择文件
+              <p className="text-gray-600 text-sm sm:text-base lg:text-lg mb-2">
+                支持 SRT / 音视频，可多选
               </p>
-              <p className="text-sm text-gray-500">
+              <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">
                 支持 .srt .mp3 .wav .m4a .mp4 .webm .ogg 等格式
               </p>
             </div>
@@ -118,6 +118,31 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
               <FileText className="h-4 w-4" />
               <span>支持多文件上传（可并行）</span>
             </div>
+          </div>
+
+          {/* 移动端特有：拍照/录音快捷入口（≥640px 隐藏） */}
+          <div className="flex sm:hidden gap-2 mt-2">
+            <label className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-gray-100 rounded-lg text-xs text-gray-700 cursor-pointer">
+              📷 拍照
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={onFileSelect}
+                className="hidden"
+              />
+            </label>
+            <label className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-gray-100 rounded-lg text-xs text-gray-700 cursor-pointer">
+              🎤 录音
+              <input
+                type="file"
+                accept="audio/*"
+                // @ts-expect-error - "microphone" is valid HTML5 capture value but missing from React.InputHTMLAttributes types
+                capture="microphone"
+                onChange={onFileSelect}
+                className="hidden"
+              />
+            </label>
           </div>
 
           {/* 拖入时的遮罩高亮 */}
