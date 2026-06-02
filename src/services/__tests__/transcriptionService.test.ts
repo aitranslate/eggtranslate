@@ -259,4 +259,54 @@ describe('transcriptionService.startTranscription', () => {
     const callArgs = vi.mocked(runTranscriptionPipeline).mock.calls[0];
     expect(callArgs[1]).toEqual([]);
   });
+
+  it('preserves keytermGroupName on the transcribing phase after completion', async () => {
+    useFilesStore.setState({
+      tasks: [makeTask(makeFile({
+        convertingStatus: 'completed',
+        selectedKeytermGroupId: 'g1',
+      }))],
+    });
+    useTranscriptionStore.setState({
+      apiKeys: 'test-key',
+      keytermGroups: [{ id: 'g1', name: '医学', keyterms: ['Aortic stenosis'] }],
+    });
+
+    vi.mocked(localforage.getItem).mockResolvedValue(new Blob(['mp3']));
+    vi.mocked(runTranscriptionPipeline).mockResolvedValue({
+      entries: [],
+      language: 'en',
+    });
+
+    await startTranscription('file_t1');
+
+    const after = useFilesStore.getState().tasks[0];
+    expect(after.phases.transcribing.status).toBe('completed');
+    expect(after.phases.transcribing.keytermGroupName).toBe('医学');
+  });
+
+  it('leaves keytermGroupName undefined when no keyterm group is selected', async () => {
+    useFilesStore.setState({
+      tasks: [makeTask(makeFile({
+        convertingStatus: 'completed',
+        selectedKeytermGroupId: null,
+      }))],
+    });
+    useTranscriptionStore.setState({
+      apiKeys: 'test-key',
+      keytermGroups: [{ id: 'g1', name: 'G1', keyterms: ['term1'] }],
+    });
+
+    vi.mocked(localforage.getItem).mockResolvedValue(new Blob(['mp3']));
+    vi.mocked(runTranscriptionPipeline).mockResolvedValue({
+      entries: [],
+      language: 'en',
+    });
+
+    await startTranscription('file_t1');
+
+    const after = useFilesStore.getState().tasks[0];
+    expect(after.phases.transcribing.status).toBe('completed');
+    expect(after.phases.transcribing.keytermGroupName).toBeUndefined();
+  });
 });

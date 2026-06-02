@@ -104,6 +104,7 @@ export async function startTranscription(fileId: string): Promise<void> {
                   language: result.language,
                   entryCount: result.entries.length,
                   totalEntries: result.entries.length,
+                  keytermGroupName: selectedKeytermGroup?.name,
                 },
               },
             }
