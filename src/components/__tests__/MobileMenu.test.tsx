@@ -55,11 +55,18 @@ describe('MobileMenu', () => {
     expect(termItem?.textContent).toContain('3');
   });
 
-  it('highlights settings item when isSettingsRequired=true', () => {
+  it('shows "必须" badge and orange highlight when isSettingsRequired=true', () => {
     setProps({ isSettingsRequired: true });
-    const settingsText = screen.getByText('设置');
-    const settingsRow = settingsText.closest('[class*="flex"]') || settingsText.parentElement;
-    expect(settingsRow?.className || '').toMatch(/orange|ff9500|warning/);
+    // "必须" badge appears
+    expect(screen.getByText('必须')).toBeTruthy();
+    // Settings row has orange inline color
+    const settingsBtn = screen.getByText('设置').closest('button');
+    expect(settingsBtn?.getAttribute('style') || '').toContain('rgb(255, 149, 0)');
+  });
+
+  it('does not show "必须" badge when isSettingsRequired=false', () => {
+    setProps({ isSettingsRequired: false });
+    expect(screen.queryByText('必须')).toBeNull();
   });
 
   it('calls onOpenTerms when 术语 clicked', () => {

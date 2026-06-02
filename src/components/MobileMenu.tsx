@@ -98,9 +98,12 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                   marginBottom: 6,
                 }}>
                   <span style={{ fontSize: 14 }}>🥚</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>
-                    蛋蛋字幕翻译
-                  </span>
+                  <Dialog.Title asChild>
+                    <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>
+                      蛋蛋字幕翻译
+                    </span>
+                  </Dialog.Title>
+                  <Dialog.Description className="sr-only">导航菜单</Dialog.Description>
                   <Dialog.Close asChild>
                     <button
                       aria-label="关闭"
@@ -158,7 +161,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                       background: isSettingsRequired ? '#fff5e6' : 'transparent',
                       color: isSettingsRequired ? '#ff9500' : '#1d1d1f',
                     }}
-                    className={isSettingsRequired ? 'text-orange-500 bg-orange-50' : 'hover:bg-gray-50'}
+                    className="hover:bg-gray-50"
                   >
                     <SettingsIcon className="w-4 h-4" />
                     <span style={{ flex: 1 }}>设置</span>
