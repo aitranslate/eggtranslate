@@ -27,7 +27,7 @@ export const GuideModal: React.FC<GuideModalProps> = ({ isOpen, onClose }) => {
         animate={{ scale: 1, y: 0, opacity: 1 }}
         exit={{ scale: 0.95, y: 8, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 280, damping: 28 }}
-        className="relative max-w-2xl w-full max-h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden"
+        className="relative bg-white shadow-2xl w-full max-w-[calc(100vw-2rem)] md:max-w-[560px] lg:max-w-[680px] rounded-none md:rounded-2xl max-h-[100dvh] md:max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -43,7 +43,7 @@ export const GuideModal: React.FC<GuideModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* 内容区域 - stagger 入场 */}
-        <div className="overflow-y-auto p-6 md:p-8 max-h-[calc(90vh-88px)]">
+        <div className="overflow-y-auto p-6 md:p-8 max-h-[calc(100dvh-88px)] md:max-h-[calc(90vh-88px)]">
           <motion.div
             initial="hidden"
             animate="show"

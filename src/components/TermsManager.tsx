@@ -204,7 +204,7 @@ export const TermsManager: React.FC<TermsManagerProps> = ({ isOpen, onClose }) =
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-white shadow-2xl w-full max-w-[calc(100vw-2rem)] md:max-w-[560px] lg:max-w-[680px] rounded-none md:rounded-2xl p-4 md:p-6 max-h-[100dvh] md:max-h-[90vh] overflow-hidden flex flex-col"
       >
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
