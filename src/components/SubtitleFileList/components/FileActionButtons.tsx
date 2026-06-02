@@ -104,7 +104,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
           : '开始翻译';
 
   return (
-    <div className="flex items-center justify-between border-t pt-4" style={{ borderColor: '#E5E5EA' }}>
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-0 border-t pt-3 md:pt-4" style={{ borderColor: '#E5E5EA' }}>
       {/* Secondary actions: keyterm dropdown, edit, export, delete */}
       <div className="flex items-center gap-2">
         {keytermDropdown}
@@ -139,7 +139,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
       </div>
 
       {/* Primary actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 md:gap-3">
         {/* Transcribe only (audio/video, always visible — grey when not actionable) */}
         {showTranscribeButton && (
           <motion.button
@@ -174,7 +174,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
               }
             }}
             disabled={primaryButtonDisabled}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto"
             style={{
               background: isQueued
                 ? '#8E8E93'
