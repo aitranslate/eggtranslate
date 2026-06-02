@@ -135,7 +135,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         animate={{ scale: 1, y: 0, opacity: 1 }}
         exit={{ scale: 0.95, y: 8, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 280, damping: 28 }}
-        className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        className="bg-white shadow-2xl w-full max-w-[calc(100vw-2rem)] md:max-w-[560px] lg:max-w-[680px] rounded-none md:rounded-2xl p-4 md:p-6 max-h-[100dvh] md:max-h-[90vh] overflow-y-auto pb-24 md:pb-6"
         onClick={(e) => e.stopPropagation()}
       >
         <motion.div
@@ -221,6 +221,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           )}
         </div>
       </motion.div>
+
+      {/* 移动端底部 sticky 操作栏 */}
+      <AnimatePresence>
+        {activeTab === 'translation' && (
+          <motion.div
+            key="mobile-action-bar"
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 280, damping: 28 }}
+            onClick={(e) => e.stopPropagation()}
+            className="fixed bottom-0 left-0 right-0 md:hidden bg-white border-t border-gray-200 p-3 flex gap-2 z-50"
+          >
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium active:scale-95 transition-transform"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              className="flex-[2] py-3 bg-blue-600 text-white rounded-lg text-sm font-medium active:scale-95 transition-transform"
+            >
+              保存设置
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
       </motion.div>
     </AnimatePresence>
   );
