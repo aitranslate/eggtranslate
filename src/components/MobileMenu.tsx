@@ -69,7 +69,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
           <Dialog.Portal forceMount>
             <Dialog.Overlay asChild>
               <motion.div
-                initial={reduce ? { opacity: 0 } : { opacity: 0 }}
+                initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}

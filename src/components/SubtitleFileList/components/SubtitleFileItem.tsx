@@ -93,7 +93,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
       }}
       whileHover={{ y: -2, boxShadow: '0 8px 24px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)' }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-      className="relative bg-white rounded-2xl p-3 md:p-3.5 flex flex-col gap-3 md:gap-5"
+      className="relative bg-white rounded-2xl p-3 md:p-3.5 lg:p-5 flex flex-col gap-3 md:gap-5 lg:gap-5"
       style={{
         boxShadow: '0 2px 12px rgba(0,0,0,0.03), 0 0 0 1px rgba(0,0,0,0.02)',
         zIndex: isTooltipVisible ? 50 : 'auto',
