@@ -93,11 +93,15 @@ async function runTask(file: SubtitleFileMetadata): Promise<void> {
   const needsTranscription = isAudioVideo && file.phases.transcribing.status !== 'completed';
 
   if (needsTranscription) {
-    useFilesStore.getState().setWorkflow(fileId, 'full');
+    // workflow 由按钮在 enqueueTask 前设置，runTask 据此决定是否继续翻译
     await startTranscription(fileId);
 
     const afterTranscribe = useFilesStore.getState().getFile(fileId);
     if (!afterTranscribe || afterTranscribe.phases.transcribing.status !== 'completed') {
+      return;
+    }
+    // 仅转录：转录完成即结束，不继续翻译
+    if (afterTranscribe.phases.workflow === 'transcribe') {
       return;
     }
   }

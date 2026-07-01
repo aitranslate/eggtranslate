@@ -5,7 +5,7 @@ import { Stagger } from '../motion/Stagger';
 import toast from 'react-hot-toast';
 import { downloadZipFile } from '@/utils/fileExport';
 import { exportTaskZip, getBaseName } from '@/services/SubtitleExporter';
-import { useFiles } from '@/stores/filesStore';
+import { useFiles, useFilesStore } from '@/stores/filesStore';
 import { useQueueStore } from '@/stores/queueStore';
 import { removeFile, clearAll } from '@/services/filesService';
 import { enqueueTask, dequeueTask, enqueueAllUncompleted } from '@/services/queueService';
@@ -144,11 +144,20 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                     file={file}
                     index={index}
                     onEdit={onEditFile}
-                    onStartTranslation={async () => { enqueueTask(file.id); }}
+                    onStartTranslation={async () => {
+                      useFilesStore.getState().setWorkflow(file.id, 'translate');
+                      enqueueTask(file.id);
+                    }}
                     onExport={handleExport}
                     onDelete={handleDeleteFile}
-                    onTranscribeAndTranslate={async () => { enqueueTask(file.id); }}
-                    onTranscribe={async () => { enqueueTask(file.id); }}
+                    onTranscribeAndTranslate={async () => {
+                      useFilesStore.getState().setWorkflow(file.id, 'full');
+                      enqueueTask(file.id);
+                    }}
+                    onTranscribe={async () => {
+                      useFilesStore.getState().setWorkflow(file.id, 'transcribe');
+                      enqueueTask(file.id);
+                    }}
                     onDequeue={() => dequeueTask(file.id)}
                     isQueued={isQueued && !isActive}
                     queuePosition={queuePosition}

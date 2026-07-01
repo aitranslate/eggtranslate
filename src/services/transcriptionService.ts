@@ -55,7 +55,11 @@ export async function startTranscription(fileId: string): Promise<void> {
       : null;
     const allKeyterms = selectedKeytermGroup?.keyterms ?? [];
 
-    useFilesStore.getState().setWorkflow(fileId, 'transcribe');
+    // workflow 由调用方（按钮）在 enqueueTask 前设置：
+    //   - 仅转录 → 'transcribe'（音视频默认）
+    //   - 一键转译 → 'full'
+    //   - 仅翻译 → 'translate'（SRT 默认）
+    // 这里不再强制覆盖，否则会抹掉"一键转译"的意图。
     // 记录该次转录使用的热词组名，UI 卡片可展示
     if (selectedKeytermGroup) {
       useFilesStore.getState().updatePhase(fileId, 'transcribing', {
@@ -94,6 +98,9 @@ export async function startTranscription(fileId: string): Promise<void> {
           ? {
               ...t,
               subtitle_entries: result.entries,
+              // 同步更新 task 顶层派生字段，供字幕编辑器头部统计与卡片 badge 使用
+              entryCount: result.entries.length,
+              translatedCount: result.entries.filter(e => e.translatedText).length,
               phases: {
                 ...t.phases,
                 converting: { status: 'completed', progress: 100, tokens: 0 },
