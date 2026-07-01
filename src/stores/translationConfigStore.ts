@@ -228,10 +228,11 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
 
           const directContent = llmResult.content;
           const directTokensUsed = llmResult.tokensUsed;
-          const repairedDirectJson = jsonrepair(directContent);
-          const directResult: Record<string, { direct: string }> = JSON.parse(repairedDirectJson);
 
           try {
+            // jsonrepair + JSON.parse 也纳入重试范围，避免推理模型偶发返回空内容时直接中断
+            const repairedDirectJson = jsonrepair(directContent);
+            const directResult: Record<string, { direct: string }> = JSON.parse(repairedDirectJson);
             validateTranslationResult(directResult, texts);
             return { translations: directResult, tokensUsed: directTokensUsed };
           } catch (error) {

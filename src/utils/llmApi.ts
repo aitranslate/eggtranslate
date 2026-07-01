@@ -65,7 +65,9 @@ export async function callLLM(
   messages: LLMMessage[],
   options: CallLLMOptions = {}
 ): Promise<CallLLMResult> {
-  const { maxRetries = API_CONSTANTS.MAX_RETRIES, temperature = API_CONSTANTS.DEFAULT_TEMPERATURE, signal } = options;
+  const { maxRetries = API_CONSTANTS.MAX_RETRIES,
+          temperature = API_CONSTANTS.DEFAULT_TEMPERATURE,
+          signal } = options;
 
   // 设置频率限制
   if (config.rpm !== undefined) {
@@ -99,8 +101,7 @@ export async function callLLM(
         body: JSON.stringify({
           model: config.model,
           messages: messages,
-          temperature,
-          max_tokens: 2048
+          temperature
         }),
         signal
       });
@@ -111,10 +112,27 @@ export async function callLLM(
       }
 
       const data = await response.json();
-      const content = data.choices[0]?.message?.content || '';
+      const choice = data.choices?.[0];
+      const content: string = choice?.message?.content ?? '';
+      const finishReason: string = choice?.finish_reason ?? '';
 
       // 计算 token 消耗（粗略估计，实际应该使用 usage.total_tokens）
       const tokensUsed = data.usage?.total_tokens || 0;
+
+      // 友好错误：content 为空（常见于推理模型 token 被推理吃光、或模型返回 null）
+      if (!content) {
+        if (finishReason === 'length') {
+          throw new Error(
+            '模型输出被 max_tokens 截断，未生成最终内容。' +
+            '推理类模型(如 step-3.7-flash / DeepSeek-R1)的思考过程会消耗大量 token，' +
+            '请在配置中减小批次大小(batchSize)。'
+          );
+        }
+        throw new Error(
+          '模型返回内容为空(content 为空)。该模型可能不兼容 OpenAI 格式，' +
+          '或为推理模型将答案放在 reasoning_content 字段中。'
+        );
+      }
 
       return { content, tokensUsed };
     } catch (error) {
