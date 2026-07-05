@@ -61,7 +61,6 @@ export class AssemblyAIService {
 
       const transcript = await client.transcripts.transcribe({
         audio: audioFile,
-        speech_models: ASSEMBLYAI_CONFIG.speechModels,
         language_detection: true,
         keyterms_prompt: options.keyterms || ASSEMBLYAI_CONFIG.defaultKeyterms
       });
@@ -119,7 +118,6 @@ export class AssemblyAIService {
 
       const transcript = await client.transcripts.transcribe({
         audio: audioFile,
-        speech_models: ASSEMBLYAI_CONFIG.speechModels,
         language_detection: true,
         keyterms_prompt: options.keyterms || ASSEMBLYAI_CONFIG.defaultKeyterms
       });
