@@ -128,7 +128,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
         className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-        onClick={onClose}
       >
       <motion.div
         initial={{ scale: 0.92, y: 24, opacity: 0 }}
@@ -136,7 +135,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         exit={{ scale: 0.95, y: 8, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 280, damping: 28 }}
         className="bg-white shadow-2xl w-full max-w-[calc(100vw-2rem)] md:max-w-[560px] lg:max-w-[680px] rounded-none md:rounded-2xl p-4 md:p-6 max-h-[100dvh] md:max-h-[90vh] overflow-y-auto pb-24 md:pb-6"
-        onClick={(e) => e.stopPropagation()}
       >
         <motion.div
           initial={{ opacity: 0, y: 8 }}
