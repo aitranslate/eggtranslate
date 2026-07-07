@@ -34,7 +34,6 @@ function createInitialPhases(isSrt: boolean, isTranslated: boolean, workflow: Wo
     converting: { ...UPCOMING },
     transcribing: isSrt ? { ...COMPLETED } : { ...UPCOMING },
     translating: isTranslated ? { ...COMPLETED } : { ...UPCOMING },
-    splitting: { ...UPCOMING },
   };
 }
 
@@ -180,7 +179,7 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
     entryCount: task.entryCount ?? entries.length,
     translatedCount: task.translatedCount ?? entries.filter((e) => e.translatedText).length,
     phases: task.phases || createInitialPhases(isSrt, isTranslated),
-    tokensUsed: (task.phases?.translating?.tokens || 0) + (task.phases?.splitting?.tokens || 0),
+    tokensUsed: (task.phases?.translating?.tokens || 0),
     entriesVersion: 0,
     selectedKeytermGroupId: task.selectedKeytermGroupId ?? null,
     fileRef: task.fileRef

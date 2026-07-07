@@ -50,7 +50,6 @@ const makeFile = (overrides: {
       converting: { status: overrides.convertingStatus ?? 'upcoming', progress: 0, tokens: 0 },
       transcribing: { status: overrides.transcribingStatus ?? 'upcoming', progress: 0, tokens: 0 },
       translating: { status: 'upcoming', progress: 0, tokens: 0 },
-      splitting: { status: 'upcoming', progress: 0, tokens: 0 },
     },
   };
 };

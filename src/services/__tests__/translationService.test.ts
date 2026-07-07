@@ -14,8 +14,7 @@ vi.mock('localforage', () => ({
 
 const makeFile = (
   taskId: string,
-  translating: 'completed' | 'upcoming' = 'upcoming',
-  splitting: 'completed' | 'upcoming' = 'upcoming'
+  translating: 'completed' | 'upcoming' = 'upcoming'
 ): SingleTask => ({
   taskId,
   subtitle_filename: `${taskId}.srt`,
@@ -31,7 +30,6 @@ const makeFile = (
     converting: { status: 'completed', progress: 100, tokens: 0 },
     transcribing: { status: 'completed', progress: 100, tokens: 0 },
     translating: { status: translating, progress: translating === 'completed' ? 100 : 0, tokens: 0 },
-    splitting: { status: splitting, progress: splitting === 'completed' ? 100 : 0, tokens: 0 },
   },
 });
 
@@ -68,7 +66,7 @@ describe('translationService', () => {
 
   it('returns null when translation already completed', async () => {
     useFilesStore.setState({
-      tasks: [makeFile('t1', 'completed', 'completed')],
+      tasks: [makeFile('t1', 'completed')],
     });
     useTranslationConfigStore.setState({ isConfigured: true });
 

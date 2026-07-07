@@ -45,7 +45,7 @@ interface TranslationConfigStore {
   updateProgress: (
     current: number,
     total: number,
-    phase: 'direct' | 'splitting' | 'completed',
+    phase: 'direct' | 'completed',
     status: string,
     taskId: string,
     newTokens?: number
@@ -250,7 +250,7 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
       updateProgress: async (
         current: number,
         total: number,
-        phase: 'direct' | 'splitting' | 'completed',
+        phase: 'direct' | 'completed',
         status: string,
         taskId: string,
         newTokens?: number

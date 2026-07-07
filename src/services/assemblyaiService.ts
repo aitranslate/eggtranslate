@@ -5,7 +5,7 @@ import { toAppError } from "@/utils/errors";
 import { useTranscriptionStore } from "@/stores/transcriptionStore";
 import { convertToMP3 } from "@/utils/convertToMP3";
 import { type AssemblyAISentence } from "@/utils/subtitleSegmentation";
-import { semanticSegment } from "@/utils/semanticSegmentation";
+import { segmentWords } from "@/services/sentenceSegmentation";
 import { logger } from "@/utils/logger";
 
 /**
@@ -147,20 +147,21 @@ export class AssemblyAIService {
         confidence: w.confidence
       }));
 
-      // 5. 语义断句（不限长度，保证语义完整）
+      // 5. DP 断句（两层流水线：句末硬切分 + 超长句 DP 软切分，带 VAD 静音代价）
       onProgress?.('segmenting', 80);
-      const segments = semanticSegment(words, 'transcribe_translate');
+      const preset = useTranscriptionStore.getState().subtitleLengthPreset || 'standard';
+      const segments = segmentWords(words, languageCode, preset);
 
-      logger.info('语义断句完成，共', segments.length, '个句子，语言代码:', languageCode);
+      logger.info('DP 断句完成，共', segments.length, '个句子，语言代码:', languageCode);
 
       onProgress?.('completed', 100);
 
       return {
         sentences: segments.map(s => ({
           text: s.text,
-          start: Math.round(s.start * 1000),
-          end: Math.round(s.end * 1000),
-          words: words.slice(s.wordStart, s.wordEnd + 1).map(w => ({
+          start: s.startTime,
+          end: s.endTime,
+          words: s.words.map(w => ({
             text: w.text,
             start: w.start,
             end: w.end

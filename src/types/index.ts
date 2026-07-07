@@ -12,9 +12,6 @@ export interface SubtitleWord {
   end: number;   // 秒
 }
 
-// 断句对齐状态类型
-export type SplitAlignStatus = 'pending' | 'in_progress' | 'completed';
-
 // 字幕条目类型
 export interface SubtitleEntry {
   id: number;
@@ -24,11 +21,6 @@ export interface SubtitleEntry {
   translatedText: string;
   translationStatus: TranslationStatus;
   words?: SubtitleWord[];  // 单词级时间戳（转录产生，SRT 导入为空）
-
-  // 断句对齐相关
-  parentId?: number;           // 父条目 id，undefined = 原始条目
-  splitIndex?: number;         // 第几个子条目（1, 2, 3...）
-  splitAlignStatus?: SplitAlignStatus;  // 原子操作状态
 }
 
 // LLM API 基础配置类型
@@ -53,7 +45,7 @@ export interface TranslationConfig extends LLMConfig {
 export interface TranslationProgress {
   current: number;
   total: number;
-  phase: 'direct' | 'splitting' | 'completed';
+  phase: 'direct' | 'completed';
   status: string;
   taskId?: string; // 当前任务ID
 }
@@ -135,10 +127,10 @@ export interface PhaseProgress {
 }
 
 // ProgressPhase: 阶段名称类型
-export type ProgressPhase = 'converting' | 'transcribing' | 'translating' | 'splitting';
+export type ProgressPhase = 'converting' | 'transcribing' | 'translating';
 
 // ALL_PHASES: 所有阶段列表
-export const ALL_PHASES: ProgressPhase[] = ['converting', 'transcribing', 'translating', 'splitting'];
+export const ALL_PHASES: ProgressPhase[] = ['converting', 'transcribing', 'translating'];
 
 // FilePhases: 工作流类型
 export type WorkflowType = 'transcribe' | 'translate' | 'full';
@@ -148,7 +140,6 @@ export interface FilePhases {
   converting: PhaseProgress;
   transcribing: PhaseProgress;
   translating: PhaseProgress;
-  splitting: PhaseProgress;
 }
 
 // 导出转录相关类型

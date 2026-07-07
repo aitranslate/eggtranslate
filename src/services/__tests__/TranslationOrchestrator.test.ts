@@ -62,7 +62,6 @@ const makeTask = (overrides: Partial<SingleTask> = {}): SingleTask => ({
     converting: { status: 'completed', progress: 100, tokens: 0 },
     transcribing: { status: 'completed', progress: 100, tokens: 0 },
     translating: { status: 'completed', progress: 100, tokens: 100 },
-    splitting: { status: 'upcoming', progress: 0, tokens: 0 },
   },
   index: 0,
   fileType: 'srt',
@@ -289,7 +288,6 @@ describe('saveTranslationHistory', () => {
         converting: { status: 'completed', progress: 100, tokens: 0 },
         transcribing: { status: 'completed', progress: 100, tokens: 0 },
         translating: { status: 'completed', progress: 100, tokens: 0 },
-        splitting: { status: 'upcoming', progress: 0, tokens: 0 },
       },
     });
     useFilesStore.setState({ tasks: [task] });

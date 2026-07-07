@@ -3,7 +3,6 @@ import { Check, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useFile } from '@/stores/filesStore';
 import { PhaseTooltipCard } from './PhaseTooltipCard';
-import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { shouldLineBeActive } from '@/utils/badgeHelper';
 import { ALL_PHASES, type ProgressPhase, type PhaseProgress, type FilePhases } from '@/types';
 
@@ -21,7 +20,6 @@ const PHASE_LABELS_CN: Record<ProgressPhase, string> = {
   converting: '视频转码',
   transcribing: '语音识别',
   translating: '字幕翻译',
-  splitting: '断句对齐',
 };
 
 const Spinner: React.FC = () => (
@@ -113,7 +111,6 @@ const ConnectingLine: React.FC<{
 
 export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId, onTooltipVisibleChange }) => {
   const file = useFile(fileId);
-  const aiSegmentationEnabled = useTranscriptionStore(state => state.aiSegmentationEnabled);
   const [hoveredPhase, setHoveredPhase] = useState<ProgressPhase | null>(null);
 
   const setHover = (phase: ProgressPhase | null) => {
@@ -128,14 +125,6 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId, onTool
     }
     return ALL_PHASES.filter(p => p !== 'converting');
   }, [file?.fileType]);
-
-  // 根据 aiSegmentationEnabled 过滤 splitting
-  const visiblePhases = useMemo(() => {
-    if (!aiSegmentationEnabled) {
-      return displayPhases.filter(p => p !== 'splitting');
-    }
-    return displayPhases;
-  }, [displayPhases, aiSegmentationEnabled]);
 
   if (!file) return null;
 

@@ -21,7 +21,6 @@ const makePhases = (overrides: Partial<Record<keyof Omit<FilePhases, 'workflow'>
   converting: { status: 'completed', progress: 100, tokens: 0, ...overrides.converting },
   transcribing: { status: 'completed', progress: 100, tokens: 0, ...overrides.transcribing },
   translating: { status: 'completed', progress: 100, tokens: 0, ...overrides.translating },
-  splitting: { status: 'completed', progress: 100, tokens: 0, ...overrides.splitting },
 });
 
 interface MakeTaskOptions {
@@ -172,7 +171,6 @@ describe('convertTaskToMetadata', () => {
     it('task.phases 存在时直接透传', () => {
       const phases = makePhases({
         translating: { status: 'active', progress: 50, tokens: 200 },
-        splitting: { status: 'upcoming', progress: 0, tokens: 0 },
       });
       const task = makeTask({ phases });
       const result = convertTaskToMetadata(task);
@@ -200,7 +198,6 @@ describe('convertTaskToMetadata', () => {
       expect(result.phases.converting).toMatchObject({ status: 'upcoming', tokens: 0 });
       expect(result.phases.transcribing).toMatchObject({ status: 'completed', progress: 100 });
       expect(result.phases.translating).toMatchObject({ status: 'upcoming', tokens: 0 });
-      expect(result.phases.splitting).toMatchObject({ status: 'upcoming', tokens: 0 });
     });
 
     it('phases 缺失且 fileType 为 video 时，transcribing 也是 upcoming', () => {
@@ -226,26 +223,24 @@ describe('convertTaskToMetadata', () => {
   // 4. tokensUsed 计算
   // ------------------------------------------
   describe('tokensUsed 计算', () => {
-    it('phases.translating.tokens + phases.splitting.tokens 之和', () => {
+    it('tokensUsed 取 translating.tokens', () => {
       const task = makeTask({
         phases: makePhases({
           translating: { tokens: 300 },
-          splitting: { tokens: 75 },
         }),
       });
       const result = convertTaskToMetadata(task);
-      expect(result.tokensUsed).toBe(375);
+      expect(result.tokensUsed).toBe(300);
     });
 
-    it('任一 phase tokens 缺失时按 0 计算', () => {
+    it('translating phase tokens 缺失时按 0 计算', () => {
       const task = makeTask({
         phases: makePhases({
-          translating: { tokens: 100 },
-          splitting: { tokens: undefined as unknown as number },
+          translating: { tokens: undefined as unknown as number },
         }),
       });
       const result = convertTaskToMetadata(task);
-      expect(result.tokensUsed).toBe(100);
+      expect(result.tokensUsed).toBe(0);
     });
 
     it('phases 整体缺失时 tokensUsed 为 0', () => {

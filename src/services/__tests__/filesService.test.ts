@@ -35,7 +35,6 @@ const makeSingleTask = (overrides: Partial<SingleTask> = {}): SingleTask => ({
     converting: { status: 'completed', progress: 100, tokens: 0 },
     transcribing: { status: 'completed', progress: 100, tokens: 0 },
     translating: { status: 'upcoming', progress: 0, tokens: 0 },
-    splitting: { status: 'upcoming', progress: 0, tokens: 0 },
   },
   index: 0,
   fileType: 'srt',

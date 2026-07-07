@@ -25,7 +25,6 @@ vi.mock('../translationService', () => ({
       converting: { status: 'completed', progress: 100, tokens: 0 },
       transcribing: { status: 'completed', progress: 100, tokens: 0 },
       translating: { status: 'completed', progress: 100, tokens: 0 },
-      splitting: { status: 'completed', progress: 100, tokens: 0 },
     } as FilePhases,
   }),
 }));
@@ -55,9 +54,6 @@ const makeFile = (taskId: string, translated: boolean = false): SingleTask => ({
     converting: { status: 'completed', progress: 100, tokens: 0 },
     transcribing: { status: 'completed', progress: 100, tokens: 0 },
     translating: translated
-      ? { status: 'completed', progress: 100, tokens: 0 }
-      : { status: 'upcoming', progress: 0, tokens: 0 },
-    splitting: translated
       ? { status: 'completed', progress: 100, tokens: 0 }
       : { status: 'upcoming', progress: 0, tokens: 0 },
   },

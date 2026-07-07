@@ -19,11 +19,9 @@ interface TranscriptionStore {
   defaultKeytermGroupId: string | null;
   setDefaultKeytermGroupId: (id: string | null) => void;
   subtitleLengthPreset: SubtitleLengthPreset;
-  aiSegmentationEnabled: boolean;
   updateKeytermGroups: (groups: KeytermGroup[]) => Promise<void>;
   setApiKeys: (keys: string) => void;
   setSubtitleLengthPreset: (preset: SubtitleLengthPreset) => void;
-  setAiSegmentationEnabled: (enabled: boolean) => void;
 }
 
 const DEFAULT_GROUPS: KeytermGroup[] = [
@@ -37,7 +35,6 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
       keytermGroups: DEFAULT_GROUPS,
       defaultKeytermGroupId: null,
       subtitleLengthPreset: 'standard',
-      aiSegmentationEnabled: true,
 
       updateKeytermGroups: async (groups) => {
         set({ keytermGroups: groups });
@@ -55,33 +52,13 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
       setSubtitleLengthPreset: (preset) => {
         set({ subtitleLengthPreset: preset });
       },
-
-      setAiSegmentationEnabled: (enabled) => {
-        set({ aiSegmentationEnabled: enabled });
-      },
     }),
     {
       name: 'transcription-storage',
-      // v2 migration: 旧数据可能带 keytermsEnabled，直接丢弃即可
-      version: 2,
-      migrate: (persistedState: unknown, version: number) => {
-        if (!persistedState || typeof persistedState !== 'object') {
-          return { keytermGroups: DEFAULT_GROUPS, defaultKeytermGroupId: null };
-        }
-        const s = persistedState as Record<string, unknown>;
-        return {
-          apiKeys: s.apiKeys ?? '',
-          keytermGroups: (s.keytermGroups as KeytermGroup[] | undefined) ?? DEFAULT_GROUPS,
-          defaultKeytermGroupId: (s.defaultKeytermGroupId as string | null | undefined) ?? null,
-          subtitleLengthPreset: (s.subtitleLengthPreset as SubtitleLengthPreset | undefined) ?? 'standard',
-          aiSegmentationEnabled: (s.aiSegmentationEnabled as boolean | undefined) ?? true,
-        };
-      },
       partialize: (state) => ({
         apiKeys: state.apiKeys,
         keytermGroups: state.keytermGroups,
         subtitleLengthPreset: state.subtitleLengthPreset,
-        aiSegmentationEnabled: state.aiSegmentationEnabled,
         defaultKeytermGroupId: state.defaultKeytermGroupId,
       }),
     }
@@ -94,5 +71,3 @@ export const useApiKeys = () => useTranscriptionStore((state) => state.apiKeys);
 export const useSetApiKeys = () => useTranscriptionStore((state) => state.setApiKeys);
 export const useSubtitleLengthPreset = () => useTranscriptionStore((state) => state.subtitleLengthPreset);
 export const useSetSubtitleLengthPreset = () => useTranscriptionStore((state) => state.setSubtitleLengthPreset);
-export const useAiSegmentationEnabled = () => useTranscriptionStore((state) => state.aiSegmentationEnabled);
-export const useSetAiSegmentationEnabled = () => useTranscriptionStore((state) => state.setAiSegmentationEnabled);

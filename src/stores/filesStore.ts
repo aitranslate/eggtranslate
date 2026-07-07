@@ -8,7 +8,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 import { useMemo } from 'react';
-import { SubtitleEntry, SubtitleFileMetadata, TranslationStatus, FilePhases, PhaseProgress, WorkflowType, SplitAlignStatus } from '@/types';
+import { SubtitleEntry, SubtitleFileMetadata, TranslationStatus, FilePhases, PhaseProgress, WorkflowType } from '@/types';
 import { convertTaskToMetadata } from '@/services/SubtitleFileManager';
 import { generateStableFileId } from '@/utils/taskIdGenerator';
 import localforage from 'localforage';
@@ -42,7 +42,6 @@ interface FilesState {
     fileId: string,
     updates: Array<{ id: number; text: string; translatedText?: string }>
   ) => void;
-  updateEntrySplitStatus: (fileId: string, entryId: number, status: SplitAlignStatus) => void;
 
   // Phase setter
   updatePhase: (fileId: string, phase: keyof Omit<FilePhases, 'workflow'>, update: Partial<PhaseProgress>) => void;
@@ -171,23 +170,6 @@ export const useFilesStore = create<FilesState>()(
         });
       },
 
-      updateEntrySplitStatus: (fileId, entryId, status) => {
-        const file = get().getFile(fileId);
-        if (!file) return;
-        set((state) => {
-          const newTasks = state.tasks.map((t) => {
-            if (t.taskId !== file.taskId) return t;
-            return {
-              ...t,
-              subtitle_entries: (t.subtitle_entries || []).map((e) =>
-                e.id === entryId ? { ...e, splitAlignStatus: status } : e
-              ),
-            };
-          });
-          return { tasks: newTasks };
-        });
-      },
-
       updatePhase: (fileId, phase, update) => {
         const file = get().getFile(fileId);
         if (!file) return;
@@ -271,7 +253,7 @@ export const useFilesStore = create<FilesState>()(
           if (!task.phases) return task;
           let taskChanged = false;
           const newPhases = { ...task.phases };
-          for (const phase of ['converting', 'transcribing', 'translating', 'splitting'] as const) {
+          for (const phase of ['converting', 'transcribing', 'translating'] as const) {
             if (newPhases[phase]?.status === 'active') {
               newPhases[phase] = {
                 status: 'failed',

@@ -16,7 +16,6 @@ function isTaskCompleted(file: SubtitleFileMetadata): boolean {
   const isSrt = file.fileType === 'srt' || !file.fileType;
   return (
     file.phases.translating.status === 'completed' &&
-    file.phases.splitting.status !== 'failed' &&
     (isSrt || file.phases.transcribing.status === 'completed')
   );
 }

@@ -50,7 +50,6 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
   const isBusy = isTranscribing || isTranslating || isActive || isQueued;
   const isAudioVideo = file.fileType === 'audio' || file.fileType === 'video';
   const isTranscriptionDone = file.phases.transcribing.status === 'completed';
-  const splittingFailed = file.phases.splitting.status === 'failed';
 
   const canTranscribeAndTranslate = useMemo(() => {
     if (isBusy) return false;
@@ -68,11 +67,9 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
   const canTranslate = useMemo(() => {
     if (isBusy) return false;
     if (isAudioVideo && !isTranscriptionDone) return false;
-    // 允许重试：断句失败时（翻译可能已100%），仍可重新触发整个流程
-    if (splittingFailed) return true;
     if (translationStats.percentage === 100) return false;
     return true;
-  }, [isBusy, translationStats.percentage, isAudioVideo, isTranscriptionDone, splittingFailed]);
+  }, [isBusy, translationStats.percentage, isAudioVideo, isTranscriptionDone]);
 
   // Determine primary action button
   // "仅转录" 按钮：audio/video 始终显示（终态置灰，不消失）

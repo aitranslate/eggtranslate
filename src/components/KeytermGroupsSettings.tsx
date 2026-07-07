@@ -124,7 +124,7 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
                     onChange={(e) => setRenamingName(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && saveEditGroup()}
                     onClick={(e) => e.stopPropagation()}
-                    className="bg-white/20 border-none outline-none text-sm w-24 text-white placeholder-white/60"
+                    className="border border-current/30 outline-none text-inherit text-sm w-24 bg-transparent rounded"
                     autoFocus
                   />
                 ) : (

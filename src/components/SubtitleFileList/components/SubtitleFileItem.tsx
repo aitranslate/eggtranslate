@@ -45,20 +45,16 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   // Tooltip 悬停时把整张卡片提升到最上层，避免被下方的 task card 遮挡
   const [isTooltipVisible, setIsTooltipVisible] = useState(false);
 
-  // 获取 aiSegmentationEnabled 配置
-  const aiSegmentationEnabled = useTranscriptionStore(state => state.aiSegmentationEnabled);
-
   // 热词选择（无全局开关，per-task 选择即生效）
   const keytermGroups = useTranscriptionStore((state) => state.keytermGroups);
   const setSelectedKeytermGroupId = useFilesStore((state) => state.setSelectedKeytermGroupId);
 
   // 计算 displayPhases（与 StepperProgress 一致：永远不展示 converting）
   const displayPhases = useMemo(() => {
-    const basePhases = file.fileType === 'srt'
+    return file.fileType === 'srt'
       ? ALL_PHASES.filter(p => p !== 'converting' && p !== 'transcribing')
       : ALL_PHASES.filter(p => p !== 'converting');
-    return aiSegmentationEnabled ? basePhases : basePhases.filter(p => p !== 'splitting');
-  }, [file.fileType, aiSegmentationEnabled]);
+  }, [file.fileType]);
 
   // 所有需要展示的阶段都完成了（用于 FileActionButtons 的 "一键转译置灰" 终态判断）
   const allPhasesDone = useMemo(
