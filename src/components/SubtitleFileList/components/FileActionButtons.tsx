@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Wand2, Edit3, Download, Trash2 } from 'lucide-react';
+import { Wand2, Edit3, Trash2 } from 'lucide-react';
 import { SubtitleFileMetadata } from '@/types';
 import { canRetranscribe } from '@/utils/fileUtils';
+import { ExportButton } from '@/components/common/ExportButton';
+import type { ExportFormat } from '@/utils/fileExport';
 
 interface FileActionButtonsProps {
   file: SubtitleFileMetadata;
@@ -18,7 +20,7 @@ interface FileActionButtonsProps {
   onDequeue?: () => void;
   onStartTranslation: () => void;
   onEdit: () => void;
-  onExport: () => void;
+  onExportFormat: (format: ExportFormat) => void;
   onDelete: () => void;
   keytermDropdown?: React.ReactNode;
 }
@@ -35,7 +37,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
   onDequeue,
   onStartTranslation,
   onEdit,
-  onExport,
+  onExportFormat,
   onDelete,
   keytermDropdown,
 }) => {
@@ -110,17 +112,12 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
         >
           <Edit3 className="w-4 h-4" />
         </button>
-        <motion.button
-          onClick={(e) => { e.stopPropagation(); onExport(); }}
+        <ExportButton
+          variant="icon"
           disabled={(file.entryCount ?? 0) === 0 || isBusy}
-          whileHover={{ scale: 1.08 }}
-          whileTap={{ scale: 0.92 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 18 }}
-          className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed"
-          title="导出"
-        >
-          <Download className="w-4 h-4" />
-        </motion.button>
+          hasTranslation={(file.translatedCount ?? 0) > 0}
+          onSelect={onExportFormat}
+        />
         <motion.button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           whileHover={{ scale: 1.08 }}

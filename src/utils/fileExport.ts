@@ -6,6 +6,33 @@
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 
+// ============================================
+// 导出格式类型与映射表
+// ============================================
+
+export type ExportFormat = 'src' | 'trans' | 'src_trans' | 'trans_src' | 'package';
+
+/** 格式 → 中文显示标签 */
+export const FORMAT_LABELS: Record<ExportFormat, string> = {
+  src: '原文',
+  trans: '译文',
+  src_trans: '双语(原上译下)',
+  trans_src: '双语(原下译上)',
+  package: '打包',
+};
+
+/** 文本格式 → SRT 文件名后缀（不含点） */
+export const FORMAT_SUFFIXES: Record<Exclude<ExportFormat, 'package'>, string> = {
+  src: '_src',
+  trans: '_trans',
+  src_trans: '_src_trans',
+  trans_src: '_trans_src',
+};
+
+// ============================================
+// 下载函数
+// ============================================
+
 /**
  * 导出文本文件
  * @param content 文件内容
@@ -35,19 +62,27 @@ export const downloadTextFile = (
 };
 
 /**
- * 导出字幕文件（带标准命名）
+ * 导出字幕文件（按格式自动决定后缀命名）
+ *
+ * 命名规则：<baseName><suffix>.<extension>
+ *   - src       → _src
+ *   - trans     → _trans
+ *   - src_trans → _src_trans
+ *   - trans_src → _trans_src
+ *
  * @param content 文件内容
  * @param originalFilename 原始文件名
  * @param extension 扩展名（srt/txt）
- * @param suffix 文件名后缀，默认为 '_translated'
+ * @param format 导出格式枚举（后缀由 FORMAT_SUFFIXES 自动映射，调用方无需关心）
  */
 export const downloadSubtitleFile = (
   content: string,
   originalFilename: string,
   extension: 'srt' | 'txt',
-  suffix: string = '_translated'
+  format: Exclude<ExportFormat, 'package'>
 ): void => {
   const baseName = originalFilename.replace(/\.(srt|txt)$/i, '');
+  const suffix = FORMAT_SUFFIXES[format];
   const filename = `${baseName}${suffix}.${extension}`;
   downloadTextFile(content, filename);
 };

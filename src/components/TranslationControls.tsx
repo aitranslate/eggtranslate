@@ -183,7 +183,7 @@ export const TranslationControls: React.FC<TranslationControlsProps> = ({
             break;
         }
 
-        downloadSubtitleFile(content, filename, extension);
+        downloadSubtitleFile(content, filename, extension, 'trans');
         toast.success('导出成功');
       } catch (error) {
         handleError(error, {

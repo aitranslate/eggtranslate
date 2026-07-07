@@ -1,10 +1,11 @@
 import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Play } from 'lucide-react';
 import { Stagger } from '../motion/Stagger';
 import toast from 'react-hot-toast';
-import { downloadZipFile } from '@/utils/fileExport';
-import { exportTaskZip, getBaseName } from '@/services/SubtitleExporter';
+import { downloadZipFile, type ExportFormat } from '@/utils/fileExport';
+import { exportFile, exportAllPackage, exportAllFormat } from '@/services/SubtitleExporter';
+import { ExportButton } from '@/components/common/ExportButton';
 import { useFiles, useFilesStore } from '@/stores/filesStore';
 import { useQueueStore } from '@/stores/queueStore';
 import { removeFile, clearAll } from '@/services/filesService';
@@ -81,11 +82,9 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     }
   }, [fileToDelete, handleError]);
 
-  const handleExport = useCallback(async (file: SubtitleFileMetadata) => {
+  const handleExportFile = useCallback(async (file: SubtitleFileMetadata, format: ExportFormat) => {
     try {
-      const zipBlob = await exportTaskZip(file.taskId);
-      const zipName = `${getBaseName(file.name)}.zip`;
-      downloadZipFile(zipBlob, zipName);
+      await exportFile(file.taskId, file.name, format);
       toast.success('导出成功');
     } catch (error) {
       handleError(error, {
@@ -93,6 +92,42 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
       });
     }
   }, [handleError]);
+
+  const handleExportAll = useCallback(async (format: ExportFormat) => {
+    // 收集有条目的文件（可导出）
+    const exportableFiles = files.filter(f => (f.entryCount ?? 0) > 0);
+    if (exportableFiles.length === 0) {
+      toast.error('没有可导出的文件');
+      return;
+    }
+
+    const taskIds = exportableFiles.map(f => f.taskId);
+
+    try {
+      if (format === 'package') {
+        const blob = await exportAllPackage(taskIds);
+        downloadZipFile(blob, '字幕导出_全部.zip');
+        toast.success(`已打包 ${exportableFiles.length} 个文件`);
+      } else {
+        const skipped = await exportAllFormat(taskIds, format);
+        const exported = exportableFiles.length - skipped;
+        if (exported === 0) {
+          toast.error('没有可导出的文件（可能均未翻译）');
+        } else if (skipped > 0) {
+          toast.success(`已导出 ${exported} 个文件，跳过 ${skipped} 个未翻译文件`);
+        } else {
+          toast.success(`已导出 ${exported} 个文件`);
+        }
+      }
+    } catch (error) {
+      handleError(error, {
+        context: { operation: '批量导出' }
+      });
+    }
+  }, [files, handleError]);
+
+  // 批量导出按钮：是否有任意文件已翻译（控制译文/双语菜单项是否可点）
+  const hasAnyTranslated = files.some(f => (f.translatedCount ?? 0) > 0);
 
   if (files.length === 0) {
     return null;
@@ -118,8 +153,15 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                 disabled={files.length === 0}
                 className="apple-button px-5 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
+                <Play className="h-4 w-4" />
                 <span>全部开始</span>
               </button>
+              <ExportButton
+                variant="button"
+                disabled={files.length === 0}
+                hasTranslation={hasAnyTranslated}
+                onSelect={handleExportAll}
+              />
               <button
                 onClick={handleClearAll}
                 disabled={files.length === 0}
@@ -147,7 +189,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                       useFilesStore.getState().setWorkflow(file.id, 'translate');
                       enqueueTask(file.id);
                     }}
-                    onExport={handleExport}
+                    onExportFormat={handleExportFile}
                     onDelete={handleDeleteFile}
                     onTranscribeAndTranslate={async () => {
                       useFilesStore.getState().setWorkflow(file.id, 'full');

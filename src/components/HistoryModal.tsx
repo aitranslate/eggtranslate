@@ -8,12 +8,12 @@ import {
   Calendar,
   FileText,
   BarChart3,
-  Search,
-  Download
+  Search
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { exportTaskZip, getBaseName } from '@/services/SubtitleExporter';
-import { downloadZipFile } from '@/utils/fileExport';
+import { getBaseName, exportEntries, buildEntriesZip } from '@/services/SubtitleExporter';
+import { downloadZipFile, downloadSubtitleFile, type ExportFormat } from '@/utils/fileExport';
+import { ExportButton } from '@/components/common/ExportButton';
 import { TranslationHistoryEntry } from '@/types';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -93,11 +93,16 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
     return new Date(timestamp).toLocaleString('zh-CN');
   }, []);
 
-  const onExport = useCallback(async (entry: TranslationHistoryEntry) => {
+  const handleExport = useCallback(async (entry: TranslationHistoryEntry, format: ExportFormat) => {
     try {
-      const zipBlob = await exportTaskZip(entry.taskId);
-      const zipName = `${getBaseName(entry.filename)}.zip`;
-      downloadZipFile(zipBlob, zipName);
+      if (format === 'package') {
+        // 历史记录直接持有 subtitle_entries，用纯函数生成 ZIP，不依赖 filesStore
+        const zipBlob = await buildEntriesZip(entry.subtitle_entries, getBaseName(entry.filename));
+        downloadZipFile(zipBlob, `${getBaseName(entry.filename)}.zip`);
+      } else {
+        const content = exportEntries(entry.subtitle_entries, format);
+        downloadSubtitleFile(content, entry.filename, 'srt', format);
+      }
       toast.success('导出成功');
     } catch (error) {
       handleError(error, {
@@ -261,21 +266,18 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
 
                     {/* 操作按钮 */}
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => onExport(entry)}
+                      <ExportButton
+                        variant="icon"
                         disabled={!entry.subtitle_entries?.length}
-                        className="apple-button apple-button-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
-                      >
-                        <Download className="h-3 w-3" />
-                        <span>导出</span>
-                      </button>
-
+                        hasTranslation={!!entry.subtitle_entries?.some(e => e.translatedText && e.translatedText.trim() !== '')}
+                        onSelect={(format) => handleExport(entry, format)}
+                      />
                       <button
                         onClick={() => onDelete(entry.taskId)}
-                        className="apple-button apple-button-ghost text-red-600 hover:bg-red-50 text-sm active:scale-95"
+                        className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-red-50 text-red-500 hover:text-red-600 transition-colors duration-200"
+                        title="删除"
                       >
-                        <Trash2 className="h-3 w-3" />
-                        <span>删除</span>
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>

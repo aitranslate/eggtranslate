@@ -4,6 +4,7 @@ import { SubtitleFileMetadata, ALL_PHASES } from '@/types';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useFilesStore } from '@/stores/filesStore';
 import { getCardBadge } from '@/utils/badgeHelper';
+import type { ExportFormat } from '@/utils/fileExport';
 import { FileIcon } from './FileIcon';
 import { StepperProgress } from './StepperProgress';
 import { FileActionButtons } from './FileActionButtons';
@@ -13,7 +14,7 @@ interface SubtitleFileItemProps {
   file: SubtitleFileMetadata;
   onEdit: (file: SubtitleFileMetadata) => void;
   onStartTranslation: (file: SubtitleFileMetadata) => Promise<void>;
-  onExport: (file: SubtitleFileMetadata) => void;
+  onExportFormat: (file: SubtitleFileMetadata, format: ExportFormat) => void;
   onDelete: (file: SubtitleFileMetadata) => Promise<void>;
   onTranscribeAndTranslate: (file: SubtitleFileMetadata) => Promise<void>;
   onTranscribe: (fileId: string) => Promise<void>;
@@ -27,7 +28,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   file,
   onEdit,
   onStartTranslation,
-  onExport,
+  onExportFormat,
   onDelete,
   onTranscribeAndTranslate,
   onTranscribe,
@@ -72,7 +73,10 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   // Token count
   const tokens = file.tokensUsed || 0;
 
-  const handleExport = useCallback(() => onExport(file), [file, onExport]);
+  const handleExportFormat = useCallback(
+    (format: ExportFormat) => onExportFormat(file, format),
+    [file, onExportFormat]
+  );
   const handleDelete = useCallback(() => onDelete(file), [file, onDelete]);
 
   return (
@@ -161,7 +165,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
         onDequeue={() => onDequeue(file.id)}
         onStartTranslation={() => onStartTranslation(file)}
         onEdit={() => onEdit(file)}
-        onExport={handleExport}
+        onExportFormat={handleExportFormat}
         onDelete={handleDelete}
       />
     </motion.div>
