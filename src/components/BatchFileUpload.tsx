@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useRef } from 'react';
-import { Upload, FileText, CheckCircle } from 'lucide-react';
+import { Upload, FileText } from 'lucide-react';
 import { addFile } from '@/services/filesService';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';

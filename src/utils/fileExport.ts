@@ -53,16 +53,6 @@ export const downloadSubtitleFile = (
 };
 
 /**
- * 导出JSON文件
- * @param data JSON数据
- * @param filename 文件名
- */
-export const downloadJsonFile = (data: unknown, filename: string): void => {
-  const content = JSON.stringify(data, null, 2);
-  downloadTextFile(content, filename, 'application/json;charset=utf-8');
-};
-
-/**
  * 导出 ZIP 文件
  * @param blob ZIP 文件的 Blob 数据
  * @param filename 文件名（包含 .zip 扩展名）

@@ -52,34 +52,3 @@ export const Stagger: React.FC<StaggerProps> = ({
     </motion.div>
   );
 };
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 16 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { type: 'spring' as const, stiffness: 220, damping: 24 },
-  },
-};
-
-const reducedItemVariants = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1 },
-};
-
-interface StaggerItemProps {
-  children: ReactNode;
-  className?: string;
-}
-
-export const StaggerItem: React.FC<StaggerItemProps> = ({ children, className }) => {
-  const reduce = useReducedMotion();
-  return (
-    <motion.div
-      className={className}
-      variants={reduce ? reducedItemVariants : itemVariants}
-    >
-      {children}
-    </motion.div>
-  );
-};

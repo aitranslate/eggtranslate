@@ -137,7 +137,6 @@ export async function processBatch(
   batch: BatchInfo,
   controller: AbortController,
   callbacks: TranslationCallbacks,
-  taskId: string,
   formatTermsForPrompt: (terms: Term[]) => string,  // 新增参数
   updateProgressCallback: (completed: number, tokensUsed?: number) => Promise<void>
 ): Promise<{ batchIndex: number; success: boolean }> {
@@ -223,7 +222,7 @@ export async function executeTranslation(
   options: TranslationOptions,
   callbacks: TranslationCallbacks
 ): Promise<void> {
-  const { entries, filename, config, controller, taskId } = options;
+  const { entries, config, controller, taskId } = options;
 
   const initialProgress = calculateActualProgress(entries);
   let currentCompletedCount = initialProgress.completed;
@@ -267,7 +266,6 @@ export async function executeTranslation(
         batch,
         controller,
         callbacks,
-        taskId,
         callbacks.formatTermsForPrompt,  // 传递格式化函数
         updateProgressCallback
       )

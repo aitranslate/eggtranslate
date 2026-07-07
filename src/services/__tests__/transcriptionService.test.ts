@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useFilesStore } from '@/stores/filesStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { startTranscription } from '../transcriptionService';
-import type { SingleTask, SubtitleFileMetadata, SubtitleEntry, PhaseProgress, WorkflowType, FileType } from '@/types';
+import type { SingleTask, SubtitleFileMetadata, PhaseProgress, WorkflowType, FileType } from '@/types';
 
 vi.mock('../transcriptionPipeline', () => ({
   runTranscriptionPipeline: vi.fn(),

@@ -57,16 +57,6 @@ export interface Term {
   notes?: string;  // 新增：可选的说明字段
 }
 
-// 翻译任务状态类型
-export interface TranslationTask {
-  taskId: string;
-  filename: string;
-  status: 'preparing' | 'translating' | 'completed' | 'failed';
-  progress: TranslationProgress;
-  createdAt: string;
-  lastUpdated: string;
-}
-
 // 单个翻译任务状态类型 (用于批处理任务列表)
 export interface SingleTask {
   taskId: string;
@@ -89,11 +79,6 @@ export interface SingleTask {
   /** 派生状态缓存：避免每次 updateEntry 触发整数组 O(n) filter */
   entryCount: number;
   translatedCount: number;
-}
-
-// 批量任务列表类型
-export interface BatchTasks {
-  tasks: SingleTask[];
 }
 
 // 翻译历史记录

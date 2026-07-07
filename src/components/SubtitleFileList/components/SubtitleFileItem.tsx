@@ -1,6 +1,6 @@
 import { useCallback, useMemo, memo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { SubtitleFileMetadata, ALL_PHASES, type ProgressPhase } from '@/types';
+import { motion } from 'framer-motion';
+import { SubtitleFileMetadata, ALL_PHASES } from '@/types';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useFilesStore } from '@/stores/filesStore';
 import { getCardBadge } from '@/utils/badgeHelper';
@@ -11,7 +11,6 @@ import { formatFileSize, formatDuration } from '../utils/fileHelpers';
 
 interface SubtitleFileItemProps {
   file: SubtitleFileMetadata;
-  index: number;
   onEdit: (file: SubtitleFileMetadata) => void;
   onStartTranslation: (file: SubtitleFileMetadata) => Promise<void>;
   onExport: (file: SubtitleFileMetadata) => void;
@@ -26,7 +25,6 @@ interface SubtitleFileItemProps {
 
 export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   file,
-  index,
   onEdit,
   onStartTranslation,
   onExport,
@@ -38,10 +36,6 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   queuePosition,
   isActive,
 }) => {
-  const isTranscribing = file.phases.converting.status === 'active' ||
-    file.phases.transcribing.status === 'active';
-  const isBusy = isTranscribing || isActive || isQueued;
-
   // Tooltip 悬停时把整张卡片提升到最上层，避免被下方的 task card 遮挡
   const [isTooltipVisible, setIsTooltipVisible] = useState(false);
 
@@ -153,7 +147,6 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
             : 0,
         }}
         isQueued={isQueued}
-        queuePosition={queuePosition}
         isActive={isActive}
         keytermDropdown={
           <KeytermDropdown

@@ -130,11 +130,6 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     };
   }, [file?.entryCount, file?.translatedCount, fileEntries]);
 
-  const editingEntry = useMemo(
-    () => editingId === null ? null : fileEntries.find((e) => e.id === editingId) ?? null,
-    [editingId, fileEntries]
-  );
-
   if (!isOpen) {
     return null;
   }

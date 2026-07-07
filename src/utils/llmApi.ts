@@ -1,4 +1,4 @@
-import { RateLimiter, rateLimiter } from './rateLimiter';
+import { rateLimiter } from './rateLimiter';
 import { API_CONSTANTS } from '@/constants/api';
 
 // 导入类型并重新导出，保持向后兼容
@@ -37,13 +37,6 @@ function getNextApiKey(apiKeyStr: string): string {
   apiKeyIndex = (apiKeyIndex + 1) % apiKeys.length;
 
   return apiKeys[currentIndex];
-}
-
-/**
- * 重置 API Key 轮询索引（用于测试或重置状态）
- */
-export function resetApiKeyIndex(): void {
-  apiKeyIndex = 0;
 }
 
 /**

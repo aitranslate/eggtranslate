@@ -27,14 +27,3 @@ export const API_CONSTANTS = {
   /** 历史保存延迟（毫秒） */
   HISTORY_SAVE_DELAY_MS: 500,
 } as const;
-
-/**
- * OpenAI API 默认配置
- */
-export const OPENAI_DEFAULTS = {
-  /** 默认 Base URL */
-  BASE_URL: 'https://api.openai.com/v1',
-
-  /** 默认模型 */
-  MODEL: 'gpt-3.5-turbo',
-} as const;

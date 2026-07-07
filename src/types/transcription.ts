@@ -1,5 +1,3 @@
-// 导入 SubtitleEntry 类型以避免循环依赖
-import type { SubtitleEntry } from './index';
 import type { FilePhases } from './index';
 
 // 热词分组
@@ -27,20 +25,6 @@ export interface AssemblyAISentence {
   end: number;             // 毫秒
   confidence?: number;
   words?: TranscriptionWord[];  // 可选的单词级别时间戳
-}
-
-// 转录结果
-export interface TranscriptionResult {
-  utterance_text: string;
-  words: TranscriptionWord[];
-  confidence_scores?: {
-    overall_log_prob: number;
-    word_avg: number;
-  };
-  metrics?: {
-    rtf: number;
-    total_ms: number;
-  };
 }
 
 /**
@@ -76,34 +60,5 @@ export interface SubtitleFileMetadata {
   fileRef?: File;
 }
 
-// 断句模式
-export type SegmentationMode = 'transcribe' | 'transcribe_translate';
-
 // 字幕长度预设
 export type SubtitleLengthPreset = 'short' | 'standard' | 'loose';
-
-// 单词 token（规范化后）
-export interface NormalizedWordToken {
-  text: string;
-  start: number; // 秒
-  end: number;   // 秒
-}
-
-// 语义断句结果
-export interface SemanticSegment {
-  text: string;
-  start: number; // 秒
-  end: number;   // 秒
-  wordStart: number; // 起始词索引
-  wordEnd: number;   // 结束词索引
-}
-
-// LLM 拆分结果
-export interface LLMSourceSplitResult {
-  sourceParts: string[];
-}
-
-// LLM 对齐结果
-export interface LLMAlignResult {
-  translations: { id: number; text: string }[];
-}

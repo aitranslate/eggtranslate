@@ -251,9 +251,7 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
         current: number,
         total: number,
         phase: 'direct' | 'completed',
-        status: string,
-        taskId: string,
-        newTokens?: number
+        status: string
       ) => {
         // 只更新进度状态，tokens 由调用方在文件级别管理
         set({
@@ -264,7 +262,7 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
       /**
        * 完成翻译
        */
-      completeTranslation: async (taskId: string) => {
+      completeTranslation: async () => {
         set({
           isTranslating: false,
           currentTaskId: '',

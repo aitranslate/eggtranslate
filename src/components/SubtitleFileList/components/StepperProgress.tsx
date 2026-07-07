@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useFile } from '@/stores/filesStore';
 import { PhaseTooltipCard } from './PhaseTooltipCard';
 import { shouldLineBeActive } from '@/utils/badgeHelper';
-import { ALL_PHASES, type ProgressPhase, type PhaseProgress, type FilePhases } from '@/types';
+import { ALL_PHASES, type ProgressPhase, type PhaseProgress } from '@/types';
 
 interface StepperProgressProps {
   fileId: string;
@@ -12,8 +12,6 @@ interface StepperProgressProps {
 }
 
 const CIRCLE_SIZE = 24;
-const RING_RADIUS = 10;
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 const BRAND_BLUE = '#0066FF';
 
 const PHASE_LABELS_CN: Record<ProgressPhase, string> = {
@@ -33,27 +31,6 @@ const Spinner: React.FC = () => (
     }}
   />
 );
-
-const RingProgress: React.FC<{ progress: number }> = ({ progress }) => {
-  const offset = RING_CIRCUMFERENCE - (progress / 100) * RING_CIRCUMFERENCE;
-  return (
-    <svg
-      style={{ position: 'absolute', inset: -2, width: CIRCLE_SIZE, height: CIRCLE_SIZE }}
-      viewBox="0 0 24 24"
-    >
-      <circle cx="12" cy="12" r={RING_RADIUS} fill="none" stroke="transparent" strokeWidth="2" />
-      <motion.circle
-        cx="12" cy="12" r={RING_RADIUS}
-        fill="none" stroke={BRAND_BLUE} strokeWidth="2" strokeLinecap="round"
-        strokeDasharray={RING_CIRCUMFERENCE}
-        initial={{ strokeDashoffset: RING_CIRCUMFERENCE }}
-        animate={{ strokeDashoffset: offset }}
-        transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
-        transform="rotate(-90 12 12)"
-      />
-    </svg>
-  );
-};
 
 /** 计算百分比（progress 字段本身即为 0-100 的百分比，-1 表示不确定进度） */
 const getPercentage = (phase: PhaseProgress): number => {

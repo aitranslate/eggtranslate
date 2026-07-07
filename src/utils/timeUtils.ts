@@ -25,16 +25,3 @@ export function formatTime(seconds: number): string {
          String(secs).padStart(2, '0') + ',' +
          String(milliseconds).padStart(3, '0');
 }
-
-/**
- * SRT 时间字符串 → 秒
- */
-export function parseTime(srtTime: string): number {
-  const parts = srtTime.split(/[:,]/);
-  if (parts.length < 4) return 0;
-  const hours = parseInt(parts[0], 10) || 0;
-  const minutes = parseInt(parts[1], 10) || 0;
-  const seconds = parseInt(parts[2], 10) || 0;
-  const milliseconds = parseInt(parts[3], 10) || 0;
-  return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000;
-}

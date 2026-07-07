@@ -1,10 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import { useTranslationConfigStore, useTranslationConfig } from '@/stores/translationConfigStore';
-import { useKeytermGroups, useUpdateKeytermGroups } from '@/stores/transcriptionStore';
 import { TranslationSettings } from './SettingsModal/TranslationSettings';
 import { TranscriptionSettings } from './TranscriptionSettings';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Save, TestTube, Settings as SettingsIcon } from 'lucide-react';
+import { X, Save, TestTube } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 
@@ -24,10 +23,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   // Translation config
   const config = useTranslationConfig();
   const updateConfig = useTranslationConfigStore((state) => state.updateConfig);
-
-  // Transcription config (热词分组)
-  const keytermGroups = useKeytermGroups();
-  const updateKeytermGroups = useUpdateKeytermGroups();
 
   // 测试连接相关状态
   const [isTesting, setIsTesting] = useState(false);

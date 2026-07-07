@@ -133,7 +133,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
 
           <Stagger className="space-y-4" stagger={0.07}>
             <AnimatePresence>
-              {files.map((file, index) => {
+              {files.map((file) => {
                 const isQueued = taskQueue.includes(file.id);
                 const queuePosition = taskQueue.indexOf(file.id) + 1;
                 const isActive = activeTaskId === file.id;
@@ -142,7 +142,6 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                   <SubtitleFileItem
                     key={file.id}
                     file={file}
-                    index={index}
                     onEdit={onEditFile}
                     onStartTranslation={async () => {
                       useFilesStore.getState().setWorkflow(file.id, 'translate');

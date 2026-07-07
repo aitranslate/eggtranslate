@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Languages, Mic, Wand2, Edit3, Download, Trash2 } from 'lucide-react';
+import { Wand2, Edit3, Download, Trash2 } from 'lucide-react';
 import { SubtitleFileMetadata } from '@/types';
 import { canRetranscribe } from '@/utils/fileUtils';
 
@@ -11,7 +11,6 @@ interface FileActionButtonsProps {
     percentage: number;
   };
   isQueued: boolean;
-  queuePosition: number;
   isActive: boolean;
   allPhasesDone: boolean;
   onTranscribeAndTranslate: () => void;
@@ -29,7 +28,6 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
   isTranslating,
   translationStats,
   isQueued,
-  queuePosition,
   isActive,
   allPhasesDone,
   onTranscribeAndTranslate,

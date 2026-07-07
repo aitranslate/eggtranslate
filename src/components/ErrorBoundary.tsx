@@ -3,7 +3,7 @@
  * 捕获组件树中的错误，显示友好的降级 UI
  */
 
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { toAppError, getUserMessage } from '@/utils/errors';
 
@@ -24,15 +24,6 @@ interface ErrorBoundaryState {
  * ErrorBoundary 组件
  *
  * 捕获子组件树中的 JavaScript 错误，显示降级 UI 而不是崩溃整个应用
- *
- * @example
- * <ErrorBoundary
- *   fallback={(error, retry) => (
- *     <ErrorFallback error={error} onRetry={retry} />
- *   )}
- * >
- *   <App />
- * </ErrorBoundary>
  */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
@@ -155,54 +146,6 @@ function DefaultErrorFallback({
           如果问题持续存在，请刷新页面或联系技术支持
         </p>
       </div>
-    </div>
-  );
-}
-
-/**
- * 预制的错误降级 UI 组件
- * 可用于自定义 ErrorBoundary 的 fallback
- */
-export function ErrorFallback({
-  error,
-  onRetry,
-  title = '出错了',
-  showDetails = import.meta.env.DEV
-}: {
-  error: Error;
-  onRetry: () => void;
-  title?: string;
-  showDetails?: boolean;
-}) {
-  const userMessage = getUserMessage(error);
-
-  return (
-    <DefaultErrorFallback error={error} onRetry={onRetry} />
-  );
-}
-
-/**
- * 用于特定错误类型的降级 UI
- */
-export function NetworkErrorFallback({
-  onRetry
-}: {
-  onRetry: () => void;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center p-8 text-center">
-      <div className="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mb-4">
-        <AlertTriangle className="w-8 h-8 text-yellow-400" />
-      </div>
-      <h2 className="text-xl font-bold text-white mb-2">网络连接失败</h2>
-      <p className="text-white/60 mb-6">请检查网络连接后重试</p>
-      <button
-        onClick={onRetry}
-        className="flex items-center space-x-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-500/30 rounded-lg py-2 px-4 transition-colors"
-      >
-        <RefreshCw className="w-4 h-4" />
-        <span>重试</span>
-      </button>
     </div>
   );
 }

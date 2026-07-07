@@ -6,10 +6,8 @@ import {
   Menu
 } from 'lucide-react';
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { FileUpload } from './FileUpload';
 import { BatchFileUpload } from './BatchFileUpload';
 import { SubtitleFileList } from './SubtitleFileList';
-import { TranslationControls } from './TranslationControls';
 import { SubtitleEditor } from './SubtitleEditor';
 import { SettingsModal } from './SettingsModal';
 import { TermsManager } from './TermsManager';
@@ -23,7 +21,6 @@ import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
 import { useHistoryStore } from '@/stores/historyStore';
 import { SubtitleFileMetadata } from '@/types';
 import { useTermsStore } from '@/stores/termsStore';
-import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { FadeIn } from './motion/FadeIn';
 
 // 滚动动画观察器 Hook
@@ -64,7 +61,6 @@ export const MainApp: React.FC = () => {
   const history = useHistoryStore((state) => state.history);
   const terms = useTermsStore((state) => state.terms);
 
-  const { handleError } = useErrorHandler();
   useScrollAnimation();
 
   const handleEditFile = useCallback((file: SubtitleFileMetadata) => {

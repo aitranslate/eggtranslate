@@ -5,9 +5,6 @@
 
 import { SubtitleEntry } from '@/types';
 import { assemblyaiService } from './assemblyaiService';
-import type { AssemblyAISentence } from '@/utils/subtitleSegmentation';
-import { toast } from 'react-hot-toast';
-import { toAppError } from '@/utils/errors';
 import { formatTime } from '@/utils/timeUtils';
 
 /**
