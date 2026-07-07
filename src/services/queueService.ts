@@ -55,9 +55,17 @@ export function dequeueTask(fileId: string): void {
 export function enqueueAllUncompleted(): void {
   const files = useFilesStore.getState().getAllFiles();
   for (const file of files) {
-    if (!isTaskCompleted(file)) {
-      enqueueTask(file.id);
-    }
+    if (isTaskCompleted(file)) continue;
+
+    const isAudioVideo = file.fileType === 'audio' || file.fileType === 'video';
+    const needsTranscription = isAudioVideo && file.phases.transcribing.status !== 'completed';
+
+    // 音视频未转录 → 转录+翻译全流程；已转录 / SRT → 仅翻译
+    useFilesStore
+      .getState()
+      .setWorkflow(file.id, needsTranscription ? 'full' : 'translate');
+
+    enqueueTask(file.id);
   }
 }
 
