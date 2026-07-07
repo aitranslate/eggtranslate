@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Save, X, Search, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useShallow } from 'zustand/react/shallow';
 import { SubtitleEntry } from '@/types';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useFilesStore, useFile } from '@/stores/filesStore';
@@ -26,11 +27,15 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const deleteEntry = useFilesStore((state) => state.deleteEntry);
 
   const taskId = file?.taskId;
-  const fileEntries = useFilesStore((state) => {
-    if (!taskId) return EMPTY_ENTRIES;
-    const task = state.tasks.find((t) => t.taskId === taskId);
-    return task?.subtitle_entries ?? EMPTY_ENTRIES;
-  });
+  // 用 useShallow 按条目 id+内容做浅比较：翻译回填只改单条 translatedText 时，
+  // 若数组引用变化但各条目引用相同，不会触发下游重渲染。
+  const fileEntries = useFilesStore(
+    useShallow((state) => {
+      if (!taskId) return EMPTY_ENTRIES;
+      const task = state.tasks.find((t) => t.taskId === taskId);
+      return task?.subtitle_entries ?? EMPTY_ENTRIES;
+    }),
+  );
 
   const { handleError } = useErrorHandler();
 
@@ -243,7 +248,6 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                       <div
                         key={entry.id}
                         data-index={vItem.index}
-                        ref={virtualizer.measureElement}
                         style={{
                           position: 'absolute',
                           top: 0,
@@ -251,7 +255,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                           width: '100%',
                           transform: `translateY(${vItem.start}px)`,
                         }}
-                        className={`p-3 border-b cursor-pointer transition-colors ${
+                        className={`p-3 border-b cursor-pointer transition-colors overflow-hidden ${
                           isEditing ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50 border-gray-100'
                         }`}
                         onClick={() => {
