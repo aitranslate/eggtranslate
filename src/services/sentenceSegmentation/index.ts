@@ -13,7 +13,10 @@ import { KEEP_INTACT_RATIO } from './constants';
 import { getProfile, tokenize } from './profiles';
 import { splitTextToSentences, mapSentencesToWordRanges } from './hardSplit';
 import { splitSpanByDp } from './softSplit';
+import { mergeWatchabilitySegments } from './watchabilityMerge';
 import type { DpSegment, Preset, Segment, SilenceQuery, WordToken, WordWithTime } from './types';
+
+export { mergeWatchabilitySegments } from './watchabilityMerge';
 
 /** 把一组 token 切片拼成文本。 */
 function joinTokens(tokens: WordToken[]): string {
@@ -53,6 +56,7 @@ export function segmentWords(
   words: WordWithTime[],
   lang: string,
   preset: Preset = 'standard',
+  options: { watchabilityMerge?: boolean } = {},
 ): DpSegment[] {
   if (words.length === 0) return [];
   const profile = getProfile(lang);
@@ -91,5 +95,6 @@ export function segmentWords(
       });
     }
   }
-  return out;
+  // Watchability 后处理：把过短相邻段重新粘合（解决"一闪而过"）。默认关闭，由调用方按需开启。
+  return options.watchabilityMerge ? mergeWatchabilitySegments(out, lang, preset) : out;
 }
