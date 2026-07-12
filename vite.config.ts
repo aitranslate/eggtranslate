@@ -2,15 +2,13 @@ import path from "path"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import sourceIdentifierPlugin from 'vite-plugin-source-info'
-import { VitePWA } from 'vite-plugin-pwa'  // <-- NEW
+import { VitePWA } from 'vite-plugin-pwa'
 
 const isProd = process.env.BUILD_MODE === 'prod'
 
 // 部署到 Cloudflare Pages，使用根路径
-const base = '/'
-
 export default defineConfig({
-  base: base,
+  base: '/',
   plugins: [
     react(),
     sourceIdentifierPlugin({
@@ -18,9 +16,9 @@ export default defineConfig({
       attributePrefix: 'data-matrix',
       includeProps: true,
     }),
-    VitePWA({                              // <-- NEW
-      registerType: 'autoUpdate',          // 新 SW 自动激活（= skipWaiting + clients.claim）
-      injectRegister: 'auto',              // 插件自动注入注册脚本
+    VitePWA({
+      registerType: 'autoUpdate',
+      injectRegister: 'auto',
       manifest: {
         name: '蛋蛋字幕翻译',
         short_name: '蛋蛋字幕翻译',
@@ -42,7 +40,7 @@ export default defineConfig({
         globPatterns: [],
       },
       devOptions: {
-        // dev 模式下不启用 SW；Task 7 手动 QA 用 pnpm preview 跑生产构建
+        // dev 模式下不启用 SW；手动 QA 用 pnpm preview 跑生产构建
         enabled: false,
       },
     }),
@@ -53,7 +51,6 @@ export default defineConfig({
   preview: {
     port: 4173,
   },
-  optimizeDeps: {},
   define: {
     global: 'globalThis',
   },
@@ -70,8 +67,6 @@ export default defineConfig({
         manualChunks: (id) => {
           if (id.includes('node_modules')) {
             if (id.includes('framer-motion')) return 'vendor-framer-motion';
-            if (id.includes('@radix-ui')) return 'vendor-radix';
-            if (id.includes('react-router')) return 'vendor-react-router';
             if (id.includes('lucide-react')) return 'vendor-lucide';
             if (id.includes('react') || id.includes('react-dom')) return 'vendor-react';
             return 'vendor';
@@ -83,6 +78,4 @@ export default defineConfig({
       }
     }
   },
-  // 确保 public 目录下的文件使用相对路径
-  publicDir: 'public'
 })
