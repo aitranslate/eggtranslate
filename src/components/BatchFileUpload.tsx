@@ -1,7 +1,6 @@
 import React, { useCallback, useState, useRef } from 'react';
 import { Upload, FileText } from 'lucide-react';
 import { addFile } from '@/services/filesService';
-import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 
@@ -26,8 +25,7 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
     }
 
     try {
-      // 不锁住组件：addFile 内部用 toast 反馈进度，
-      // 用户可以继续拖拽/选择新文件（多个上传可并行）
+      // 不锁住组件：addFile 内部用 toast 反馈进度；store 已在 app bootstrap 完成 rehydrate
       await addFile(file);
     } catch (err) {
       handleError(err, {
@@ -65,21 +63,14 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
 
   return (
     <div className={className}>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full"
-      >
+      <div className="w-full">
         {/* 批量上传区域 - Apple 风格 */}
-        <motion.div
-          className="relative w-full p-5 sm:p-8 lg:p-12 border-2 border-dashed rounded-2xl bg-gray-50/50 border-gray-300"
-          animate={isDragging
-            ? { scale: 1.02, backgroundColor: 'rgba(0, 102, 255, 0.04)', borderColor: '#0066FF' }
-            : { scale: 1, backgroundColor: 'rgba(249, 250, 251, 0.5)', borderColor: '#d1d5db' }
-          }
-          whileHover={!isDragging ? { borderColor: '#60a5fa' } : undefined}
-          transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+        <div
+          className={`relative w-full p-5 sm:p-8 lg:p-12 border-2 border-dashed rounded-2xl transition duration-200 ${
+            isDragging
+              ? 'scale-[1.01] bg-blue-500/[0.04] border-blue-500'
+              : 'bg-gray-50/50 border-gray-300 hover:border-blue-400'
+          }`}
           onDrop={onDrop}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
@@ -94,13 +85,13 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
           />
 
           <div className="flex flex-col items-center justify-center space-y-6">
-            <motion.div
-              animate={isDragging ? { y: -4, scale: 1.05 } : { y: 0, scale: 1 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 18 }}
-              className="w-10 h-10 sm:w-12 sm:h-12 lg:w-16 lg:h-16 rounded-full bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/20"
+            <div
+              className={`w-10 h-10 sm:w-12 sm:h-12 lg:w-16 lg:h-16 rounded-full bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/20 transition-transform duration-200 ${
+                isDragging ? '-translate-y-1 scale-105' : ''
+              }`}
             >
               <Upload className="h-5 w-5 sm:h-6 sm:w-6 lg:h-8 lg:w-8 text-white" />
-            </motion.div>
+            </div>
 
             <div className="text-center">
               <h3 className="text-base sm:text-lg lg:text-2xl font-semibold text-gray-900 mb-2 sm:mb-3">
@@ -146,20 +137,14 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
           </div>
 
           {/* 拖入时的遮罩高亮 */}
-          <AnimatePresence>
-            {isDragging && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
-                className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-blue-500 ring-offset-2 ring-offset-white"
-              />
-            )}
-          </AnimatePresence>
-        </motion.div>
+          <div
+            className={`pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-blue-500 ring-offset-2 ring-offset-white transition-opacity duration-150 ${
+              isDragging ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
+        </div>
 
-      </motion.div>
+      </div>
     </div>
   );
 };

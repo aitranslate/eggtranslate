@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Save, X, Search, FileText } from 'lucide-react';
@@ -16,6 +16,128 @@ interface SubtitleEditorProps {
   onClose: () => void;
   fileId: string;
 }
+
+interface DisplayRowProps {
+  entry: SubtitleEntry;
+  index: number;
+  start: number;
+  onStartEdit: (entry: SubtitleEntry) => void;
+}
+
+/** Non-editing row: no draft props → keystrokes on another row never re-render this. */
+export const SubtitleDisplayRow = memo<DisplayRowProps>(({ entry, index, start, onStartEdit }) => {
+  return (
+    <div
+      data-index={index}
+      data-testid={`subtitle-row-${entry.id}`}
+      data-editing="false"
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        transform: `translateY(${start}px)`,
+      }}
+      className="p-3 border-b cursor-pointer transition-colors overflow-hidden hover:bg-gray-50 border-gray-100"
+      onClick={() => onStartEdit(entry)}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <div className="text-xs text-gray-500">
+          #{index + 1} | {entry.startTime} {'-->'} {entry.endTime}
+        </div>
+      </div>
+      <div className="space-y-0.5">
+        <div className="text-sm text-gray-900">{entry.text}</div>
+        <div className={`text-sm ${entry.translatedText ? 'text-blue-600' : 'text-gray-400 italic'}`}>
+          {entry.translatedText || '未翻译（点击编辑）'}
+        </div>
+      </div>
+    </div>
+  );
+});
+SubtitleDisplayRow.displayName = 'SubtitleDisplayRow';
+
+interface EditingRowProps {
+  entry: SubtitleEntry;
+  index: number;
+  start: number;
+  editText: string;
+  editTranslation: string;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+  setEditText: (text: string) => void;
+  setEditTranslation: (text: string) => void;
+}
+
+export const SubtitleEditingRow = memo<EditingRowProps>(({
+  entry,
+  index,
+  start,
+  editText,
+  editTranslation,
+  onSaveEdit,
+  onCancelEdit,
+  setEditText,
+  setEditTranslation,
+}) => {
+  return (
+    <div
+      data-index={index}
+      data-testid={`subtitle-row-${entry.id}`}
+      data-editing="true"
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        transform: `translateY(${start}px)`,
+      }}
+      className="p-3 border-b cursor-pointer transition-colors overflow-hidden bg-blue-50 border-blue-300"
+    >
+      <div className="flex items-center justify-between mb-1">
+        <div className="text-xs text-gray-500">
+          #{index + 1} | {entry.startTime} {'-->'} {entry.endTime}
+        </div>
+      </div>
+      <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+        <textarea
+          value={editText}
+          onChange={(e) => setEditText(e.target.value)}
+          className="w-full p-2 bg-white border border-gray-200 rounded text-sm text-gray-900 resize-none focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+          rows={2}
+          placeholder="原文"
+          autoFocus
+        />
+        <textarea
+          value={editTranslation}
+          onChange={(e) => setEditTranslation(e.target.value)}
+          className="w-full p-2 bg-white border border-gray-200 rounded text-sm text-gray-900 resize-none focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+          rows={2}
+          placeholder="译文（输入后点保存）"
+        />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onSaveEdit}
+            className="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-sm rounded transition-colors flex items-center gap-1"
+          >
+            <Save className="h-3 w-3" />
+            <span>保存</span>
+          </button>
+          <button
+            type="button"
+            onClick={onCancelEdit}
+            className="px-3 py-1 text-gray-500 hover:bg-gray-200 text-sm rounded transition-colors flex items-center gap-1"
+          >
+            <X className="h-3 w-3" />
+            <span>取消</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+SubtitleEditingRow.displayName = 'SubtitleEditingRow';
 
 export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   isOpen,
@@ -81,10 +203,10 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   }, []);
 
   const onSaveEdit = useCallback(() => {
-    if (editingId === null || !file?.id) return;
+    if (editingId === null || !fileId) return;
 
     try {
-      updateEntry(file.id, editingId, editText, editTranslation);
+      updateEntry(fileId, editingId, editText, editTranslation);
       setEditingId(null);
       setEditText('');
       setEditTranslation('');
@@ -94,7 +216,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
         context: { operation: '保存字幕编辑' }
       });
     }
-  }, [editingId, editText, editTranslation, updateEntry, handleError, file]);
+  }, [editingId, editText, editTranslation, updateEntry, handleError, fileId]);
 
   const onCancelEdit = useCallback(() => {
     setEditingId(null);
@@ -103,7 +225,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   }, []);
 
   const handleMerge = useCallback(() => {
-    if (!file?.id || !fileEntries.length) return;
+    if (!fileId || !fileEntries.length) return;
 
     const toMerge: Array<{current: SubtitleEntry, next: SubtitleEntry}> = [];
 
@@ -118,22 +240,23 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
 
     for (const { current, next } of toMerge) {
       const mergedText = `${current.text} ${next.text}`;
-      updateEntry(file.id, current.id, mergedText, current.translatedText, 'completed');
-      deleteEntry(file.id, next.id);
+      updateEntry(fileId, current.id, mergedText, current.translatedText, 'completed');
+      deleteEntry(fileId, next.id);
     }
 
-  }, [file, fileEntries, updateEntry, deleteEntry]);
+  }, [fileId, fileEntries, updateEntry, deleteEntry]);
 
+  // 头部进度/统计只依赖文件元数据，避免翻译批量写入 entries 时整表重渲染
   const translationStats = useMemo(() => {
-    const total = file?.entryCount ?? fileEntries.length;
-    const translated = file?.translatedCount ?? fileEntries.filter((e) => e.translatedText).length;
+    const total = file?.entryCount ?? 0;
+    const translated = file?.translatedCount ?? 0;
     return {
       total,
       translated,
       untranslated: total - translated,
       percentage: total > 0 ? Math.round((translated / total) * 100) : 0,
     };
-  }, [file?.entryCount, file?.translatedCount, fileEntries]);
+  }, [file?.entryCount, file?.translatedCount]);
 
   if (!isOpen) {
     return null;
@@ -228,7 +351,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                 </div>
               </div>
 
-              {/* Subtitle List - 虚拟化 */}
+              {/* Subtitle List - 虚拟化；仅编辑行接收 draft props */}
               <div
                 ref={parentRef}
                 className="flex-1 overflow-auto border border-gray-200 rounded-xl"
@@ -243,73 +366,30 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                 >
                   {virtualizer.getVirtualItems().map((vItem) => {
                     const entry = filteredEntries[vItem.index];
-                    const isEditing = editingId === entry.id;
+                    if (editingId === entry.id) {
+                      return (
+                        <SubtitleEditingRow
+                          key={entry.id}
+                          entry={entry}
+                          index={vItem.index}
+                          start={vItem.start}
+                          editText={editText}
+                          editTranslation={editTranslation}
+                          onSaveEdit={onSaveEdit}
+                          onCancelEdit={onCancelEdit}
+                          setEditText={setEditText}
+                          setEditTranslation={setEditTranslation}
+                        />
+                      );
+                    }
                     return (
-                      <div
+                      <SubtitleDisplayRow
                         key={entry.id}
-                        data-index={vItem.index}
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          width: '100%',
-                          transform: `translateY(${vItem.start}px)`,
-                        }}
-                        className={`p-3 border-b cursor-pointer transition-colors overflow-hidden ${
-                          isEditing ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50 border-gray-100'
-                        }`}
-                        onClick={() => {
-                          if (!isEditing) onStartEdit(entry);
-                        }}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="text-xs text-gray-500">
-                            #{vItem.index + 1} | {entry.startTime} {'-->'} {entry.endTime}
-                          </div>
-                        </div>
-                        {isEditing ? (
-                          <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-                            <textarea
-                              value={editText}
-                              onChange={(e) => setEditText(e.target.value)}
-                              className="w-full p-2 bg-white border border-gray-200 rounded text-sm text-gray-900 resize-none focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
-                              rows={2}
-                              placeholder="原文"
-                              autoFocus
-                            />
-                            <textarea
-                              value={editTranslation}
-                              onChange={(e) => setEditTranslation(e.target.value)}
-                              className="w-full p-2 bg-white border border-gray-200 rounded text-sm text-gray-900 resize-none focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
-                              rows={2}
-                              placeholder="译文（输入后点保存）"
-                            />
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={onSaveEdit}
-                                className="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-sm rounded transition-colors flex items-center gap-1"
-                              >
-                                <Save className="h-3 w-3" />
-                                <span>保存</span>
-                              </button>
-                              <button
-                                onClick={onCancelEdit}
-                                className="px-3 py-1 text-gray-500 hover:bg-gray-200 text-sm rounded transition-colors flex items-center gap-1"
-                              >
-                                <X className="h-3 w-3" />
-                                <span>取消</span>
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-0.5">
-                            <div className="text-sm text-gray-900">{entry.text}</div>
-                            <div className={`text-sm ${entry.translatedText ? 'text-blue-600' : 'text-gray-400 italic'}`}>
-                              {entry.translatedText || '未翻译（点击编辑）'}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                        entry={entry}
+                        index={vItem.index}
+                        start={vItem.start}
+                        onStartEdit={onStartEdit}
+                      />
                     );
                   })}
                 </div>

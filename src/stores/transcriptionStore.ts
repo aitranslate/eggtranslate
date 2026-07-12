@@ -55,6 +55,7 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
     }),
     {
       name: 'transcription-storage',
+      skipHydration: true,
       partialize: (state) => ({
         apiKeys: state.apiKeys,
         keytermGroups: state.keytermGroups,

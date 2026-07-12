@@ -6,7 +6,7 @@
  * - 选中：记录用户当前选择
  */
 
-import { useFilesStore } from '@/stores/filesStore';
+import { useFilesStore, flushFilesStorePersist } from '@/stores/filesStore';
 import { useQueueStore } from '@/stores/queueStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
@@ -18,6 +18,7 @@ import localforage from 'localforage';
 import toast from 'react-hot-toast';
 
 export async function addFile(file: File): Promise<string | null> {
+  // Store 已在 main bootstrap 中 rehydrate 完成；此处不再做 per-call hydrate 等待
   const { defaultKeytermGroupId } = useTranscriptionStore.getState();
 
   // 音视频文件：转码 + 持久化 + 上传完成才加入 store（用 toast 持续提示）
@@ -73,6 +74,8 @@ async function addMediaFile(file: File, defaultKeytermGroupId: string | null): P
       },
     };
     useFilesStore.getState().addTask(finalTask);
+    // 双保险：addTask 已 flush，这里再 await 确保 MP3 key 与任务列表一致落盘
+    await flushFilesStorePersist();
 
     // 4) 上传成功 toast（覆盖 loading toast，4s 后自动消失）
     toast.success(`上传成功：${file.name}`, { id: toastId, duration: 4000 });

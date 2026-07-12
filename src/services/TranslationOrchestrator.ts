@@ -34,12 +34,18 @@ export interface TranslationCallbacks {
     contextAfter?: string,
     terms?: string
   ) => Promise<{ translations: Record<string, { direct: string }>; tokensUsed: number }>;
-  updateEntry: (
-    id: number,
-    text: string,
-    translatedText: string,
-    status?: TranslationStatus  // 新增可选参数
-  ) => Promise<void>;
+  /**
+   * Apply an entire batch of entry patches in one store mutation.
+   * Prefer this over per-line updateEntry on the translation hot path.
+   */
+  batchUpdateEntries: (
+    updates: Array<{
+      id: number;
+      text: string;
+      translatedText: string;
+      status?: TranslationStatus;
+    }>
+  ) => void | Promise<void>;
   updateProgress: (
     current: number,
     total: number,
@@ -186,14 +192,8 @@ export async function processBatch(
     }
 
     if (batchUpdates.length > 0) {
-      for (const update of batchUpdates) {
-        await callbacks.updateEntry(
-          update.id,
-          update.text,
-          update.translatedText,
-          update.status  // 传递状态
-        );
-      }
+      // One store mutation for the whole batch (not one per line)
+      await callbacks.batchUpdateEntries(batchUpdates);
 
       // 传递本次翻译使用的 tokens
       await updateProgressCallback(batchUpdates.length, translationResult.tokensUsed);

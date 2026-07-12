@@ -1,7 +1,8 @@
-import { motion } from 'framer-motion';
 import { Check, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useFile } from '@/stores/filesStore';
+import { useShallow } from 'zustand/react/shallow';
+import { useFilesStore } from '@/stores/filesStore';
+import { generateStableFileId } from '@/utils/taskIdGenerator';
 import { PhaseTooltipCard } from './PhaseTooltipCard';
 import { shouldLineBeActive } from '@/utils/badgeHelper';
 import { ALL_PHASES, type ProgressPhase, type PhaseProgress } from '@/types';
@@ -68,18 +69,16 @@ const ConnectingLine: React.FC<{
           overflow: 'hidden',
         }}
       >
-        <motion.div
+        <div
           style={{
             height: '100%',
+            width: '100%',
             borderRadius: 1,
             backgroundColor: isFailed ? '#FF3B30' : BRAND_BLUE,
             transformOrigin: 'left center',
+            transform: `scaleX(${isActive || isCompleted ? 1 : 0})`,
+            transition: 'transform 0.7s cubic-bezier(0.16, 1, 0.3, 1)',
           }}
-          initial={{ width: '0%' }}
-          animate={{
-            width: isActive || isCompleted ? '100%' : '0%',
-          }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
         />
       </div>
     </div>
@@ -87,7 +86,14 @@ const ConnectingLine: React.FC<{
 };
 
 export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId, onTooltipVisibleChange }) => {
-  const file = useFile(fileId);
+  // 只订阅本文件需要的字段，且用 useShallow 比较具体值，避免其他任务进度更新触发重渲染
+  const fileSnapshot = useFilesStore(
+    useShallow((state) => {
+      const task = state.tasks.find((t) => generateStableFileId(t.taskId) === fileId);
+      if (!task) return undefined;
+      return { phases: task.phases, fileType: task.fileType };
+    }),
+  );
   const [hoveredPhase, setHoveredPhase] = useState<ProgressPhase | null>(null);
 
   const setHover = (phase: ProgressPhase | null) => {
@@ -97,15 +103,15 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId, onTool
 
   // 决定显示哪些阶段节点（converting 节点已交给 TranscodingIndicator 在顶部统一展示）
   const displayPhases = useMemo(() => {
-    if (file?.fileType === 'srt') {
+    if (fileSnapshot?.fileType === 'srt') {
       return ALL_PHASES.filter(p => p !== 'converting' && p !== 'transcribing');
     }
     return ALL_PHASES.filter(p => p !== 'converting');
-  }, [file?.fileType]);
+  }, [fileSnapshot?.fileType]);
 
-  if (!file) return null;
+  if (!fileSnapshot) return null;
 
-  const { phases } = file;
+  const { phases } = fileSnapshot;
 
   return (
     <div
@@ -119,7 +125,13 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId, onTool
         minHeight: 84,
       }}
     >
-      <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @keyframes node-pulse {
+          0% { transform: scale(0.85); opacity: 0.5; }
+          100% { transform: scale(1.45); opacity: 0; }
+        }
+      `}</style>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
         {displayPhases.map((phase, i) => {
@@ -160,7 +172,7 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId, onTool
                   minWidth: CIRCLE_SIZE,
                 }}
               >
-                <motion.div
+                <div
                   style={{
                     width: CIRCLE_SIZE,
                     height: CIRCLE_SIZE,
@@ -173,40 +185,29 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({ fileId, onTool
                     border: `2px solid ${nodeBorder}`,
                     transition: 'all 0.4s ease',
                   }}
-                  animate={
-                    isActive
-                      ? { boxShadow: ['0 0 0 0 rgba(0,102,255,0.2)', '0 0 0 6px rgba(0,102,255,0)'] }
-                      : { boxShadow: '0 0 0 0 transparent' }
-                  }
-                  transition={
-                    isActive
-                      ? { duration: 2, repeat: Infinity, ease: 'easeOut' }
-                      : { duration: 0.3 }
-                  }
                   onMouseEnter={() => setHover(phase)}
                   onMouseLeave={() => setHover(null)}
                 >
+                  {isActive && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        inset: -2,
+                        borderRadius: '50%',
+                        border: '2px solid rgba(0,102,255,0.35)',
+                        animation: 'node-pulse 2s ease-out infinite',
+                      }}
+                    />
+                  )}
                   {isCompleted && (
-                    <motion.div
-                      initial={{ scale: 0.5, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ duration: 0.3, ease: 'easeOut' }}
-                    >
-                      <Check size={12} style={{ color: 'white' }} strokeWidth={3} />
-                    </motion.div>
+                    <Check size={12} style={{ color: 'white' }} strokeWidth={3} />
                   )}
                   {isFailed && (
-                    <motion.div
-                      initial={{ scale: 0.5, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ duration: 0.3, ease: 'easeOut' }}
-                    >
-                      <X size={12} style={{ color: 'white' }} strokeWidth={3} />
-                    </motion.div>
+                    <X size={12} style={{ color: 'white' }} strokeWidth={3} />
                   )}
                   {/* 不确定进度和确定进度都显示 Spinner */}
                   {isActive && <Spinner />}
-                </motion.div>
+                </div>
 
                 <PhaseTooltipCard
                   phaseName={PHASE_LABELS_CN[phase]}

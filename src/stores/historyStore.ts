@@ -32,6 +32,7 @@ export const useHistoryStore = create<HistoryState>()(
       name: 'translation_history',
       storage: createJSONStorage(() => localforage),
       version: 1,
+      skipHydration: true,
       // 迁移：旧格式是 TranslationHistoryEntry[]，新格式是 {state: {history: [...]}}
       migrate: (persistedState: unknown, version: number) => {
         if (version === 0 && Array.isArray(persistedState)) {

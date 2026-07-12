@@ -1,7 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Trash2, Play } from 'lucide-react';
-import { Stagger } from '../motion/Stagger';
 import toast from 'react-hot-toast';
 import { downloadZipFile, type ExportFormat } from '@/utils/fileExport';
 import { exportFile, exportAllPackage, exportAllFormat } from '@/services/SubtitleExporter';
@@ -28,6 +26,13 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   const files = useFiles();
   const taskQueue = useQueueStore((state) => state.taskQueue);
   const activeTaskId = useQueueStore((state) => state.activeTaskId);
+
+  // O(1) 队列位置查询，避免列表项多时 indexOf/includes 形成 O(n^2)
+  const queueMeta = useMemo(() => {
+    const map = new Map<string, number>();
+    taskQueue.forEach((id, i) => map.set(id, i + 1));
+    return map;
+  }, [taskQueue]);
 
   const { handleError } = useErrorHandler();
 
@@ -135,10 +140,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
 
   return (
     <div className={className}>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
+      <div>
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h3 className="apple-heading-medium">
@@ -173,43 +175,41 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
             </div>
           </div>
 
-          <Stagger className="space-y-4" stagger={0.07}>
-            <AnimatePresence>
-              {files.map((file) => {
-                const isQueued = taskQueue.includes(file.id);
-                const queuePosition = taskQueue.indexOf(file.id) + 1;
-                const isActive = activeTaskId === file.id;
+          <div className="space-y-4">
+            {files.map((file) => {
+              const queuePosition = queueMeta.get(file.id) ?? 0;
+              const isActive = activeTaskId === file.id;
+              const isQueued = queuePosition > 0 && !isActive;
 
-                return (
-                  <SubtitleFileItem
-                    key={file.id}
-                    file={file}
-                    onEdit={onEditFile}
-                    onStartTranslation={async () => {
-                      useFilesStore.getState().setWorkflow(file.id, 'translate');
-                      enqueueTask(file.id);
-                    }}
-                    onExportFormat={handleExportFile}
-                    onDelete={handleDeleteFile}
-                    onTranscribeAndTranslate={async () => {
-                      useFilesStore.getState().setWorkflow(file.id, 'full');
-                      enqueueTask(file.id);
-                    }}
-                    onTranscribe={async () => {
-                      useFilesStore.getState().setWorkflow(file.id, 'transcribe');
-                      enqueueTask(file.id);
-                    }}
-                    onDequeue={() => dequeueTask(file.id)}
-                    isQueued={isQueued && !isActive}
-                    queuePosition={queuePosition}
-                    isActive={isActive}
-                  />
-                );
-              })}
-            </AnimatePresence>
-          </Stagger>
+              return (
+                <SubtitleFileItem
+                  key={file.id}
+                  file={file}
+                  onEdit={onEditFile}
+                  onStartTranslation={async () => {
+                    useFilesStore.getState().setWorkflow(file.id, 'translate');
+                    enqueueTask(file.id);
+                  }}
+                  onExportFormat={handleExportFile}
+                  onDelete={handleDeleteFile}
+                  onTranscribeAndTranslate={async () => {
+                    useFilesStore.getState().setWorkflow(file.id, 'full');
+                    enqueueTask(file.id);
+                  }}
+                  onTranscribe={async () => {
+                    useFilesStore.getState().setWorkflow(file.id, 'transcribe');
+                    enqueueTask(file.id);
+                  }}
+                  onDequeue={() => dequeueTask(file.id)}
+                  isQueued={isQueued}
+                  queuePosition={queuePosition}
+                  isActive={isActive}
+                />
+              );
+            })}
+          </div>
         </div>
-      </motion.div>
+      </div>
 
       <ConfirmDialog
         isOpen={showClearConfirm}

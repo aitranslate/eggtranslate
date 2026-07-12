@@ -43,6 +43,7 @@ export const useTermsStore = create<TermsState>()(
       name: 'terms_list',
       storage: createJSONStorage(() => localforage),
       version: 1,
+      skipHydration: true,
       // 迁移：旧格式是 Term[] 直接存储，新格式是 {state: {terms: Term[]}}
       migrate: (persistedState: unknown, version: number) => {
         if (version === 0 && Array.isArray(persistedState)) {

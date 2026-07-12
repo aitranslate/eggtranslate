@@ -154,7 +154,7 @@
   border-radius: var(--apple-radius-button);
   border: none;
   cursor: pointer;
-  transition: all var(--apple-transition-fast);
+  transition: background-color var(--apple-transition-fast), transform var(--apple-transition-fast);
   background-color: var(--apple-blue);
   color: #ffffff;
   min-height: 44px;
@@ -220,9 +220,10 @@
   right: 0;
   z-index: 1000;
   background-color: rgba(255, 255, 255, 0.8);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
   border-bottom: 1px solid var(--apple-border-lighter);
+  contain: layout paint;
 }
 
 .apple-navbar-content {

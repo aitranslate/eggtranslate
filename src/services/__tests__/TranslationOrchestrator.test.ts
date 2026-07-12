@@ -4,6 +4,9 @@ import {
   createTranslationBatches,
   calculateActualProgress,
   saveTranslationHistory,
+  processBatch,
+  type BatchInfo,
+  type TranslationCallbacks,
 } from '../TranslationOrchestrator';
 import type {
   SubtitleEntry,
@@ -46,7 +49,7 @@ const makeCallbacks = (overrides: Partial<{
   formatTermsForPrompt: (terms: Term[]) => string;
 }> = {}) => ({
   translateBatch: vi.fn(),
-  updateEntry: vi.fn(),
+  batchUpdateEntries: vi.fn(),
   updateProgress: vi.fn(),
   getRelevantTerms: vi.fn(() => [] as Term[]),
   formatTermsForPrompt: vi.fn((terms: Term[]) => terms.map(t => t.original).join(',')),
@@ -342,3 +345,95 @@ describe('saveTranslationHistory', () => {
     errorSpy.mockRestore();
   });
 });
+
+// ---------- processBatch: one batch store write ----------
+
+describe('processBatch batch apply', () => {
+  it('calls batchUpdateEntries once (not per line) and applies via real store', async () => {
+    const entries = [makeEntry(1), makeEntry(2), makeEntry(3)];
+    const task = makeTask({
+      taskId: 't1',
+      subtitle_entries: entries,
+      entryCount: 3,
+      translatedCount: 0,
+      phases: {
+        workflow: 'translate',
+        converting: { status: 'completed', progress: 100, tokens: 0 },
+        transcribing: { status: 'completed', progress: 100, tokens: 0 },
+        translating: { status: 'active', progress: 0, tokens: 0 },
+      },
+    });
+    useFilesStore.setState({ tasks: [task], selectedFileId: null });
+
+    let storeMutations = 0;
+    const unsub = useFilesStore.subscribe(() => {
+      storeMutations += 1;
+    });
+
+    const batchUpdateEntries = vi.fn(
+      (
+        updates: Array<{
+          id: number;
+          text: string;
+          translatedText: string;
+          status?: TranslationStatus;
+        }>
+      ) => {
+        // production wiring: one store API call
+        useFilesStore.getState().batchUpdateEntries('file_t1', updates);
+      }
+    );
+    const updateEntrySpy = vi.fn();
+
+    const callbacks: TranslationCallbacks = {
+      translateBatch: vi.fn().mockResolvedValue({
+        translations: {
+          '1': { direct: 'A' },
+          '2': { direct: 'B' },
+          '3': { direct: 'C' },
+        },
+        tokensUsed: 9,
+      }),
+      batchUpdateEntries,
+      updateProgress: vi.fn().mockResolvedValue(undefined),
+      getRelevantTerms: vi.fn(() => [] as Term[]),
+      formatTermsForPrompt: vi.fn(() => ''),
+    };
+
+    const batch: BatchInfo = {
+      batchIndex: 0,
+      untranslatedEntries: entries,
+      textsToTranslate: entries.map((e) => e.text),
+      contextBeforeTexts: '',
+      contextAfterTexts: '',
+      relevantTerms: [],
+    };
+
+    const progressCb = vi.fn().mockResolvedValue(undefined);
+    const result = await processBatch(
+      batch,
+      new AbortController(),
+      callbacks,
+      callbacks.formatTermsForPrompt,
+      progressCb
+    );
+
+    unsub();
+
+    expect(result.success).toBe(true);
+    expect(batchUpdateEntries).toHaveBeenCalledTimes(1);
+    expect(batchUpdateEntries.mock.calls[0][0]).toHaveLength(3);
+    // must not fall back to per-line API
+    expect(updateEntrySpy).not.toHaveBeenCalled();
+    // one store mutation for the batch apply (progress is separate callback)
+    expect(storeMutations).toBe(1);
+
+    const updated = useFilesStore.getState().tasks[0];
+    expect(updated.subtitle_entries.map((e) => e.translatedText)).toEqual(['A', 'B', 'C']);
+    expect(updated.subtitle_entries.every((e) => e.translationStatus === 'completed')).toBe(true);
+    expect(updated.translatedCount).toBe(3);
+    expect(progressCb).toHaveBeenCalledWith(3, 9);
+  });
+});
+
+

@@ -1,5 +1,4 @@
 import { useCallback, useMemo, memo, useState } from 'react';
-import { motion } from 'framer-motion';
 import { SubtitleFileMetadata, ALL_PHASES } from '@/types';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useFilesStore } from '@/stores/filesStore';
@@ -80,14 +79,8 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   const handleDelete = useCallback(() => onDelete(file), [file, onDelete]);
 
   return (
-    <motion.div
-      variants={{
-        hidden: { opacity: 0, y: 20 },
-        show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 220, damping: 24 } },
-      }}
-      whileHover={{ y: -2, boxShadow: '0 8px 24px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)' }}
-      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-      className="relative bg-white rounded-2xl p-3 md:p-3.5 lg:p-5 flex flex-col gap-3 md:gap-5 lg:gap-5"
+    <div
+      className="relative bg-white rounded-2xl p-3 md:p-3.5 lg:p-5 flex flex-col gap-3 md:gap-5 lg:gap-5 hover:-translate-y-0.5 transition-transform duration-200 will-change-transform"
       style={{
         boxShadow: '0 2px 12px rgba(0,0,0,0.03), 0 0 0 1px rgba(0,0,0,0.02)',
         zIndex: isTooltipVisible ? 50 : 'auto',
@@ -168,7 +161,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
         onExportFormat={handleExportFormat}
         onDelete={handleDelete}
       />
-    </motion.div>
+    </div>
   );
 };
 

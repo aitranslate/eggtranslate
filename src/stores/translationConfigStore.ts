@@ -271,6 +271,7 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
     }),
     {
       name: 'translation-config-storage',
+      skipHydration: true,
       partialize: (state) => ({
         config: state.config,
         isConfigured: state.isConfigured

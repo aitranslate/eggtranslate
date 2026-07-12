@@ -10,7 +10,7 @@
  * 直接上传 SRT 不再二次断句。本服务只负责翻译，不含 AI 断句对齐。
  */
 
-import { useFilesStore } from '@/stores/filesStore';
+import { useFilesStore, flushFilesStorePersist } from '@/stores/filesStore';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { useTermsStore } from '@/stores/termsStore';
 import { executeTranslation } from './TranslationOrchestrator';
@@ -20,7 +20,7 @@ import {
   getRelevantTerms as getRelevantTermsUtil,
   formatTermsForPrompt as formatTermsForPromptUtil
 } from '@/utils/termsHelpers';
-import type { SubtitleEntry, Term, TranslationStatus, FilePhases } from '@/types';
+import type { SubtitleEntry, Term, FilePhases } from '@/types';
 import toast from 'react-hot-toast';
 
 export async function startTranslation(
@@ -74,8 +74,8 @@ export async function startTranslation(
       },
       {
         translateBatch: translationConfigStore.translateBatch,
-        updateEntry: async (id: number, text: string, translatedText: string, status?: TranslationStatus) => {
-          useFilesStore.getState().updateEntry(fileId, id, text, translatedText, status);
+        batchUpdateEntries: (updates) => {
+          useFilesStore.getState().batchUpdateEntries(fileId, updates);
         },
         updateProgress: async (current: number, total: number, phase: 'direct' | 'completed', status: string, taskId: string, newTokens?: number) => {
           await translationConfigStore.updateProgress(current, total, phase, status, taskId);
@@ -102,9 +102,10 @@ export async function startTranslation(
       return null;
     }
 
-    // 完成翻译 — 更新 tasks（内存操作）
+    // 完成翻译 — 更新 tasks（内存操作）；updatePhase(completed) 会 flush persist
     const finalTokens = useFilesStore.getState().getFile(fileId)?.tokensUsed || 0;
     useFilesStore.getState().updatePhase(fileId, 'translating', { status: 'completed', progress: 100, tokens: finalTokens });
+    await flushFilesStorePersist();
 
     const finalTask = useFilesStore.getState().tasks.find(t => t.taskId === file.taskId);
     const lastEntries = finalTask?.subtitle_entries || entries;
@@ -123,6 +124,7 @@ export async function startTranslation(
         status: 'failed',
         errorMessage: error instanceof Error ? error.message : String(error),
       });
+      await flushFilesStorePersist();
     }
   } finally {
     useTranslationConfigStore.getState().stopTranslation();
