@@ -6,7 +6,8 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { TranslationConfig, TranslationProgress } from '@/types';
+import { TranslationConfig, TranslationProgress, LlmProfile } from '@/types';
+import type { LlmModelInfo } from '@/utils/listLlmModels';
 import { callLLM } from '@/utils/llmApi';
 import { jsonrepair } from 'jsonrepair';
 import { generateSharedPrompt, generateDirectPrompt } from '@/utils/translationPrompts';
@@ -30,8 +31,11 @@ interface TranslationConfigStore {
   tokensUsed: number;
   currentTaskId: string;
   abortController: AbortController | null;
+  /** 按 profile id 缓存的模型列表，避免每次打开设置都重新获取 */
+  cachedModelLists: Record<string, LlmModelInfo[]>;
 
   updateConfig: (updates: Partial<TranslationConfig>) => Promise<void>;
+  cacheModelList: (profileId: string, models: LlmModelInfo[]) => void;
   testConnection: () => Promise<boolean>;
   startTranslation: (taskId?: string) => Promise<AbortController>;
   stopTranslation: () => void;
@@ -51,7 +55,6 @@ interface TranslationConfigStore {
     taskId?: string,
     newTokens?: number
   ) => Promise<void>;
-  completeTranslation: (taskId?: string) => Promise<void>;
 }
 
 const defaultProfiles = createDefaultProfiles();
@@ -59,7 +62,7 @@ const defaultProfiles = createDefaultProfiles();
 const DEFAULT_CONFIG: TranslationConfig = {
   profiles: defaultProfiles,
   activeProfileId: 'agnes',
-  sourceLanguage: 'en',
+  sourceLanguage: 'English',
   targetLanguage: '简体中文',
   batchSize: 20,
   threadCount: 4,
@@ -92,15 +95,26 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
       tokensUsed: 0,
       currentTaskId: '',
       abortController: null,
+      cachedModelLists: {},
 
       updateConfig: async (updates) => {
         const newConfig = { ...get().config, ...updates };
         set(withConfigured(newConfig));
       },
 
+      cacheModelList: (profileId, models) => {
+        set({
+          cachedModelLists: {
+            ...get().cachedModelLists,
+            [profileId]: models,
+          },
+        });
+      },
+
       testConnection: async () => {
         const llm = getActiveLlmConfig(get().config);
-        if (!llm.apiKey?.trim()) {
+        const profile = getActiveProfile(get().config);
+        if (profile.requiresKey !== false && !llm.apiKey?.trim()) {
           toastError('请先配置 API 密钥');
           return false;
         }
@@ -161,7 +175,8 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
       ) => {
         const config = get().config;
         const llm = getActiveLlmConfig(config);
-        if (!llm.apiKey?.trim()) {
+        const profile = getActiveProfile(config);
+        if (profile.requiresKey !== false && !llm.apiKey?.trim()) {
           throw new Error('请先配置API密钥');
         }
 
@@ -214,10 +229,6 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
       updateProgress: async (current, total, phase, status) => {
         set({ progress: { current, total, phase, status } });
       },
-
-      completeTranslation: async () => {
-        set({ isTranslating: false, currentTaskId: '' });
-      },
     }),
     {
       name: 'translation-config-v2',
@@ -225,10 +236,20 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
       partialize: (state) => ({
         config: state.config,
         isConfigured: state.isConfigured,
+        cachedModelLists: state.cachedModelLists,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state?.config) return;
         const normalized = ensureProfiles(state.config);
+        // 历史语言 code → LANGUAGE_OPTIONS.value
+        const src = (normalized.sourceLanguage || '').trim().toLowerCase();
+        if (src === 'en' || src === 'eng' || src === 'english') {
+          normalized.sourceLanguage = 'English';
+        }
+        const tgt = (normalized.targetLanguage || '').trim();
+        if (tgt === 'zh' || tgt === 'zh-cn' || tgt === 'zh-hans') {
+          normalized.targetLanguage = '简体中文';
+        }
         state.config = normalized;
         state.isConfigured = isTranslationLlmConfigured(normalized);
       },
@@ -250,6 +271,13 @@ export const useTranslationProgress = () => useTranslationConfigStore((state) =>
 
 export const useTranslationTokensUsed = () =>
   useTranslationConfigStore((state) => state.tokensUsed);
+
+const EMPTY_MODEL_LIST: LlmModelInfo[] = [];
+
+export const useCachedModelList = (profileId: string) =>
+  useTranslationConfigStore(
+    (state) => state.cachedModelLists[profileId] ?? EMPTY_MODEL_LIST
+  );
 
 function validateTranslationResult(
   result: Record<string, { direct: string }>,

@@ -19,6 +19,7 @@ export function createProfileFromPreset(preset: LlmProviderPreset, apiKey = ''):
     model: preset.model,
     apiKey,
     presetId: preset.id,
+    requiresKey: preset.requiresKey ?? true,
   };
 }
 
@@ -46,6 +47,7 @@ export function getActiveLlmConfig(config: TranslationConfig): LLMConfig {
 }
 
 export function isProfileConfigured(profile: LlmProfile): boolean {
+  if (profile.requiresKey === false) return true;
   return (profile.apiKey?.trim().length ?? 0) > 0;
 }
 
@@ -84,12 +86,15 @@ export function selectProvider(
 
 /** 确保档案完整且 active 有效 */
 export function ensureProfiles(config: TranslationConfig): TranslationConfig {
-  let profiles = config.profiles?.length ? [...config.profiles] : createDefaultProfiles();
+  const profiles = config.profiles?.length ? [...config.profiles] : createDefaultProfiles();
 
-  // 补齐缺失的服务商槽位
+  // 补齐缺失的服务商槽位，并同步预设字段（如 requiresKey）
   for (const preset of LLM_PROVIDER_PRESETS) {
-    if (!profiles.some((p) => p.id === preset.id)) {
+    const idx = profiles.findIndex((p) => p.id === preset.id);
+    if (idx === -1) {
       profiles.push(createProfileFromPreset(preset));
+    } else if (profiles[idx].requiresKey === undefined) {
+      profiles[idx] = { ...profiles[idx], requiresKey: preset.requiresKey ?? true };
     }
   }
 

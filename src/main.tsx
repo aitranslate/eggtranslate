@@ -5,6 +5,9 @@ import './index.css'
 import App from './App.tsx'
 import { logger } from '@/utils/logger'
 import { rehydrateAppStores } from '@/stores/bootstrap'
+import { initThemeFromStorage } from '@/stores/themeStore'
+
+initThemeFromStorage()
 
 function renderApp() {
   createRoot(document.getElementById('root')!).render(

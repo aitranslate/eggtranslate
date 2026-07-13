@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { ExternalLink, Settings2 } from 'lucide-react';
+import { Check, ExternalLink, Settings2 } from 'lucide-react';
 import {
   LLM_PROVIDER_PRESETS,
   type LlmProviderId,
@@ -63,8 +63,8 @@ export const ProviderPresetPicker: React.FC<ProviderPresetPickerProps> = ({
                 active:scale-[0.97]
                 ${
                   isSelected
-                    ? 'border-blue-500 bg-blue-50/80 shadow-sm shadow-blue-500/10'
-                    : 'border-gray-100 bg-gray-50/60 hover:border-gray-200 hover:bg-white'
+                    ? 'border-[var(--apple-blue)] bg-[var(--apple-blue-soft)] shadow-sm shadow-blue-500/10 ring-1 ring-[var(--apple-blue-soft-strong)]'
+                    : 'border-transparent bg-[var(--wb-panel-2,#f5f5f7)] hover:border-[var(--wb-border,#e5e5ea)] hover:bg-[var(--wb-panel,#fff)]'
                 }
               `}
             >
@@ -82,30 +82,38 @@ export const ProviderPresetPicker: React.FC<ProviderPresetPickerProps> = ({
                 </span>
               )}
               {preset.iconSrc ? (
-                <img
-                  src={preset.iconSrc}
-                  alt=""
-                  className="w-7 h-7 object-contain"
-                  draggable={false}
-                />
+                <span
+                  className={`wb-provider-icon-wrap${preset.iconMono ? ' is-mono' : ''}`}
+                >
+                  <img
+                    src={preset.iconSrc}
+                    alt=""
+                    className="wb-provider-icon"
+                    draggable={false}
+                  />
+                </span>
               ) : (
-                <span className="w-7 h-7 rounded-lg bg-gray-200/80 flex items-center justify-center">
-                  <Settings2 className="w-3.5 h-3.5 text-gray-600" />
+                <span className="wb-provider-icon-wrap wb-provider-icon-fallback">
+                  <Settings2 className="w-3.5 h-3.5" strokeWidth={2} />
                 </span>
               )}
               <span
                 className={`text-[10px] font-medium leading-tight text-center truncate w-full ${
-                  isSelected ? 'text-blue-700' : 'text-gray-600'
+                  isSelected ? 'text-[var(--apple-blue)]' : 'text-gray-600'
                 }`}
               >
                 {preset.shortName}
               </span>
-              {hasKey && !isSelected && (
+              {isSelected ? (
+                <span className="wb-provider-check" aria-hidden>
+                  <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                </span>
+              ) : hasKey ? (
                 <span
                   className="absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full bg-[var(--apple-success)]"
                   aria-hidden
                 />
-              )}
+              ) : null}
             </button>
           );
         })}

@@ -129,6 +129,24 @@
 
 ---
 
+## 🧪 本地开发与 E2E
+
+```bash
+pnpm install
+pnpm dev                 # http://127.0.0.1:5173
+pnpm test                # 单元测试 (vitest)
+pnpm test:e2e            # agent-browser 全流程冒烟
+pnpm test:e2e:live       # 含真实 LLM（需 e2e/.env.e2e）
+pnpm test:e2e:live-full  # 完整 live 素材 + LLM
+```
+
+本机已全局安装 `agent-browser` 时，直接 `pnpm test:e2e` 即可，无需再装。  
+仅在新环境或提示找不到命令时执行：`pnpm test:e2e:install`。
+
+说明见 [`e2e/README.md`](e2e/README.md)。
+
+---
+
 ## 🔒 隐私保护
 
 - ✅ **本地处理** - 所有转录和翻译在浏览器中完成

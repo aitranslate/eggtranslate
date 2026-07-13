@@ -28,10 +28,17 @@ export interface LlmProviderPreset {
   badgeTone?: 'free' | 'recommend';
   /** 获取 Key 的文档或平台链接 */
   keyUrl?: string;
+  /** 是否必须填写 API Key（如 Agnes 免费接口可免 Key） */
+  requiresKey?: boolean;
   /** 卡片副文案 */
   hint?: string;
   /** public 下图标路径；无则用通用图标 */
   iconSrc?: string;
+  /**
+   * 单色 / currentColor 图标：暗色模式下需反白，否则贴在深底上几乎看不见
+   * （有品牌色的 SVG 不要开）
+   */
+  iconMono?: boolean;
 }
 
 /**
@@ -111,6 +118,7 @@ export const LLM_PROVIDER_PRESETS: LlmProviderPreset[] = [
     keyUrl: 'https://platform.openai.com/api-keys',
     hint: 'GPT-5 mini · 高性价比',
     iconSrc: '/icons/providers/chatgpt.svg',
+    iconMono: true,
   },
   {
     id: 'gemini',
@@ -131,6 +139,7 @@ export const LLM_PROVIDER_PRESETS: LlmProviderPreset[] = [
     keyUrl: 'https://openrouter.ai/keys',
     hint: '聚合 · 默认 Gemini Flash',
     iconSrc: '/icons/providers/openrouter.svg',
+    iconMono: true,
   },
   {
     id: 'ollama',
@@ -141,6 +150,7 @@ export const LLM_PROVIDER_PRESETS: LlmProviderPreset[] = [
     keyUrl: 'https://ollama.com/',
     hint: '本地 · 需先 ollama pull · Key 可填 ollama',
     iconSrc: '/icons/providers/ollama.svg',
+    iconMono: true,
   },
 ];
 

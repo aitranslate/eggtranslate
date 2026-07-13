@@ -10,7 +10,14 @@ import {
   useTranscriptionStore
 } from '@/stores/transcriptionStore';
 
-export const TranscriptionSettings: React.FC = () => {
+interface TranscriptionSettingsProps {
+  /** 设置双栏内更紧凑 */
+  compact?: boolean;
+}
+
+export const TranscriptionSettings: React.FC<TranscriptionSettingsProps> = ({
+  compact = false,
+}) => {
   const apiKeys = useApiKeys();
   const setApiKeys = useSetApiKeys();
   const keytermGroups = useKeytermGroups();
@@ -19,17 +26,19 @@ export const TranscriptionSettings: React.FC = () => {
   const setDefaultKeytermGroupId = useTranscriptionStore((state) => state.setDefaultKeytermGroupId);
 
   return (
-    <div className="space-y-6">
+    <div className={compact ? 'space-y-4' : 'space-y-6'}>
       <ApiEndpointsSettings
         keys={apiKeys}
         onKeysChange={setApiKeys}
+        compact={compact}
       />
-      <SrtCharsSettings />
+      <SrtCharsSettings compact={compact} />
       <KeytermGroupsSettings
         groups={keytermGroups}
         onGroupsChange={updateKeytermGroups}
         defaultKeytermGroupId={defaultKeytermGroupId}
         onDefaultGroupChange={setDefaultKeytermGroupId}
+        compact={compact}
       />
     </div>
   );

@@ -191,7 +191,8 @@ export async function listLlmModels(
     allModels.push(m);
   }
 
-  allModels.sort((a, b) => a.id.localeCompare(b.id, undefined, { sensitivity: 'base' }));
+  // 直接按接口返回的原始顺序倒序展示
+  allModels.reverse();
 
   if (allModels.length === 0) {
     throw new Error('接口已响应，但未解析到模型列表，请手填模型名');

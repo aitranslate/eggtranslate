@@ -20,7 +20,7 @@ const isCjk = (ch: string) => {
   );
 };
 
-const useCharUnits = (lang: string, text: string) => {
+const shouldUseCharUnits = (lang: string, text: string) => {
   const lo = lang.trim().toLowerCase();
   if (/^(zh|yue|ja|ko|th)/.test(lo)) return true;
   if (!lo || lo === 'auto') return [...text].some(isCjk);
@@ -53,7 +53,7 @@ const countWordUnits = (t: string) => {
 const textLen = (t: string, lang: string) => {
   const s = t.trim();
   if (!s) return 0;
-  return useCharUnits(lang, s) ? countCharUnits(s) : countWordUnits(s);
+  return shouldUseCharUnits(lang, s) ? countCharUnits(s) : countWordUnits(s);
 };
 
 // 与 voxtrans quality.rs is_terminal_punctuation 一致。注意不含 ] / ) ——
@@ -101,7 +101,7 @@ const isFragIssue = (t: string, lang: string) => {
 const startsContinuation = (t: string, lang: string) => {
   const n = norm(t);
   if (!n) return false;
-  if (useCharUnits(lang, n)) return CJK_STARTERS.some((p) => n.startsWith(p));
+  if (shouldUseCharUnits(lang, n)) return CJK_STARTERS.some((p) => n.startsWith(p));
   const first = n.split(/\s+/)[0]?.toLowerCase() ?? '';
   return !!first && (ASCII_STARTERS.includes(first) || ASCII_STARTERS.some((s) => n.startsWith(s + ' ')));
 };
@@ -111,7 +111,7 @@ const mergeText = (a: string, b: string) => {
   if (!la || !lb) return la || lb;
   // 左右任一侧以/起 CJK 时不插空格，避免"我们决定出门去 然后"这种字面瑕疵；
   // 两侧皆拉丁时保留空格（"and the weather was bad"）。
-  const rxCjk = /[　-鿿　-〿＀-￯]/;
+  const rxCjk = /[\u3000-\u9fff\uff00-\uffef]/;
   const useSpace = !rxCjk.test(la[la.length - 1] ?? '') || !rxCjk.test(lb[0] ?? '');
   return norm(useSpace ? `${la} ${lb}` : `${la}${lb}`);
 };

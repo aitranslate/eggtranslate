@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { parseSRT, toSRT, toTXT, toBilingual, toSrcTrans } from '../srtParser';
+import {
+  parseSRT,
+  toSRT,
+  toTXT,
+  toBilingual,
+  toSrcTrans,
+  getBilingualDisplayLines,
+} from '../srtParser';
 import type { SubtitleEntry } from '@/types';
 
 const makeEntry = (overrides: Partial<SubtitleEntry> = {}): SubtitleEntry => ({
@@ -60,7 +67,7 @@ Third line
     expect(parseSRT('')).toEqual([]);
   });
 
-  it('preserves newlines within a multi-line subtitle text', () => {
+  it('preserves newlines within multi-line subtitle text (does not split to translation)', () => {
     const srt = `1
 00:00:01,000 --> 00:00:02,000
 Line one
@@ -69,8 +76,48 @@ Line two
     const result = parseSRT(srt);
     expect(result).toHaveLength(1);
     expect(result[0].text).toBe('Line one\nLine two');
+    expect(result[0].translatedText).toBeUndefined();
   });
 
+  it('keeps bilingual cue fully in original text for translation workflow', () => {
+    const srt = `1
+00:00:00,160 --> 00:00:01,103
+好的 在本期视频中
+All right, in this video
+`;
+    const result = parseSRT(srt);
+    expect(result).toHaveLength(1);
+    expect(result[0].text).toBe('好的 在本期视频中\nAll right, in this video');
+    expect(result[0].translatedText).toBeUndefined();
+    expect(result[0].translationStatus).toBe('pending');
+  });
+});
+
+describe('getBilingualDisplayLines', () => {
+  it('returns single line for pure text', () => {
+    expect(getBilingualDisplayLines('Hello world')).toEqual(['Hello world']);
+  });
+
+  it('uses explicit newlines as display lines', () => {
+    expect(getBilingualDisplayLines('好的 在本期视频中\nAll right, in this video')).toEqual([
+      '好的 在本期视频中',
+      'All right, in this video',
+    ]);
+  });
+
+  it('visually breaks same-line CJK+Latin without mutating meaning', () => {
+    expect(
+      getBilingualDisplayLines(
+        '以及它如何影响你的交易纪律和心态 how it affects your discipline and your mindset with trading.'
+      )
+    ).toEqual([
+      '以及它如何影响你的交易纪律和心态',
+      'how it affects your discipline and your mindset with trading.',
+    ]);
+  });
+});
+
+describe('parseSRT (timestamps & edge cases)', () => {
   it('parses the standard SRT timestamp format 00:00:01,000 --> 00:00:02,000', () => {
     const srt = `1
 00:00:01,000 --> 00:00:02,000

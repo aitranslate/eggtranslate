@@ -82,15 +82,19 @@ export async function callLLM(
         throw new DOMException('请求被取消', 'AbortError');
       }
 
-      // 多 key 轮询：获取下一个可用的 API key
-      const apiKey = getNextApiKey(config.apiKey);
+      // 多 key 轮询：获取下一个可用的 API key（免 Key 服务商允许空字符串）
+      const apiKey = config.apiKey?.trim() ? getNextApiKey(config.apiKey) : '';
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (apiKey) {
+        headers.Authorization = `Bearer ${apiKey}`;
+      }
 
       const response = await fetch(`${config.baseURL}/chat/completions`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
+        headers,
         body: JSON.stringify({
           model: config.model,
           messages: messages,

@@ -10,3 +10,8 @@ node_modules
 /.claude
 /.superpowers
 claude.md
+# agent-browser E2E
+/e2e/output/
+/e2e/.env.e2e
+/test-fixtures/
+/test-media-list.json

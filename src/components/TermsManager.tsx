@@ -1,20 +1,31 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useTermsStore } from '@/stores/termsStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, Edit3, Save, X, Upload, Download, Search } from 'lucide-react';
+import { Plus, Trash2, X, Upload, Download, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ConfirmDialog } from './ConfirmDialog';
 import { downloadTextFile } from '@/utils/fileExport';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-import { Button, Input } from '@/components/ui';
+import { Button } from '@/components/ui';
 import type { Term } from '@/types';
 
-interface TermsManagerProps {
-  isOpen: boolean;
-  onClose: () => void;
+/** 内联输入按内容伸缩的最小宽度（字符数） */
+function inlineSize(value: string, min = 2, max = 28): number {
+  const len = value.trim().length || value.length;
+  return Math.min(max, Math.max(min, len + 1));
 }
 
-export const TermsManager: React.FC<TermsManagerProps> = ({ isOpen, onClose }) => {
+interface TermsManagerProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+  variant?: 'panel' | 'modal';
+}
+
+export const TermsManager: React.FC<TermsManagerProps> = ({
+  isOpen = true,
+  onClose,
+  variant = 'panel',
+}) => {
   const terms = useTermsStore((state) => state.terms);
   const addTerm = useTermsStore((state) => state.addTerm);
   const deleteTerm = useTermsStore((state) => state.deleteTerm);
@@ -22,7 +33,6 @@ export const TermsManager: React.FC<TermsManagerProps> = ({ isOpen, onClose }) =
   const clearTerms = useTermsStore((state) => state.clearTerms);
   const saveTerms = useTermsStore((state) => state.saveTerms);
 
-  // 派生 importTerms：从文本解析术语行并保存
   const importTerms = useCallback(async (termsText: string) => {
     const lines = termsText.split('\n').filter(line => line.trim());
     const newTerms: Term[] = [];
@@ -43,7 +53,6 @@ export const TermsManager: React.FC<TermsManagerProps> = ({ isOpen, onClose }) =
     toast.success('术语导入成功');
   }, [saveTerms]);
 
-  // 派生 exportTerms：将术语列表序列化为可导入的文本
   const exportTerms = useCallback(() => {
     return terms.map(term => {
       if (term.notes) {
@@ -101,6 +110,33 @@ export const TermsManager: React.FC<TermsManagerProps> = ({ isOpen, onClose }) =
     }
   }, [deleteTerm, handleError]);
 
+  const editDraftRef = useRef({
+    index: null as number | null,
+    original: '',
+    translation: '',
+    notes: '',
+  });
+  const skipBlurSaveRef = useRef(false);
+  const editOriginalRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    editDraftRef.current = {
+      index: editingIndex,
+      original: editOriginal,
+      translation: editTranslation,
+      notes: editNotes,
+    };
+  }, [editingIndex, editOriginal, editTranslation, editNotes]);
+
+  useEffect(() => {
+    if (editingIndex === null) return;
+    const el = editOriginalRef.current;
+    if (!el) return;
+    el.focus();
+    const len = el.value.length;
+    el.setSelectionRange(len, len);
+  }, [editingIndex]);
+
   const onStartEdit = useCallback((index: number) => {
     setEditingIndex(index);
     setEditOriginal(terms[index].original);
@@ -108,38 +144,95 @@ export const TermsManager: React.FC<TermsManagerProps> = ({ isOpen, onClose }) =
     setEditNotes(terms[index].notes || '');
   }, [terms]);
 
-  const onSaveEdit = useCallback(async () => {
-    if (editingIndex === null) return;
-
-    if (!editOriginal.trim() || !editTranslation.trim()) {
-      toast.error('请输入原文和译文');
-      return;
-    }
-
-    try {
-      await updateTerm(editingIndex, {
-        original: editOriginal.trim(),
-        translation: editTranslation.trim(),
-        notes: editNotes.trim() || undefined
-      });
-      setEditingIndex(null);
-      setEditOriginal('');
-      setEditTranslation('');
-      setEditNotes('');
-      toast.success('术语更新成功');
-    } catch (error) {
-      handleError(error, {
-        context: { operation: '更新术语' }
-      });
-    }
-  }, [editingIndex, editOriginal, editTranslation, editNotes, updateTerm, handleError]);
-
   const onCancelEdit = useCallback(() => {
+    skipBlurSaveRef.current = true;
     setEditingIndex(null);
     setEditOriginal('');
     setEditTranslation('');
     setEditNotes('');
   }, []);
+
+  const onSaveEdit = useCallback(async () => {
+    const draft = editDraftRef.current;
+    if (draft.index === null) return;
+
+    const original = draft.original.trim();
+    const translation = draft.translation.trim();
+    const notes = draft.notes.trim();
+
+    if (!original || !translation) {
+      toast.error('请输入原文和译文');
+      return;
+    }
+
+    const prev = terms[draft.index];
+    const unchanged =
+      prev &&
+      prev.original === original &&
+      prev.translation === translation &&
+      (prev.notes || '') === notes;
+
+    if (unchanged) {
+      setEditingIndex(null);
+      setEditOriginal('');
+      setEditTranslation('');
+      setEditNotes('');
+      return;
+    }
+
+    try {
+      await updateTerm(draft.index, {
+        original,
+        translation,
+        notes: notes || undefined,
+      });
+      setEditingIndex(null);
+      setEditOriginal('');
+      setEditTranslation('');
+      setEditNotes('');
+    } catch (error) {
+      handleError(error, {
+        context: { operation: '更新术语' }
+      });
+    }
+  }, [terms, updateTerm, handleError]);
+
+  const onEditKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onCancelEdit();
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        skipBlurSaveRef.current = true;
+        void onSaveEdit();
+      }
+    },
+    [onCancelEdit, onSaveEdit]
+  );
+
+  const onEditBlur = useCallback(
+    (e: React.FocusEvent) => {
+      const next = e.relatedTarget as Node | null;
+      const root = e.currentTarget.closest('.wb-term-chip');
+      if (root && next && root.contains(next)) return;
+      if (skipBlurSaveRef.current) {
+        skipBlurSaveRef.current = false;
+        return;
+      }
+      requestAnimationFrame(() => {
+        if (skipBlurSaveRef.current) {
+          skipBlurSaveRef.current = false;
+          return;
+        }
+        void onSaveEdit();
+      });
+    },
+    [onSaveEdit]
+  );
 
   const onImport = useCallback(async () => {
     if (!importText.trim()) {
@@ -169,13 +262,16 @@ export const TermsManager: React.FC<TermsManagerProps> = ({ isOpen, onClose }) =
     toast.success('术语导出成功');
   }, [exportTerms]);
 
+  /** 保留原始 store 下标，避免搜索过滤后编辑/删除打错行 */
   const filteredTerms = useMemo(() => {
-    if (!searchTerm.trim()) return terms;
+    const items = terms.map((term, index) => ({ term, index }));
+    if (!searchTerm.trim()) return items;
 
     const searchLower = searchTerm.toLowerCase();
-    return terms.filter((term) =>
+    return items.filter(({ term }) =>
       term.original.toLowerCase().includes(searchLower) ||
-      term.translation.toLowerCase().includes(searchLower)
+      term.translation.toLowerCase().includes(searchLower) ||
+      (term.notes || '').toLowerCase().includes(searchLower)
     );
   }, [terms, searchTerm]);
 
@@ -197,230 +293,235 @@ export const TermsManager: React.FC<TermsManagerProps> = ({ isOpen, onClose }) =
     }
   }, [clearTerms, handleError]);
 
-  if (!isOpen) return null;
+  if (variant === 'modal' && !isOpen) return null;
+
+  const body = (
+    <>
+      <div className={variant === 'panel' ? 'wb-panel-header' : 'flex items-center justify-between mb-6'}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <h2 className={variant === 'panel' ? 'wb-panel-title' : 'apple-heading-medium'}>
+            术语
+          </h2>
+          <span className="wb-panel-chip">{terms.length}</span>
+        </div>
+        {variant === 'modal' && onClose && (
+          <Button variant="ghost" size="sm" onClick={onClose}>关闭</Button>
+        )}
+      </div>
+
+      <div className={variant === 'panel' ? 'wb-panel-body !flex !flex-col' : 'space-y-4 flex-1 overflow-y-auto'}>
+        <div className="wb-glossary-shell flex-1 min-h-0">
+          <div className="wb-glossary-toolbar">
+            <div className="wb-search">
+              <Search />
+              <input
+                type="text"
+                placeholder="搜索词条…"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="wb-tool-row" style={{ marginLeft: 'auto' }}>
+              <button type="button" className="wb-tool" onClick={() => setShowImport(!showImport)}>
+                <Upload className="h-3.5 w-3.5" />
+                导入
+              </button>
+              <button type="button" className="wb-tool" onClick={onExport} disabled={terms.length === 0}>
+                <Download className="h-3.5 w-3.5" />
+                导出
+              </button>
+              <button type="button" className="wb-tool danger" onClick={onClearAll} disabled={terms.length === 0}>
+                <Trash2 className="h-3.5 w-3.5" />
+                清空
+              </button>
+            </div>
+          </div>
+
+          <AnimatePresence>
+            {showImport && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden border-b border-[var(--wb-border)]"
+              >
+                <div className="p-2.5 space-y-2 bg-[var(--wb-panel-2)]">
+                  <textarea
+                    placeholder="每行一条：原文:译文 [备注]"
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    rows={4}
+                    className="apple-input !h-auto py-2 resize-none w-full text-xs"
+                  />
+                  <div className="wb-tool-row">
+                    <button type="button" className="wb-tool primary" onClick={onImport}>确认导入</button>
+                    <button type="button" className="wb-tool" onClick={() => setShowImport(false)}>取消</button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="wb-glossary-add">
+            <input
+              className="wb-glossary-field"
+              placeholder="原文"
+              value={newOriginal}
+              onChange={(e) => setNewOriginal(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && onAddTerm()}
+              aria-label="原文"
+            />
+            <input
+              className="wb-glossary-field"
+              placeholder="译文"
+              value={newTranslation}
+              onChange={(e) => setNewTranslation(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && onAddTerm()}
+              aria-label="译文"
+            />
+            <input
+              className="wb-glossary-field"
+              placeholder="备注（可选）"
+              value={newNotes}
+              onChange={(e) => setNewNotes(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && onAddTerm()}
+              aria-label="备注（可选）"
+            />
+            <button type="button" className="wb-tool primary wb-glossary-add-btn" onClick={onAddTerm}>
+              <Plus className="h-3.5 w-3.5" />
+              添加
+            </button>
+          </div>
+
+          <div className="wb-glossary-scroll">
+            {filteredTerms.length === 0 ? (
+              <div className="wb-empty">
+                {searchTerm ? '没有匹配词条' : '暂无术语，在上方添加或导入'}
+              </div>
+            ) : (
+              <div className="wb-term-cloud" role="list" aria-label="术语标签">
+                {filteredTerms.map(({ term, index }) =>
+                  editingIndex === index ? (
+                    <div
+                      key={`edit-${index}`}
+                      className="wb-term-chip is-editing"
+                      role="listitem"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        ref={editOriginalRef}
+                        className="wb-term-inline wb-term-src"
+                        value={editOriginal}
+                        onChange={(e) => setEditOriginal(e.target.value)}
+                        onKeyDown={onEditKeyDown}
+                        onBlur={onEditBlur}
+                        size={inlineSize(editOriginal, 3)}
+                        placeholder="原文"
+                        aria-label="原文"
+                        spellCheck={false}
+                      />
+                      <span className="wb-term-arrow" aria-hidden>
+                        →
+                      </span>
+                      <input
+                        className="wb-term-inline wb-term-dst"
+                        value={editTranslation}
+                        onChange={(e) => setEditTranslation(e.target.value)}
+                        onKeyDown={onEditKeyDown}
+                        onBlur={onEditBlur}
+                        size={inlineSize(editTranslation, 3)}
+                        placeholder="译文"
+                        aria-label="译文"
+                        spellCheck={false}
+                      />
+                      <input
+                        className="wb-term-inline wb-term-note"
+                        value={editNotes}
+                        onChange={(e) => setEditNotes(e.target.value)}
+                        onKeyDown={onEditKeyDown}
+                        onBlur={onEditBlur}
+                        size={inlineSize(editNotes || '备注', 2, 16)}
+                        placeholder="备注"
+                        aria-label="备注（可选）"
+                        spellCheck={false}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      key={`${term.original}-${index}`}
+                      className="wb-term-chip"
+                      role="listitem"
+                      title={
+                        term.notes
+                          ? `${term.original} → ${term.translation}\n${term.notes}`
+                          : `${term.original} → ${term.translation}`
+                      }
+                    >
+                      <button
+                        type="button"
+                        className="wb-term-chip-main"
+                        onClick={() => onStartEdit(index)}
+                      >
+                        <span className="wb-term-src">{term.original}</span>
+                        <span className="wb-term-arrow" aria-hidden>
+                          →
+                        </span>
+                        <span className="wb-term-dst">{term.translation}</span>
+                        {term.notes ? (
+                          <span className="wb-term-note">{term.notes}</span>
+                        ) : null}
+                      </button>
+                      <button
+                        type="button"
+                        className="wb-term-chip-x"
+                        onClick={() => onRemoveTerm(index)}
+                        title="删除"
+                        aria-label={`删除 ${term.original}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  const dialog = (
+    <ConfirmDialog
+      isOpen={showClearConfirm}
+      onClose={() => setShowClearConfirm(false)}
+      onConfirm={handleConfirmClear}
+      title="清空术语？"
+      message={`将删除全部 ${terms.length} 个词条，且不可恢复。`}
+      confirmText="清空"
+      tone="danger"
+    />
+  );
+
+  if (variant === 'panel') {
+    return (
+      <div className="wb-panel">
+        {body}
+        {dialog}
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white shadow-2xl w-full max-w-[calc(100vw-2rem)] md:max-w-[560px] lg:max-w-[680px] rounded-none md:rounded-2xl p-4 md:p-6 max-h-[100dvh] md:max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-white shadow-2xl w-full max-w-[680px] rounded-2xl p-5 max-h-[90vh] overflow-hidden flex flex-col"
       >
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <h2 className="apple-heading-medium">术语管理</h2>
-            <span className="px-2.5 py-1 text-sm font-medium rounded-full bg-[var(--apple-blue-soft)] text-[var(--apple-blue)]">
-              {terms.length} 个术语
-            </span>
-          </div>
-          <Button iconOnly onClick={onClose} aria-label="关闭">
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
-
-        <div className="space-y-6 flex-1 overflow-y-auto">
-          {/* 添加术语 */}
-          <div className="space-y-4">
-            <h3 className="apple-heading-small">添加新术语</h3>
-            <div className="grid grid-cols-12 gap-3 items-center">
-              <Input
-                placeholder="原文"
-                value={newOriginal}
-                onChange={(e) => setNewOriginal(e.target.value)}
-                className="col-span-3"
-                onKeyDown={(e) => e.key === 'Enter' && onAddTerm()}
-              />
-              <Input
-                placeholder="译文"
-                value={newTranslation}
-                onChange={(e) => setNewTranslation(e.target.value)}
-                className="col-span-3"
-                onKeyDown={(e) => e.key === 'Enter' && onAddTerm()}
-              />
-              <Input
-                placeholder="说明（可选）"
-                value={newNotes}
-                onChange={(e) => setNewNotes(e.target.value)}
-                className="col-span-4"
-                onKeyDown={(e) => e.key === 'Enter' && onAddTerm()}
-              />
-              <Button onClick={onAddTerm} className="col-span-2">
-                <Plus className="h-4 w-4" />
-                <span>添加</span>
-              </Button>
-            </div>
-          </div>
-
-          {/* 导入/导出 */}
-          <div className="space-y-4">
-            <h3 className="apple-heading-small">导入/导出</h3>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button variant="secondary" size="sm" onClick={() => setShowImport(!showImport)}>
-                <Upload className="h-4 w-4" />
-                <span>导入术语</span>
-              </Button>
-              <Button variant="secondary" size="sm" onClick={onExport} disabled={terms.length === 0}>
-                <Download className="h-4 w-4" />
-                <span>导出术语</span>
-              </Button>
-              <Button variant="danger" size="sm" onClick={onClearAll} disabled={terms.length === 0}>
-                <Trash2 className="h-4 w-4" />
-                <span>清空全部</span>
-              </Button>
-            </div>
-
-            <AnimatePresence>
-              {showImport && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-3"
-                >
-                  <textarea
-                    placeholder="请输入术语，每行一个，原文和译文用冒号(:)分隔，例如：原文:译文..."
-                    value={importText}
-                    onChange={(e) => setImportText(e.target.value)}
-                    rows={6}
-                    className="apple-input !h-auto py-3 resize-none"
-                  />
-                  <div className="flex gap-3">
-                    <Button variant="secondary" size="sm" onClick={onImport}>
-                      确认导入
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setShowImport(false)}>
-                      取消
-                    </Button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* 术语列表 */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="apple-heading-small">术语列表</h3>
-              <div className="flex items-center gap-3">
-                {/* 搜索框 */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="搜索..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all w-40"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2 h-80 overflow-y-auto">
-              <AnimatePresence>
-                {filteredTerms.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    {searchTerm ? '没有找到匹配的术语' : '暂无术语，请添加术语或导入术语列表'}
-                  </div>
-                ) : (
-                  filteredTerms.map((term, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="border border-gray-200 rounded-xl p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
-                    >
-                      {editingIndex === index ? (
-                        <div className="space-y-3">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <input
-                              type="text"
-                              value={editOriginal}
-                              onChange={(e) => setEditOriginal(e.target.value)}
-                              className="w-full p-2 bg-white border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:border-blue-500 transition-colors"
-                              placeholder="原文"
-                            />
-                            <input
-                              type="text"
-                              value={editTranslation}
-                              onChange={(e) => setEditTranslation(e.target.value)}
-                              className="w-full p-2 bg-white border border-gray-200 rounded-lg text-gray-900 focus:outline-none focus:border-blue-500 transition-colors"
-                              placeholder="译文"
-                            />
-                            <input
-                              type="text"
-                              value={editNotes}
-                              onChange={(e) => setEditNotes(e.target.value)}
-                              className="w-full p-2 bg-white border border-gray-200 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:border-blue-500 transition-colors"
-                              placeholder="说明（可选）"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button size="sm" onClick={onSaveEdit}>
-                              <Save className="h-3.5 w-3.5" />
-                              <span>保存</span>
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={onCancelEdit}>
-                              <X className="h-3.5 w-3.5" />
-                              <span>取消</span>
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                              <div className="text-sm text-gray-500 mb-1">原文</div>
-                              <div className="text-gray-900 font-medium">{term.original}</div>
-                            </div>
-                            <div>
-                              <div className="text-sm text-gray-500 mb-1">译文</div>
-                              <div className="text-blue-600 font-medium">{term.translation}</div>
-                            </div>
-                            <div>
-                              <div className="text-sm text-gray-500 mb-1">说明</div>
-                              <div className={term.notes ? 'text-gray-700' : 'text-gray-400 italic'}>
-                                {term.notes || '无'}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 ml-4">
-                            <button
-                              onClick={() => onStartEdit(index)}
-                              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-                            >
-                              <Edit3 className="h-4 w-4 text-gray-500" />
-                            </button>
-                            <button
-                              onClick={() => onRemoveTerm(index)}
-                              className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </motion.div>
-                  ))
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-        </div>
+        {body}
       </motion.div>
-
-      {/* 清空术语确认对话框 */}
-      <ConfirmDialog
-        isOpen={showClearConfirm}
-        onClose={() => setShowClearConfirm(false)}
-        onConfirm={handleConfirmClear}
-        title="确认清空"
-        message={`确定要清空所有 ${terms.length} 个术语吗？此操作不可恢复。`}
-        confirmText="确认清空"
-        confirmButtonClass="bg-red-500 hover:bg-red-600 text-white"
-      />
+      {dialog}
     </div>
   );
 };

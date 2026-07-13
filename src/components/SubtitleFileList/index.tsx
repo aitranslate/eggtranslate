@@ -10,24 +10,30 @@ import { removeFile, clearAll } from '@/services/filesService';
 import { enqueueTask, dequeueTask, enqueueAllUncompleted } from '@/services/queueService';
 import { SubtitleFileMetadata } from '@/types';
 import { SubtitleFileItemMemo as SubtitleFileItem } from './components/SubtitleFileItem';
+import { SidebarTaskRowMemo as SidebarTaskRow } from './components/SidebarTaskRow';
 import { ConfirmDialog } from '../ConfirmDialog';
-import { SettingsModal } from '../SettingsModal';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 interface SubtitleFileListProps {
   className?: string;
-  onEditFile: (file: SubtitleFileMetadata) => void;
+  /** @deprecated 请用 onSelectFile；保留兼容 */
+  onEditFile?: (file: SubtitleFileMetadata) => void;
+  onSelectFile?: (file: SubtitleFileMetadata) => void;
+  selectedFileId?: string | null;
+  variant?: 'default' | 'sidebar';
 }
 
 export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   className,
-  onEditFile
+  onEditFile,
+  onSelectFile,
+  selectedFileId = null,
+  variant = 'default',
 }) => {
   const files = useFiles();
   const taskQueue = useQueueStore((state) => state.taskQueue);
   const activeTaskId = useQueueStore((state) => state.activeTaskId);
 
-  // O(1) 队列位置查询，避免列表项多时 indexOf/includes 形成 O(n^2)
   const queueMeta = useMemo(() => {
     const map = new Map<string, number>();
     taskQueue.forEach((id, i) => map.set(id, i + 1));
@@ -39,16 +45,19 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<SubtitleFileMetadata | null>(null);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const handleOpen = useCallback(
+    (file: SubtitleFileMetadata) => {
+      if (onSelectFile) onSelectFile(file);
+      else onEditFile?.(file);
+    },
+    [onSelectFile, onEditFile]
+  );
 
   const handleStartAll = useCallback(() => {
     if (files.length === 0) return;
     enqueueAllUncompleted();
   }, [files]);
-
-  const handleSettingsClose = useCallback(() => {
-    setIsSettingsOpen(false);
-  }, []);
 
   const handleClearAll = useCallback(async () => {
     if (files.length === 0) return;
@@ -99,7 +108,6 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   }, [handleError]);
 
   const handleExportAll = useCallback(async (format: ExportFormat) => {
-    // 收集有条目的文件（可导出）
     const exportableFiles = files.filter(f => (f.entryCount ?? 0) > 0);
     if (exportableFiles.length === 0) {
       toast.error('没有可导出的文件');
@@ -131,94 +139,150 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     }
   }, [files, handleError]);
 
-  // 批量导出按钮：是否有任意文件已翻译（控制译文/双语菜单项是否可点）
   const hasAnyTranslated = files.some(f => (f.translatedCount ?? 0) > 0);
 
   if (files.length === 0) {
     return null;
   }
 
+  const isSidebar = variant === 'sidebar';
+
   return (
     <div className={className}>
-      <div>
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="apple-heading-medium">
-              文件列表
-            </h3>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-gray-600">
-                共 {files.length} 个文件
-              </div>
-              <button
-                onClick={handleStartAll}
-                disabled={files.length === 0}
-                className="apple-button apple-button-sm"
-              >
-                <Play className="h-4 w-4" />
-                <span>全部开始</span>
-              </button>
-              <ExportButton
-                variant="button"
-                disabled={files.length === 0}
-                hasTranslation={hasAnyTranslated}
-                onSelect={handleExportAll}
-              />
-              <button
-                onClick={handleClearAll}
-                disabled={files.length === 0}
-                className="apple-button apple-button-sm apple-button-secondary"
-              >
-                <Trash2 className="h-4 w-4" />
-                <span>清空</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {files.map((file) => {
-              const queuePosition = queueMeta.get(file.id) ?? 0;
-              const isActive = activeTaskId === file.id;
-              const isQueued = queuePosition > 0 && !isActive;
-
-              return (
-                <SubtitleFileItem
-                  key={file.id}
-                  file={file}
-                  onEdit={onEditFile}
-                  onStartTranslation={async () => {
-                    useFilesStore.getState().setWorkflow(file.id, 'translate');
-                    enqueueTask(file.id);
-                  }}
-                  onExportFormat={handleExportFile}
-                  onDelete={handleDeleteFile}
-                  onTranscribeAndTranslate={async () => {
-                    useFilesStore.getState().setWorkflow(file.id, 'full');
-                    enqueueTask(file.id);
-                  }}
-                  onTranscribe={async () => {
-                    useFilesStore.getState().setWorkflow(file.id, 'transcribe');
-                    enqueueTask(file.id);
-                  }}
-                  onDequeue={() => dequeueTask(file.id)}
-                  isQueued={isQueued}
-                  queuePosition={queuePosition}
-                  isActive={isActive}
-                />
-              );
-            })}
+      {!isSidebar && (
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="apple-heading-medium">文件列表</h3>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="text-sm text-gray-600">共 {files.length} 个文件</div>
+            <button
+              type="button"
+              onClick={handleStartAll}
+              disabled={files.length === 0}
+              className="apple-button apple-button-sm"
+            >
+              <Play className="h-4 w-4" />
+              <span>全部开始</span>
+            </button>
+            <ExportButton
+              variant="button"
+              disabled={files.length === 0}
+              hasTranslation={hasAnyTranslated}
+              onSelect={handleExportAll}
+            />
+            <button
+              type="button"
+              onClick={handleClearAll}
+              disabled={files.length === 0}
+              className="apple-button apple-button-sm apple-button-secondary"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>清空</span>
+            </button>
           </div>
         </div>
+      )}
+
+      {isSidebar && (
+        <div className="wb-proj-list-tools">
+          <button
+            type="button"
+            onClick={handleStartAll}
+            className="wb-proj-list-btn primary"
+          >
+            <Play className="h-3 w-3" />
+            全部开始
+          </button>
+          <ExportButton
+            variant="icon"
+            disabled={files.length === 0}
+            hasTranslation={hasAnyTranslated}
+            onSelect={handleExportAll}
+          />
+          <button
+            type="button"
+            onClick={handleClearAll}
+            className="wb-proj-list-btn"
+            title="清空全部"
+          >
+            <Trash2 className="h-3 w-3" />
+            清空
+          </button>
+        </div>
+      )}
+
+      <div className={isSidebar ? 'wb-proj-list' : 'space-y-4'}>
+        {files.map((file) => {
+          const queuePosition = queueMeta.get(file.id) ?? 0;
+          const isActive = activeTaskId === file.id;
+          const isQueued = queuePosition > 0 && !isActive;
+
+          if (isSidebar) {
+            return (
+              <SidebarTaskRow
+                key={file.id}
+                file={file}
+                selected={selectedFileId === file.id}
+                onSelect={handleOpen}
+                onStartTranslation={async () => {
+                  useFilesStore.getState().setWorkflow(file.id, 'translate');
+                  enqueueTask(file.id);
+                }}
+                onExportFormat={handleExportFile}
+                onDelete={handleDeleteFile}
+                onTranscribeAndTranslate={async () => {
+                  useFilesStore.getState().setWorkflow(file.id, 'full');
+                  enqueueTask(file.id);
+                }}
+                onTranscribe={async () => {
+                  useFilesStore.getState().setWorkflow(file.id, 'transcribe');
+                  enqueueTask(file.id);
+                }}
+                onDequeue={() => dequeueTask(file.id)}
+                isQueued={isQueued}
+                queuePosition={queuePosition}
+                isActive={isActive}
+              />
+            );
+          }
+
+          return (
+            <SubtitleFileItem
+              key={file.id}
+              file={file}
+              selected={selectedFileId === file.id}
+              onSelect={handleOpen}
+              onEdit={handleOpen}
+              onStartTranslation={async () => {
+                useFilesStore.getState().setWorkflow(file.id, 'translate');
+                enqueueTask(file.id);
+              }}
+              onExportFormat={handleExportFile}
+              onDelete={handleDeleteFile}
+              onTranscribeAndTranslate={async () => {
+                useFilesStore.getState().setWorkflow(file.id, 'full');
+                enqueueTask(file.id);
+              }}
+              onTranscribe={async () => {
+                useFilesStore.getState().setWorkflow(file.id, 'transcribe');
+                enqueueTask(file.id);
+              }}
+              onDequeue={() => dequeueTask(file.id)}
+              isQueued={isQueued}
+              queuePosition={queuePosition}
+              isActive={isActive}
+            />
+          );
+        })}
       </div>
 
       <ConfirmDialog
         isOpen={showClearConfirm}
         onClose={() => setShowClearConfirm(false)}
         onConfirm={handleConfirmClear}
-        title="确认清空"
-        message={`确定要清空所有 ${files.length} 个文件吗？此操作不可恢复。`}
-        confirmText="确认清空"
-        confirmButtonClass="bg-red-500 hover:bg-red-600 text-white"
+        title="清空全部项目？"
+        message={`将移除列表中的 ${files.length} 个项目，且不可恢复。`}
+        confirmText="清空"
+        tone="danger"
       />
 
       <ConfirmDialog
@@ -228,18 +292,12 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
           setFileToDelete(null);
         }}
         onConfirm={handleConfirmDelete}
-        title="确认删除"
-        message={fileToDelete ? `确定要删除文件 "${fileToDelete.name}" 吗？此操作不可恢复。` : ''}
-        confirmText="确认删除"
-        confirmButtonClass="bg-red-500 hover:bg-red-600 text-white"
+        title="删除项目？"
+        detail={fileToDelete?.name}
+        message="将从列表中移除，且不可恢复。"
+        confirmText="删除"
+        tone="danger"
       />
-
-      {isSettingsOpen && (
-        <SettingsModal
-          isOpen={isSettingsOpen}
-          onClose={handleSettingsClose}
-        />
-      )}
     </div>
   );
 };

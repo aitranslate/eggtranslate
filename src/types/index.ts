@@ -41,6 +41,8 @@ export interface LlmProfile {
   model: string;
   /** 来自哪个厂商预设（仅用于图标/匹配，可选） */
   presetId?: string;
+  /** 是否必须填写 API Key */
+  requiresKey?: boolean;
 }
 
 // 翻译配置：多套 LLM 档案 + 全局翻译参数

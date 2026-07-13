@@ -6,9 +6,11 @@ import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 interface BatchFileUploadProps {
   className?: string;
+  /** 侧栏紧凑样式 */
+  compact?: boolean;
 }
 
-export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) => {
+export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className, compact = false }) => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -25,7 +27,6 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
     }
 
     try {
-      // 不锁住组件：addFile 内部用 toast 反馈进度；store 已在 app bootstrap 完成 rehydrate
       await addFile(file);
     } catch (err) {
       handleError(err, {
@@ -60,11 +61,35 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
     }
   }, [handleFile]);
 
+  if (compact) {
+    return (
+      <div className={className}>
+        <div
+          className={`wb-drop ${isDragging ? 'drag' : ''}`}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".srt,.mp3,.wav,.m4a,.ogg,.flac,.mp4,.webm,.mkv,.avi,.mov,audio/*,video/*"
+            multiple
+            onChange={onFileSelect}
+          />
+          <div className="wb-drop-icon">
+            <Upload className="h-4 w-4" />
+          </div>
+          <h3>{isDragging ? '放开即可导入' : '拖入视频 / 字幕'}</h3>
+          <p>支持 MP4 / MOV / SRT / WAV 等，可多选</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={className}>
       <div className="w-full">
-        {/* 批量上传区域 - Apple 风格 */}
         <div
           className={`relative w-full p-5 sm:p-8 lg:p-12 border-2 border-dashed rounded-2xl transition duration-200 ${
             isDragging
@@ -111,7 +136,6 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
             </div>
           </div>
 
-          {/* 移动端特有：拍照/录音快捷入口（≥640px 隐藏） */}
           <div className="flex sm:hidden gap-2 mt-2">
             <label className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-gray-100 rounded-lg text-xs text-gray-700 cursor-pointer">
               📷 拍照
@@ -136,14 +160,12 @@ export const BatchFileUpload: React.FC<BatchFileUploadProps> = ({ className }) =
             </label>
           </div>
 
-          {/* 拖入时的遮罩高亮 */}
           <div
             className={`pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-blue-500 ring-offset-2 ring-offset-white transition-opacity duration-150 ${
               isDragging ? 'opacity-100' : 'opacity-0'
             }`}
           />
         </div>
-
       </div>
     </div>
   );

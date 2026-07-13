@@ -4,7 +4,7 @@
 
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import * as Dialog from '@radix-ui/react-dialog';
-import { BookOpen, History, Settings as SettingsIcon, X } from 'lucide-react';
+import { BookOpen, History, Settings as SettingsIcon, X, LayoutList } from 'lucide-react';
 
 interface MobileMenuProps {
   isOpen: boolean;
@@ -15,6 +15,7 @@ interface MobileMenuProps {
   onOpenTerms: () => void;
   onOpenHistory: () => void;
   onOpenSettings: () => void;
+  onOpenWorkspace?: () => void;
 }
 
 const PANEL_STYLE: React.CSSProperties = {
@@ -54,6 +55,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
   onOpenTerms,
   onOpenHistory,
   onOpenSettings,
+  onOpenWorkspace,
 }) => {
   const reduce = useReducedMotion();
 
@@ -120,6 +122,16 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {onOpenWorkspace && (
+                    <button
+                      onClick={handleItem(onOpenWorkspace)}
+                      style={ROW_BASE}
+                      className="hover:bg-gray-50"
+                    >
+                      <LayoutList className="w-4 h-4" />
+                      <span style={{ flex: 1 }}>工作区</span>
+                    </button>
+                  )}
                   <button
                     onClick={handleItem(onOpenTerms)}
                     style={ROW_BASE}

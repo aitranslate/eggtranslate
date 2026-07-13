@@ -19,6 +19,7 @@ import {
 import { toastError } from '@/utils/appToast';
 import { Input } from '@/components/ui';
 import { ProviderPresetPicker } from './ProviderPresetPicker';
+import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 
 interface ApiTestFormProps {
   profiles: LlmProfile[];
@@ -79,8 +80,11 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
     });
   }, []);
 
+  const cacheModelList = useTranslationConfigStore((state) => state.cacheModelList);
+
   useEffect(() => {
-    setChatModels([]);
+    const cached = useTranslationConfigStore.getState().cachedModelLists[activeProfile.id] ?? [];
+    setChatModels(cached);
     setPickerOpen(false);
     setFilter('');
     setEndpointOpen(selectedId === 'custom' || !activeProfile.baseURL);
@@ -127,6 +131,7 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
         activeProfile.apiKey
       );
       setChatModels(chats);
+      cacheModelList(activeProfile.id, chats);
 
       if (chats.length === 0) {
         toastError(
@@ -153,7 +158,7 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
     } finally {
       setModelsLoading(false);
     }
-  }, [activeProfile.baseURL, activeProfile.apiKey, activeProfile.model, onUpdateActiveProfile]);
+  }, [activeProfile.baseURL, activeProfile.apiKey, activeProfile.model, activeProfile.id, onUpdateActiveProfile, cacheModelList]);
 
   const filteredModels = chatModels.filter((m) =>
     !filter.trim() ? true : m.id.toLowerCase().includes(filter.trim().toLowerCase())

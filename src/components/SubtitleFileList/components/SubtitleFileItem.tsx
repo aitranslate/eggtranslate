@@ -4,6 +4,7 @@ import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useFilesStore } from '@/stores/filesStore';
 import { getCardBadge } from '@/utils/badgeHelper';
 import type { ExportFormat } from '@/utils/fileExport';
+import { ExportButton } from '@/components/common/ExportButton';
 import { FileIcon } from './FileIcon';
 import { StepperProgress } from './StepperProgress';
 import { FileActionButtons } from './FileActionButtons';
@@ -12,6 +13,9 @@ import { formatFileSize, formatDuration } from '../utils/fileHelpers';
 interface SubtitleFileItemProps {
   file: SubtitleFileMetadata;
   onEdit: (file: SubtitleFileMetadata) => void;
+  /** 点击卡片主体选中任务（工作台右侧展示编辑器） */
+  onSelect?: (file: SubtitleFileMetadata) => void;
+  selected?: boolean;
   onStartTranslation: (file: SubtitleFileMetadata) => Promise<void>;
   onExportFormat: (file: SubtitleFileMetadata, format: ExportFormat) => void;
   onDelete: (file: SubtitleFileMetadata) => Promise<void>;
@@ -26,6 +30,8 @@ interface SubtitleFileItemProps {
 export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
   file,
   onEdit,
+  onSelect,
+  selected = false,
   onStartTranslation,
   onExportFormat,
   onDelete,
@@ -38,6 +44,14 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
 }) => {
   // Tooltip 悬停时把整张卡片提升到最上层，避免被下方的 task card 遮挡
   const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+
+  const handleCardClick = useCallback(() => {
+    if (onSelect) {
+      onSelect(file);
+    } else {
+      onEdit(file);
+    }
+  }, [onSelect, onEdit, file]);
 
   // 热词选择（无全局开关，per-task 选择即生效）
   const keytermGroups = useTranscriptionStore((state) => state.keytermGroups);
@@ -80,11 +94,14 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
 
   return (
     <div
-      className="relative bg-white rounded-2xl p-3 md:p-3.5 lg:p-5 flex flex-col gap-3 md:gap-5 lg:gap-5 hover:-translate-y-0.5 transition-transform duration-200 will-change-transform"
+      className="relative bg-white rounded-2xl p-3 md:p-3.5 lg:p-5 flex flex-col gap-3 md:gap-5 lg:gap-5 hover:-translate-y-0.5 transition-transform duration-200 will-change-transform cursor-pointer"
       style={{
-        boxShadow: '0 2px 12px rgba(0,0,0,0.03), 0 0 0 1px rgba(0,0,0,0.02)',
+        boxShadow: selected
+          ? '0 0 0 2px var(--apple-blue-soft-strong), 0 2px 12px rgba(0,0,0,0.04)'
+          : '0 2px 12px rgba(0,0,0,0.03), 0 0 0 1px rgba(0,0,0,0.02)',
         zIndex: isTooltipVisible ? 50 : 'auto',
       }}
+      onClick={handleCardClick}
     >
       {/* 1. Header: file info + status badge */}
       <div className="flex items-center justify-between gap-4">
@@ -134,33 +151,35 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
       />
 
       {/* 3. Footer: action buttons (keyterm dropdown slots into secondary group) */}
-      <FileActionButtons
-        file={file}
-        isTranslating={isActive}
-        allPhasesDone={allPhasesDone}
-        translationStats={{
-          percentage: (file.entryCount ?? 0) > 0
-            ? Math.round(((file.translatedCount ?? 0) / (file.entryCount ?? 1)) * 100)
-            : 0,
-        }}
-        isQueued={isQueued}
-        isActive={isActive}
-        keytermDropdown={
-          <KeytermDropdown
-            fileId={file.id}
-            fileSelectedGroupId={file.selectedKeytermGroupId}
-            keytermGroups={keytermGroups.map(g => ({ id: g.id, name: g.name }))}
-            onChange={(groupId) => setSelectedKeytermGroupId(file.id, groupId)}
-          />
-        }
-        onTranscribeAndTranslate={() => onTranscribeAndTranslate(file)}
-        onTranscribe={() => onTranscribe(file.id)}
-        onDequeue={() => onDequeue(file.id)}
-        onStartTranslation={() => onStartTranslation(file)}
-        onEdit={() => onEdit(file)}
-        onExportFormat={handleExportFormat}
-        onDelete={handleDelete}
-      />
+      <div onClick={(e) => e.stopPropagation()}>
+        <FileActionButtons
+          file={file}
+          isTranslating={isActive}
+          allPhasesDone={allPhasesDone}
+          translationStats={{
+            percentage: (file.entryCount ?? 0) > 0
+              ? Math.round(((file.translatedCount ?? 0) / (file.entryCount ?? 1)) * 100)
+              : 0,
+          }}
+          isQueued={isQueued}
+          isActive={isActive}
+          keytermDropdown={
+            <KeytermDropdown
+              fileId={file.id}
+              fileSelectedGroupId={file.selectedKeytermGroupId}
+              keytermGroups={keytermGroups.map(g => ({ id: g.id, name: g.name }))}
+              onChange={(groupId) => setSelectedKeytermGroupId(file.id, groupId)}
+            />
+          }
+          onTranscribeAndTranslate={() => onTranscribeAndTranslate(file)}
+          onTranscribe={() => onTranscribe(file.id)}
+          onDequeue={() => onDequeue(file.id)}
+          onStartTranslation={() => onStartTranslation(file)}
+          onEdit={() => onEdit(file)}
+          onExportFormat={handleExportFormat}
+          onDelete={handleDelete}
+        />
+      </div>
     </div>
   );
 };
@@ -221,6 +240,7 @@ export const SubtitleFileItemMemo = memo(SubtitleFileItem, (prevProps, nextProps
   if (prevProps.isQueued !== nextProps.isQueued) return false;
   if (prevProps.queuePosition !== nextProps.queuePosition) return false;
   if (prevProps.isActive !== nextProps.isActive) return false;
+  if (prevProps.selected !== nextProps.selected) return false;
 
   return true;
 });

@@ -1,9 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useTranslationConfigStore, useTranslationConfig } from '@/stores/translationConfigStore';
 import { TranslationSettings } from './SettingsModal/TranslationSettings';
 import { TranscriptionSettings } from './TranscriptionSettings';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Save, TestTube } from 'lucide-react';
+import { Save, TestTube, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import type { LlmProfile, TranslationConfig } from '@/types';
@@ -11,64 +11,53 @@ import type { LlmProviderId } from '@/constants/llmProviders';
 import {
   ensureProfiles,
   getActiveProfile,
-  isTranslationLlmConfigured,
   selectProvider,
   updateActiveProfile,
 } from '@/utils/llmProfiles';
-import { useApiKeys } from '@/stores/transcriptionStore';
 import { toastError } from '@/utils/appToast';
-import { Button } from '@/components/ui';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 interface SettingsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  /** @deprecated 抽屉模式为主 */
+  variant?: 'panel' | 'modal' | 'drawer';
 }
 
-type TabType = 'translation' | 'transcription';
-
-/** 缺翻译 Key 优先翻译；翻译已配且缺转录 Key 则转录；否则默认翻译 */
-function resolveDefaultTab(
-  config: TranslationConfig,
-  transcriptionKeys: string
-): TabType {
-  const translationOk = isTranslationLlmConfigured(config);
-  const transcriptionOk = transcriptionKeys.trim().length > 0;
-  if (!translationOk) return 'translation';
-  if (!transcriptionOk) return 'transcription';
-  return 'translation';
-}
-
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({
+  isOpen = true,
+  onClose,
+}) => {
   const config = useTranslationConfig();
   const updateConfig = useTranslationConfigStore((state) => state.updateConfig);
-  const transcriptionKeys = useApiKeys();
+  const closeSettings = useWorkspaceStore((s) => s.closeSettings);
+  const openEditor = useWorkspaceStore((s) => s.openEditor);
+
+  const handleClose = useCallback(() => {
+    onClose?.();
+    closeSettings();
+  }, [onClose, closeSettings]);
 
   const [isTesting, setIsTesting] = useState(false);
   const { handleError } = useErrorHandler();
-
-  const [activeTab, setActiveTab] = useState<TabType>('translation');
   const [formData, setFormData] = useState<TranslationConfig>(() => ensureProfiles(config));
+  const [dirty, setDirty] = useState(false);
 
-  React.useEffect(() => {
-    if (isOpen) {
-      const normalized = ensureProfiles(config);
-      setFormData(normalized);
-      setActiveTab(resolveDefaultTab(normalized, transcriptionKeys));
-    }
-  }, [isOpen, config, transcriptionKeys]);
+  useEffect(() => {
+    if (!isOpen) return;
+    setFormData(ensureProfiles(config));
+    setDirty(false);
+  }, [isOpen, config]);
 
   const activeProfile = getActiveProfile(formData);
 
   const onTestConnection = useCallback(async () => {
     const currentApiKey = activeProfile.apiKey?.trim();
-
     if (!currentApiKey) {
       toastError('请先输入 API 密钥');
       return;
     }
-
     setIsTesting(true);
-
     try {
       const apiKey = currentApiKey
         .split('|')
@@ -95,7 +84,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             `HTTP ${response.status}`
         );
       }
-
       await response.json();
       toast.success('连接成功，API 配置正常');
     } catch (error) {
@@ -103,8 +91,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         context: { operation: 'API 连接测试' },
         showToast: false,
       });
-      const message = error instanceof Error ? error.message : '连接失败';
-      toastError(message);
+      toastError(error instanceof Error ? error.message : '连接失败');
     } finally {
       setIsTesting(false);
     }
@@ -113,152 +100,152 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const onSave = useCallback(async () => {
     try {
       await updateConfig(ensureProfiles(formData));
+      setDirty(false);
       toast.success('设置已保存');
-      onClose();
+      handleClose();
+      openEditor();
     } catch (error) {
-      handleError(error, {
-        context: { operation: '保存翻译设置' },
-      });
+      handleError(error, { context: { operation: '保存翻译设置' } });
     }
-  }, [formData, updateConfig, onClose, handleError]);
+  }, [formData, updateConfig, handleError, handleClose, openEditor]);
 
   const onInputChange = useCallback(
     (field: keyof TranslationConfig, value: TranslationConfig[keyof TranslationConfig]) => {
       setFormData((prev) => ({ ...prev, [field]: value }));
+      setDirty(true);
     },
     []
   );
 
   const onSelectProvider = useCallback((id: LlmProviderId) => {
     setFormData((prev) => selectProvider(prev, id));
+    setDirty(true);
   }, []);
 
-  const onUpdateActiveProfile = useCallback((patch: Partial<Omit<LlmProfile, 'id' | 'presetId'>>) => {
-    setFormData((prev) => updateActiveProfile(prev, patch));
-  }, []);
-
-  if (!isOpen) return null;
+  const onUpdateActiveProfile = useCallback(
+    (patch: Partial<Omit<LlmProfile, 'id' | 'presetId'>>) => {
+      setFormData((prev) => updateActiveProfile(prev, patch));
+      setDirty(true);
+    },
+    []
+  );
 
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.15 }}
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-      >
-        <motion.div
-          initial={{ scale: 0.92, y: 24, opacity: 0 }}
-          animate={{ scale: 1, y: 0, opacity: 1 }}
-          exit={{ scale: 0.95, y: 8, opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 280, damping: 28 }}
-          className="bg-white shadow-2xl w-full max-w-[calc(100vw-2rem)] md:max-w-[560px] lg:max-w-[680px] rounded-2xl max-h-[calc(100dvh-2rem)] md:max-h-[min(90vh,calc(100dvh-2rem))] flex flex-col overflow-hidden"
-        >
-          <div className="shrink-0 px-5 pt-6 pb-4 md:px-6 md:pt-6 md:pb-5 border-b border-gray-100">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="apple-heading-medium">设置</h2>
+      {isOpen && (
+        <>
+          <motion.div
+            className="wb-drawer-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={handleClose}
+            aria-hidden
+          />
+          <motion.aside
+            className="wb-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="wb-settings-title"
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'tween', duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+          >
+            <header className="wb-drawer-header">
+              <div className="min-w-0">
+                <h2 id="wb-settings-title" className="wb-drawer-title">
+                  设置
+                </h2>
+                {dirty && <span className="wb-prefs-dirty">未保存的更改</span>}
+              </div>
               <button
-                onClick={onClose}
-                className="p-2 -mr-1 hover:bg-gray-100 rounded-full transition-colors active:scale-90"
+                type="button"
+                className="wb-proj-icon-btn"
+                onClick={handleClose}
+                aria-label="关闭设置"
               >
-                <X className="h-5 w-5 text-gray-500" />
+                <X className="h-4 w-4" />
               </button>
-            </div>
+            </header>
 
-            <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
-              <button
-                onClick={() => setActiveTab('transcription')}
-                className={`flex-1 px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                  activeTab === 'transcription'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                转录设置
-              </button>
-              <button
-                onClick={() => setActiveTab('translation')}
-                className={`flex-1 px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                  activeTab === 'translation'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                翻译设置
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 min-h-0 overflow-y-auto px-5 py-5 md:px-6 md:py-5 pb-28 md:pb-5">
-            <div className="space-y-6">
-              {activeTab === 'translation' ? (
-                <>
+            <div className="wb-drawer-scroll wb-drawer-scroll-full">
+              <section className="wb-drawer-section">
+                <header className="wb-prefs-section-head">
+                  <h3>翻译</h3>
+                  <p>服务商、密钥与源/目标语言</p>
+                </header>
+                <div className="wb-prefs-block">
                   <TranslationSettings
                     config={formData}
                     onConfigChange={onInputChange}
                     onSelectProvider={onSelectProvider}
                     onUpdateActiveProfile={onUpdateActiveProfile}
+                    sections="provider"
                   />
+                </div>
+                <div className="wb-prefs-block">
+                  <h4 className="wb-prefs-block-title">语言</h4>
+                  <TranslationSettings
+                    config={formData}
+                    onConfigChange={onInputChange}
+                    onSelectProvider={onSelectProvider}
+                    onUpdateActiveProfile={onUpdateActiveProfile}
+                    sections="language"
+                  />
+                </div>
+              </section>
 
-                  <div className="hidden md:flex justify-between items-center pt-4 border-t border-gray-200">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={onTestConnection}
-                      disabled={isTesting || !activeProfile.apiKey}
-                    >
-                      <TestTube className={`h-4 w-4 ${isTesting ? 'animate-spin' : ''}`} />
-                      <span>{isTesting ? '测试中...' : '测试连接'}</span>
-                    </Button>
+              <section className="wb-drawer-section">
+                <header className="wb-prefs-section-head">
+                  <h3>转录</h3>
+                  <p>AssemblyAI、字幕长度与热词</p>
+                </header>
+                <div className="wb-prefs-block">
+                  <TranscriptionSettings compact />
+                </div>
+              </section>
 
-                    <div className="flex gap-3">
-                      <Button variant="ghost" size="sm" onClick={onClose}>
-                        取消
-                      </Button>
-                      <Button size="sm" onClick={onSave}>
-                        <Save className="h-4 w-4" />
-                        <span>保存设置</span>
-                      </Button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <TranscriptionSettings />
-              )}
+              <section className="wb-drawer-section">
+                <header className="wb-prefs-section-head">
+                  <h3>高级参数</h3>
+                  <p>上下文、批次与限速，一般保持默认即可</p>
+                </header>
+                <div className="wb-prefs-block">
+                  <TranslationSettings
+                    config={formData}
+                    onConfigChange={onInputChange}
+                    onSelectProvider={onSelectProvider}
+                    onUpdateActiveProfile={onUpdateActiveProfile}
+                    sections="params"
+                  />
+                </div>
+              </section>
             </div>
-          </div>
-        </motion.div>
 
-        <AnimatePresence>
-          {activeTab === 'translation' && (
-            <motion.div
-              key="mobile-action-bar"
-              initial={{ y: 100, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 100, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 280, damping: 28 }}
-              onClick={(e) => e.stopPropagation()}
-              className="fixed bottom-0 left-0 right-0 md:hidden bg-white border-t border-gray-200 p-3 flex gap-2 z-50"
-            >
-              <Button
-                variant="secondary"
-                className="flex-1"
+            <footer className="wb-drawer-footer">
+              <button
+                type="button"
+                className="wb-tool"
                 onClick={onTestConnection}
                 disabled={isTesting || !activeProfile.apiKey}
               >
-                {isTesting ? '测试中…' : '测试'}
-              </Button>
-              <Button variant="ghost" className="flex-1" onClick={onClose}>
-                取消
-              </Button>
-              <Button className="flex-[1.4]" onClick={onSave}>
+                <TestTube className={`h-3.5 w-3.5 ${isTesting ? 'animate-spin' : ''}`} />
+                {isTesting ? '测试中…' : '测试连接'}
+              </button>
+              <div className="wb-prefs-footer-spacer" />
+              <button type="button" className="wb-tool" onClick={handleClose}>
+                关闭
+              </button>
+              <button type="button" className="wb-tool primary" onClick={onSave}>
+                <Save className="h-3.5 w-3.5" />
                 保存
-              </Button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+              </button>
+            </footer>
+          </motion.aside>
+        </>
+      )}
     </AnimatePresence>
   );
 };

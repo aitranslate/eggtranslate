@@ -176,9 +176,14 @@ export const useFilesStore = create<FilesState>()(
       },
 
       removeTask: (taskId) => {
+        const fileId = generateStableFileId(taskId);
         set((state) => ({
           tasks: state.tasks.filter((t) => t.taskId !== taskId),
-          selectedFileId: state.selectedFileId === taskId ? null : state.selectedFileId,
+          // selectedFileId 存的是 fileId（稳定 id），兼容旧数据里可能写过 taskId
+          selectedFileId:
+            state.selectedFileId === fileId || state.selectedFileId === taskId
+              ? null
+              : state.selectedFileId,
         }));
         void flushFilesStorePersist();
       },

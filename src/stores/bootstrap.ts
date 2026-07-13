@@ -14,6 +14,7 @@ import { useTermsStore } from './termsStore';
 import { useHistoryStore } from './historyStore';
 import { useTranscriptionStore } from './transcriptionStore';
 import { useTranslationConfigStore } from './translationConfigStore';
+import { useThemeStore } from './themeStore';
 
 type PersistApi = {
   rehydrate: () => Promise<void> | void;
@@ -35,6 +36,7 @@ export async function rehydrateAppStores(): Promise<void> {
     asPersist(useHistoryStore),
     asPersist(useTranscriptionStore),
     asPersist(useTranslationConfigStore),
+    asPersist(useThemeStore),
   ].filter((p): p is PersistApi => p != null && typeof p.rehydrate === 'function');
 
   await Promise.all(

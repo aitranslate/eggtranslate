@@ -1,9 +1,15 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Settings,
   BookOpen,
   History,
-  Menu
+  Menu,
+  FileText,
+  Upload,
+  Moon,
+  Sun,
+  LayoutList,
 } from 'lucide-react';
 import { BatchFileUpload } from './BatchFileUpload';
 import { SubtitleFileList } from './SubtitleFileList';
@@ -11,192 +17,280 @@ import { SubtitleEditor } from './SubtitleEditor';
 import { SettingsModal } from './SettingsModal';
 import { TermsManager } from './TermsManager';
 import { HistoryModal } from './HistoryModal';
+import { StatusBar } from './StatusBar';
 import { PWAInstallBanner } from './PWAInstallBanner';
 import { MobileMenu } from './MobileMenu';
-import { useFileCount } from '@/stores/filesStore';
+import { useFileCount, useFilesStore } from '@/stores/filesStore';
 import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
 import { useHistoryStore } from '@/stores/historyStore';
-import { SubtitleFileMetadata } from '@/types';
 import { useTermsStore } from '@/stores/termsStore';
+import { useWorkspaceStore, type StageMode } from '@/stores/workspaceStore';
+import { useThemeStore } from '@/stores/themeStore';
+import { useWorkbenchShortcuts } from '@/hooks/useWorkbenchShortcuts';
+import { SubtitleFileMetadata } from '@/types';
 
-// 滚动动画观察器 Hook
-const useScrollAnimation = () => {
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('animated');
-          }
-        });
-      },
-      {
-        threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
-      }
-    );
-
-    document.querySelectorAll('.apple-animate-on-scroll').forEach((el) => {
-      observer.observe(el);
-    });
-
-    return () => observer.disconnect();
-  }, []);
+const stageMotion = {
+  initial: { opacity: 0, y: 5 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -4 },
+  transition: { duration: 0.15, ease: [0.4, 0, 0.2, 1] as const },
 };
 
 export const MainApp: React.FC = () => {
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isTermsOpen, setIsTermsOpen] = useState(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [editingFileId, setEditingFileId] = useState<string | null>(null);
-  const [isEditingModalOpen, setIsEditingModalOpen] = useState(false);
-  // Only length — progress/entry content must not re-render the shell
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+
   const fileCount = useFileCount();
+  const selectedFileId = useFilesStore((s) => s.selectedFileId);
+  const setSelectedFileId = useFilesStore((s) => s.setSelectedFileId);
   const isConfigured = useIsTranslationConfigured();
-  const history = useHistoryStore((state) => state.history);
-  const terms = useTermsStore((state) => state.terms);
+  const historyCount = useHistoryStore((s) => s.history.length);
+  const termsCount = useTermsStore((s) => s.terms.length);
 
-  useScrollAnimation();
+  const stage = useWorkspaceStore((s) => s.stage);
+  const settingsOpen = useWorkspaceStore((s) => s.settingsOpen);
+  const setStage = useWorkspaceStore((s) => s.setStage);
+  const openEditor = useWorkspaceStore((s) => s.openEditor);
+  const openSettings = useWorkspaceStore((s) => s.openSettings);
+  const openTerms = useWorkspaceStore((s) => s.openTerms);
+  const openHistory = useWorkspaceStore((s) => s.openHistory);
 
-  const handleEditFile = useCallback((file: SubtitleFileMetadata) => {
-    setEditingFileId(file.id);
-    setIsEditingModalOpen(true);
+  const theme = useThemeStore((s) => s.theme);
+  const toggleTheme = useThemeStore((s) => s.toggleTheme);
+
+  // 默认工作区；未配置时打开设置抽屉（不替换舞台）
+  useEffect(() => {
+    openEditor();
+    if (!isConfigured) {
+      openSettings();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleCloseEditModal = useCallback(async () => {
-    // Stores auto-persist, no need for manual forcePersistAllData
-    setIsEditingModalOpen(false);
-    setEditingFileId(null);
+  const handleSelectTask = useCallback(
+    (file: SubtitleFileMetadata) => {
+      setSelectedFileId(file.id);
+      openEditor();
+    },
+    [setSelectedFileId, openEditor]
+  );
+
+  const handleNav = useCallback(
+    (mode: StageMode) => {
+      setStage(mode);
+    },
+    [setStage]
+  );
+
+  const triggerFilePicker = useCallback(() => {
+    document.querySelector<HTMLInputElement>('.wb-drop input[type="file"]')?.click();
   }, []);
+
+  useWorkbenchShortcuts({ onOpenFiles: triggerFilePicker });
+
+  const showEditor = stage === 'editor';
 
   return (
-    <div className="apple-style min-h-screen w-full">
-      {/* Apple 风格导航栏 */}
-      <nav className="apple-navbar">
-        <div className="apple-navbar-content">
-          <div className="flex items-center gap-2">
-            <h1 className="apple-heading-small">蛋蛋字幕翻译</h1>
-            <span className="hidden md:inline-block px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 rounded-full">v1.2</span>
+    <div className="workbench apple-style" data-theme={theme}>
+      <header className="wb-topbar">
+        <div className="wb-brand">
+          <img
+            className="wb-brand-logo"
+            src="/favicon.svg"
+            alt=""
+            width={24}
+            height={24}
+            draggable={false}
+          />
+          <span className="wb-brand-title">蛋蛋字幕翻译</span>
+          <span className="wb-brand-ver">v2.0</span>
+        </div>
+
+        <div className="wb-top-actions">
+          <div className="hidden md:flex items-center gap-1">
+            <button
+              type="button"
+              className={`wb-nav-btn ${showEditor && !settingsOpen ? 'active' : ''}`}
+              onClick={() => handleNav('editor')}
+              title="工作区"
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+              <span className="wb-nav-label">工作区</span>
+            </button>
+
+            <span className="wb-top-sep" aria-hidden />
+
+            <button
+              type="button"
+              className={`wb-nav-btn ${stage === 'terms' ? 'active' : ''}`}
+              onClick={() => handleNav('terms')}
+              title="术语 (Ctrl+Shift+T)"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              <span className="wb-nav-label">术语</span>
+              {termsCount > 0 && <span className="wb-nav-badge">{termsCount}</span>}
+            </button>
+
+            <button
+              type="button"
+              className={`wb-nav-btn ${stage === 'history' ? 'active' : ''}`}
+              onClick={() => handleNav('history')}
+              title="历史 (Ctrl+Shift+H)"
+            >
+              <History className="h-3.5 w-3.5" />
+              <span className="wb-nav-label">历史</span>
+              {historyCount > 0 && (
+                <span className="wb-nav-badge">{historyCount}</span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className={`wb-nav-btn ${settingsOpen ? 'active' : ''} ${!isConfigured ? 'warn' : ''}`}
+              onClick={openSettings}
+              title="设置 (Ctrl+,)"
+            >
+              <span className="wb-nav-dot" aria-hidden />
+              <Settings className="h-3.5 w-3.5" />
+              <span className="wb-nav-label">设置</span>
+              {!isConfigured && <span className="wb-nav-badge">必须</span>}
+            </button>
+
+            <button
+              type="button"
+              className="wb-nav-btn"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? '浅色' : '深色'}
+              aria-label="切换主题"
+            >
+              {theme === 'dark' ? (
+                <Sun className="h-3.5 w-3.5" />
+              ) : (
+                <Moon className="h-3.5 w-3.5" />
+              )}
+            </button>
           </div>
 
-          {/* 桌面端：水平按钮组（≥768px 显示） */}
-          <div className={`hidden md:flex items-center gap-3 ${isEditingModalOpen ? 'pointer-events-none opacity-50' : ''}`}>
-            <button
-              onClick={() => setIsTermsOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors"
-            >
-              <BookOpen className="h-4 w-4" />
-              <span className="text-sm">术语</span>
-              {terms.length > 0 && (
-                <span className="px-1.5 py-0.5 text-xs bg-blue-500 text-white rounded-full">
-                  {terms.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setIsHistoryOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors"
-            >
-              <History className="h-4 w-4" />
-              <span className="text-sm">历史</span>
-              {history.length > 0 && (
-                <span className="px-1.5 py-0.5 text-xs bg-blue-500 text-white rounded-full">
-                  {history.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors ${
-                isConfigured
-                  ? 'text-gray-600 hover:bg-gray-100'
-                  : 'text-orange-600 bg-orange-50 hover:bg-orange-100'
-              }`}
-            >
-              <Settings className="h-4 w-4" />
-              <span className="text-sm">设置</span>
-              {!isConfigured && (
-                <span className="px-1.5 py-0.5 text-xs bg-orange-500 text-white rounded-full">
-                  必须
-                </span>
-              )}
-            </button>
-          </div>
-
-          {/* 移动端：汉堡按钮（<768px 显示） */}
           <button
+            type="button"
+            className="md:hidden wb-nav-btn"
+            onClick={toggleTheme}
+            aria-label="切换主题"
+          >
+            {theme === 'dark' ? (
+              <Sun className="h-3.5 w-3.5" />
+            ) : (
+              <Moon className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <button
+            type="button"
             onClick={() => setIsMobileMenuOpen(true)}
-            className={`md:hidden w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 ${isEditingModalOpen ? 'pointer-events-none opacity-50' : ''}`}
+            className="md:hidden w-8 h-8 flex items-center justify-center rounded-[8px]"
+            style={{ background: 'var(--wb-panel-2)', color: 'var(--wb-text-2)' }}
             aria-label="打开菜单"
           >
             <Menu className="h-4 w-4" />
           </button>
         </div>
-      </nav>
+      </header>
 
-      {/* 主内容区域 */}
-      <main className="apple-container apple-section">
-        {/* Hero：静态文案，避免首屏 framer 逐字弹簧 */}
-        <div className="text-center mb-16 pt-8">
-          <h2 className="apple-heading-hero mb-4">字幕翻译，重新定义</h2>
-          <p className="apple-body-large max-w-2xl mx-auto mb-8">
-            支持音视频转录、SRT 翻译、术语管理。本地处理，隐私安全。
-          </p>
+      <aside className="wb-sidebar">
+        <div className="wb-upload">
+          <BatchFileUpload compact />
         </div>
 
-        {/* 上传区域 - 突出显示 */}
-        <div className="mb-16">
-          <div className="apple-card-large p-12">
-            <BatchFileUpload />
+        <div className="wb-tasks">
+          <div className="wb-tasks-head">
+            <h2>项目</h2>
+            {fileCount > 0 && <span className="wb-tasks-count">{fileCount}</span>}
           </div>
-        </div>
 
-        {/* 文件列表：仅按数量显示，内容更新由列表自身订阅 */}
-        {fileCount > 0 && (
-          <SubtitleFileList
-            onEditFile={handleEditFile}
-          />
-        )}
+          {fileCount > 0 ? (
+            <div className="wb-task-list">
+              <SubtitleFileList
+                variant="sidebar"
+                selectedFileId={selectedFileId}
+                onSelectFile={handleSelectTask}
+              />
+            </div>
+          ) : (
+            <div className="wb-task-list-empty">
+              <Upload className="h-5 w-5 mx-auto mb-2 opacity-40" />
+              拖入视频 / 字幕开始
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* 主舞台始终是工作区 / 术语 / 历史 — 设置不占用 */}
+      <main className="wb-stage">
+        <AnimatePresence mode="wait">
+          {stage === 'terms' && (
+            <motion.div key="terms" className="wb-stage-inner" {...stageMotion}>
+              <TermsManager variant="panel" />
+            </motion.div>
+          )}
+
+          {stage === 'history' && (
+            <motion.div key="history" className="wb-stage-inner" {...stageMotion}>
+              <HistoryModal variant="panel" />
+            </motion.div>
+          )}
+
+          {showEditor && selectedFileId && (
+            <motion.div
+              key={`editor-${selectedFileId}`}
+              className="wb-stage-inner"
+              {...stageMotion}
+            >
+              <SubtitleEditor variant="panel" fileId={selectedFileId} />
+            </motion.div>
+          )}
+
+          {showEditor && !selectedFileId && (
+            <motion.div key="empty" className="wb-stage-inner" {...stageMotion}>
+              <div className="wb-stage-empty">
+                <div className="wb-stage-empty-icon">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <h3>{fileCount > 0 ? '选择一个项目' : '导入文件开始'}</h3>
+                <p>
+                  {fileCount > 0
+                    ? '在左侧点选任务，这里打开字幕编辑与进度。'
+                    : '拖入 SRT 或音视频到左侧。本地处理，隐私安全。'}
+                </p>
+                <div className="wb-stage-empty-hints">
+                  <button type="button" className="wb-kbd" onClick={triggerFilePicker}>
+                    选择文件
+                  </button>
+                  {!isConfigured && (
+                    <button type="button" className="wb-kbd" onClick={openSettings}>
+                      配置 API
+                    </button>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
 
-      {/* 底部信息 */}
-      <footer className="apple-container apple-section">
-        <div className="apple-body-small text-center text-gray-500">
-          <p>SRT 字幕翻译 • 音视频转录 • 本地处理 • 隐私安全</p>
-        </div>
-      </footer>
+      <StatusBar />
 
-      {/* 模态框 */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
-      <TermsManager
-        isOpen={isTermsOpen}
-        onClose={() => setIsTermsOpen(false)}
-      />
-      <HistoryModal
-        isOpen={isHistoryOpen}
-        onClose={() => setIsHistoryOpen(false)}
-      />
-      <SubtitleEditor
-        isOpen={isEditingModalOpen}
-        onClose={handleCloseEditModal}
-        fileId={editingFileId || ''}
-      />
+      {/* 右侧设置抽屉：浮在工作区之上 */}
+      <SettingsModal isOpen={settingsOpen} />
+
       <PWAInstallBanner />
       <MobileMenu
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
-        termsCount={terms.length}
-        historyCount={history.length}
+        termsCount={termsCount}
+        historyCount={historyCount}
         isSettingsRequired={!isConfigured}
-        onOpenTerms={() => setIsTermsOpen(true)}
-        onOpenHistory={() => setIsHistoryOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenWorkspace={openEditor}
+        onOpenTerms={openTerms}
+        onOpenHistory={openHistory}
+        onOpenSettings={openSettings}
       />
     </div>
   );

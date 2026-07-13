@@ -86,4 +86,12 @@ describe('llmProfiles', () => {
     config = selectProvider(config, 'agnes');
     expect(isTranslationLlmConfigured(config)).toBe(false);
   });
+
+  it('keyless provider is considered configured without API key', () => {
+    const profiles = createDefaultProfiles().map((p) =>
+      p.id === 'agnes' ? { ...p, requiresKey: false } : p
+    );
+    const config = { ...baseConfig(), profiles, activeProfileId: 'agnes' };
+    expect(isTranslationLlmConfigured(config)).toBe(true);
+  });
 });

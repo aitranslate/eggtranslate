@@ -1,17 +1,21 @@
 {
   "name": "eggtranslate",
   "private": true,
-  "version": "1.2.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "build:prod": "tsc -b && set BUILD_MODE=prod && vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
+    "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "test:e2e": "node e2e/run.mjs",
+    "test:e2e:live": "node e2e/run.mjs --live",
+    "test:e2e:live-full": "node e2e/run-live.mjs",
+    "test:e2e:install": "npm install -g agent-browser && agent-browser install"
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
