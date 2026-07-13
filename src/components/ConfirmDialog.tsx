@@ -82,13 +82,13 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               >
                 <button
                   onClick={onClose}
-                  className="apple-button apple-button-ghost flex-1 active:scale-[0.97]"
+                  className="apple-button apple-button-ghost flex-1"
                 >
                   {cancelText}
                 </button>
                 <button
                   onClick={handleConfirm}
-                  className={`apple-button flex-1 active:scale-[0.97] ${confirmButtonClass}`}
+                  className={`apple-button flex-1 ${confirmButtonClass}`}
                 >
                   {confirmText}
                 </button>

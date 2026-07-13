@@ -17,9 +17,22 @@
   --apple-blue: #0071e3;
   --apple-blue-hover: #0077ed;
   --apple-blue-active: #0062cc;
+  --apple-blue-soft: rgba(0, 113, 227, 0.08);
+  --apple-blue-soft-strong: rgba(0, 113, 227, 0.14);
+
+  --apple-success: #34c759;
+  --apple-success-soft: #ecfdf5;
+  --apple-danger: #ff3b30;
+  --apple-danger-soft: #fff5f5;
+  --apple-warning: #ff9500;
 
   --apple-border-light: #d2d2d7;
   --apple-border-lighter: #e8e8ed;
+
+  /* 控件高度节奏 */
+  --apple-control-h: 40px;
+  --apple-control-h-sm: 36px;
+  --apple-control-h-lg: 44px;
 
   /* 字体系统 */
   --apple-font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Display",
@@ -31,10 +44,12 @@
   --apple-content-max-width: 980px;
   --apple-content-padding: 24px;
 
-  /* 圆角系统 */
-  --apple-radius-button: 980px; /* 药丸形状 */
-  --apple-radius-card: 18px;
-  --apple-radius-card-large: 28px;
+  /* 圆角系统：工具产品用软方圆，避免满屏大药丸/大圆钮 */
+  --apple-radius-control: 10px; /* 输入框、次要按钮 */
+  --apple-radius-button: 12px; /* 主按钮 */
+  --apple-radius-card: 16px;
+  --apple-radius-card-large: 20px;
+  --apple-radius-pill: 999px; /* 仅徽章/chip 使用 */
 
   /* 动画 */
   --apple-transition-fast: 0.3s ease;
@@ -138,56 +153,195 @@
   color: var(--apple-text-secondary);
 }
 
-/* ===== 按钮系统 ===== */
+/* ===== 按钮系统（精致工具风：软方圆，不用大圆/药丸 CTA） ===== */
 .apple-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 12px 24px;
-  font-size: 17px;
-  font-weight: 400;
-  line-height: 1.17648;
-  letter-spacing: -0.022em;
+  gap: 6px;
+  padding: 0 16px;
+  height: var(--apple-control-h);
+  min-height: var(--apple-control-h);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   text-align: center;
   text-decoration: none;
   border-radius: var(--apple-radius-button);
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: background-color var(--apple-transition-fast), transform var(--apple-transition-fast);
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    background-color var(--apple-duration-base) var(--apple-ease-out),
+    border-color var(--apple-duration-base) var(--apple-ease-out),
+    color var(--apple-duration-base) var(--apple-ease-out),
+    box-shadow var(--apple-duration-base) var(--apple-ease-out),
+    opacity var(--apple-duration-quick) var(--apple-ease-out);
   background-color: var(--apple-blue);
   color: #ffffff;
-  min-height: 44px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .apple-button:hover {
   background-color: var(--apple-blue-hover);
-  transform: scale(1.02);
+  box-shadow: 0 2px 8px rgba(0, 113, 227, 0.2);
 }
 
 .apple-button:active {
   background-color: var(--apple-blue-active);
-  transform: scale(0.98);
+  box-shadow: none;
 }
 
+.apple-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+/* 小尺寸：表单行内、工具条 */
+.apple-button-sm {
+  height: var(--apple-control-h-sm);
+  min-height: var(--apple-control-h-sm);
+  padding: 0 14px;
+  font-size: 13px;
+  border-radius: var(--apple-radius-control);
+  gap: 5px;
+}
+
+.apple-button-lg {
+  height: var(--apple-control-h-lg);
+  min-height: var(--apple-control-h-lg);
+  padding: 0 18px;
+  font-size: 15px;
+}
+
+/* ===== 输入框系统 ===== */
+.apple-input {
+  display: block;
+  width: 100%;
+  height: var(--apple-control-h);
+  min-height: var(--apple-control-h);
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--apple-text-primary);
+  background-color: var(--apple-bg-secondary);
+  border: 1px solid var(--apple-border-lighter);
+  border-radius: var(--apple-radius-control);
+  outline: none;
+  transition:
+    border-color var(--apple-duration-base) var(--apple-ease-out),
+    box-shadow var(--apple-duration-base) var(--apple-ease-out),
+    background-color var(--apple-duration-base) var(--apple-ease-out);
+}
+
+.apple-input::placeholder {
+  color: var(--apple-text-tertiary);
+}
+
+.apple-input:hover {
+  border-color: var(--apple-border-light);
+}
+
+.apple-input:focus {
+  background-color: var(--apple-bg-primary);
+  border-color: var(--apple-blue);
+  box-shadow: 0 0 0 3px var(--apple-blue-soft);
+}
+
+.apple-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.apple-input-sm {
+  height: var(--apple-control-h-sm);
+  min-height: var(--apple-control-h-sm);
+  font-size: 13px;
+  padding: 0 10px;
+}
+
+/* 密码框：隐藏浏览器原生眼睛 */
+.apple-input[type="password"]::-ms-reveal,
+.apple-input[type="password"]::-ms-clear {
+  display: none;
+}
+
+/* 次要：描边，不抢主操作 */
 .apple-button-secondary {
-  background-color: transparent;
-  color: var(--apple-blue);
-  border: 1px solid var(--apple-blue);
+  background-color: #ffffff;
+  color: var(--apple-text-primary);
+  border-color: var(--apple-border-light);
+  box-shadow: none;
 }
 
 .apple-button-secondary:hover {
-  background-color: rgba(0, 113, 227, 0.08);
+  background-color: var(--apple-bg-secondary);
+  border-color: #c7c7cc;
+  box-shadow: none;
 }
 
+.apple-button-secondary:active {
+  background-color: var(--apple-bg-tertiary);
+}
+
+/* 幽灵：最低权重 */
 .apple-button-ghost {
   background-color: transparent;
-  color: var(--apple-text-primary);
-  border: none;
+  color: var(--apple-text-secondary);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .apple-button-ghost:hover {
   background-color: var(--apple-bg-secondary);
+  color: var(--apple-text-primary);
+  box-shadow: none;
+}
+
+.apple-button-ghost:active {
+  background-color: var(--apple-bg-tertiary);
+}
+
+/* 危险：仅文字/浅底，不用大红实心 */
+.apple-button-danger {
+  background-color: transparent;
+  color: #ff3b30;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.apple-button-danger:hover {
+  background-color: rgba(255, 59, 48, 0.08);
+  color: #ff3b30;
+  box-shadow: none;
+}
+
+/* 仅图标：小方圆，不是大圆球 */
+.apple-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: var(--apple-radius-control);
+  background: transparent;
+  color: var(--apple-text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--apple-duration-base) var(--apple-ease-out),
+    color var(--apple-duration-base) var(--apple-ease-out);
+}
+
+.apple-icon-button:hover {
+  background-color: var(--apple-bg-secondary);
+  color: var(--apple-text-primary);
 }
 
 /* ===== 卡片系统 ===== */
@@ -274,11 +428,7 @@
   }
 
   .apple-button:hover {
-    transform: none;
-  }
-
-  .apple-button:active {
-    transform: scale(0.98);
+    box-shadow: none;
   }
 }
 

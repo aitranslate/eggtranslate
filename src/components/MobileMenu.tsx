@@ -129,7 +129,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                     <span style={{ flex: 1 }}>术语</span>
                     {termsCount > 0 && (
                       <span style={{
-                        background: '#0066FF', color: '#fff',
+                        background: 'var(--apple-blue)', color: '#fff',
                         fontSize: 10, padding: '1px 6px', borderRadius: 8,
                       }}>
                         {termsCount}
@@ -146,7 +146,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                     <span style={{ flex: 1 }}>历史</span>
                     {historyCount > 0 && (
                       <span style={{
-                        background: '#0066FF', color: '#fff',
+                        background: 'var(--apple-blue)', color: '#fff',
                         fontSize: 10, padding: '1px 6px', borderRadius: 8,
                       }}>
                         {historyCount}

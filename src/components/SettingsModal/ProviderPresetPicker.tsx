@@ -72,10 +72,10 @@ export const ProviderPresetPicker: React.FC<ProviderPresetPickerProps> = ({
                 <span
                   className={`absolute -top-1.5 -right-1 z-10 px-1 py-0.5 text-[9px] font-semibold leading-none rounded-full text-white shadow-sm ${
                     preset.badgeTone === 'recommend'
-                      ? 'bg-blue-500'
+                      ? 'bg-[var(--apple-blue)]'
                       : preset.badgeTone === 'free'
-                        ? 'bg-emerald-500'
-                        : 'bg-gray-500'
+                        ? 'bg-[var(--apple-success)]'
+                        : 'bg-[var(--apple-text-tertiary)]'
                   }`}
                 >
                   {preset.badge}
@@ -102,7 +102,7 @@ export const ProviderPresetPicker: React.FC<ProviderPresetPickerProps> = ({
               </span>
               {hasKey && !isSelected && (
                 <span
-                  className="absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-500"
+                  className="absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full bg-[var(--apple-success)]"
                   aria-hidden
                 />
               )}

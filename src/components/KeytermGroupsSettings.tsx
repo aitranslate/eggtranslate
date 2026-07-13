@@ -227,7 +227,7 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
               />
               <button
                 onClick={addKeyterm}
-                className="apple-button apple-button-secondary"
+                className="apple-button apple-button-sm apple-button-secondary"
               >
                 <Plus className="h-4 w-4" />
                 <span>添加</span>

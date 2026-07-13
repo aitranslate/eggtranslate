@@ -119,7 +119,7 @@ export const SubtitleEditingRow = memo<EditingRowProps>(({
           <button
             type="button"
             onClick={onSaveEdit}
-            className="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-sm rounded transition-colors flex items-center gap-1"
+            className="apple-button apple-button-sm flex items-center gap-1"
           >
             <Save className="h-3 w-3" />
             <span>保存</span>
@@ -345,7 +345,8 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
               <div className="flex items-center gap-3 flex-shrink-0">
                 <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-emerald-500 transition-all"
+                    className="h-full transition-all"
+                    style={{ background: 'var(--apple-success)' }}
                     style={{ width: `${translationStats.percentage}%` }}
                   />
                 </div>

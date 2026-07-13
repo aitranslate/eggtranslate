@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Key, Plus, HelpCircle } from 'lucide-react';
 import { SettingsHint } from './SettingsHint';
+import { Button, Input } from '@/components/ui';
 
 interface ApiKeysSettingsProps {
   keys: string;
@@ -52,7 +53,7 @@ export const ApiEndpointsSettings: React.FC<ApiKeysSettingsProps> = ({
 
       {/* 输入框和添加按钮 */}
       <div className="flex gap-2">
-        <input
+        <Input
           type="password"
           autoComplete="off"
           value={localValue}
@@ -63,15 +64,12 @@ export const ApiEndpointsSettings: React.FC<ApiKeysSettingsProps> = ({
             }
           }}
           placeholder="输入 AssemblyAI API KEY"
-          className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all [&::-ms-reveal]:hidden [&::-ms-clear]:hidden"
+          className="flex-1"
         />
-        <button
-          onClick={addKey}
-          className="apple-button apple-button-secondary"
-        >
+        <Button variant="secondary" onClick={addKey}>
           <Plus className="h-4 w-4" />
           <span>添加</span>
-        </button>
+        </Button>
       </div>
 
       {/* 当前配置的 KEY 列表 */}

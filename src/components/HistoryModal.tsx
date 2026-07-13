@@ -11,6 +11,7 @@ import {
   Search
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Button, Input } from '@/components/ui';
 import { getBaseName, exportEntries, buildEntriesZip } from '@/services/SubtitleExporter';
 import { downloadZipFile, downloadSubtitleFile, type ExportFormat } from '@/utils/fileExport';
 import { ExportButton } from '@/components/common/ExportButton';
@@ -144,16 +145,13 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
         >
           <div className="flex items-center gap-3">
             <h2 className="apple-heading-medium">翻译历史</h2>
-            <span className="px-2.5 py-1 bg-purple-100 text-purple-700 text-sm rounded-full font-medium">
+            <span className="px-2.5 py-1 text-sm font-medium rounded-full bg-[var(--apple-blue-soft)] text-[var(--apple-blue)]">
               {history.length} 条记录
             </span>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors active:scale-95"
-          >
-            <X className="h-5 w-5 text-gray-500" />
-          </button>
+          <Button iconOnly onClick={onClose} aria-label="关闭">
+            <X className="h-5 w-5" />
+          </Button>
         </motion.div>
 
         {/* 统计信息 - 数字 CountUp */}
@@ -194,24 +192,19 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ isOpen, onClose }) =
           className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-6"
         >
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-[1]" />
+            <Input
               placeholder="搜索历史记录..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+              className="!pl-10"
             />
           </div>
 
-          <button
-            onClick={onClear}
-            disabled={history.length === 0}
-            className="apple-button apple-button-ghost text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
-          >
+          <Button variant="danger" size="sm" onClick={onClear} disabled={history.length === 0}>
             <Trash2 className="h-4 w-4" />
             <span>清空历史</span>
-          </button>
+          </Button>
         </motion.div>
 
         {/* 历史记录列表 */}

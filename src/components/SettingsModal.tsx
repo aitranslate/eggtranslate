@@ -16,6 +16,8 @@ import {
   updateActiveProfile,
 } from '@/utils/llmProfiles';
 import { useApiKeys } from '@/stores/transcriptionStore';
+import { toastError } from '@/utils/appToast';
+import { Button } from '@/components/ui';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -23,11 +25,6 @@ interface SettingsModalProps {
 }
 
 type TabType = 'translation' | 'transcription';
-
-interface TestResult {
-  success: boolean;
-  message: string;
-}
 
 /** 缺翻译 Key 优先翻译；翻译已配且缺转录 Key 则转录；否则默认翻译 */
 function resolveDefaultTab(
@@ -47,7 +44,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const transcriptionKeys = useApiKeys();
 
   const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<TestResult | null>(null);
   const { handleError } = useErrorHandler();
 
   const [activeTab, setActiveTab] = useState<TabType>('translation');
@@ -58,7 +54,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       const normalized = ensureProfiles(config);
       setFormData(normalized);
       setActiveTab(resolveDefaultTab(normalized, transcriptionKeys));
-      setTestResult(null);
     }
   }, [isOpen, config, transcriptionKeys]);
 
@@ -68,12 +63,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     const currentApiKey = activeProfile.apiKey?.trim();
 
     if (!currentApiKey) {
-      setTestResult({ success: false, message: '请先输入API密钥' });
+      toastError('请先输入 API 密钥');
       return;
     }
 
     setIsTesting(true);
-    setTestResult(null);
 
     try {
       const apiKey = currentApiKey
@@ -103,14 +97,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       }
 
       await response.json();
-      setTestResult({ success: true, message: '连接成功！API配置正常' });
+      toast.success('连接成功，API 配置正常');
     } catch (error) {
       handleError(error, {
         context: { operation: 'API 连接测试' },
         showToast: false,
       });
       const message = error instanceof Error ? error.message : '连接失败';
-      setTestResult({ success: false, message });
+      toastError(message);
     } finally {
       setIsTesting(false);
     }
@@ -137,7 +131,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   const onSelectProvider = useCallback((id: LlmProviderId) => {
     setFormData((prev) => selectProvider(prev, id));
-    setTestResult(null);
   }, []);
 
   const onUpdateActiveProfile = useCallback((patch: Partial<Omit<LlmProfile, 'id' | 'presetId'>>) => {
@@ -206,33 +199,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                     onConfigChange={onInputChange}
                     onSelectProvider={onSelectProvider}
                     onUpdateActiveProfile={onUpdateActiveProfile}
-                    testResult={testResult}
                   />
 
                   <div className="hidden md:flex justify-between items-center pt-4 border-t border-gray-200">
-                    <button
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={onTestConnection}
                       disabled={isTesting || !activeProfile.apiKey}
-                      className="apple-button apple-button-secondary px-6 py-2.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97]"
                     >
                       <TestTube className={`h-4 w-4 ${isTesting ? 'animate-spin' : ''}`} />
                       <span>{isTesting ? '测试中...' : '测试连接'}</span>
-                    </button>
+                    </Button>
 
                     <div className="flex gap-3">
-                      <button
-                        onClick={onClose}
-                        className="apple-button apple-button-ghost px-6 py-2.5 text-sm active:scale-[0.97]"
-                      >
+                      <Button variant="ghost" size="sm" onClick={onClose}>
                         取消
-                      </button>
-                      <button
-                        onClick={onSave}
-                        className="apple-button px-6 py-2.5 text-sm active:scale-[0.97]"
-                      >
+                      </Button>
+                      <Button size="sm" onClick={onSave}>
                         <Save className="h-4 w-4" />
                         <span>保存设置</span>
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </>
@@ -254,28 +241,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               onClick={(e) => e.stopPropagation()}
               className="fixed bottom-0 left-0 right-0 md:hidden bg-white border-t border-gray-200 p-3 flex gap-2 z-50"
             >
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                className="flex-1"
                 onClick={onTestConnection}
                 disabled={isTesting || !activeProfile.apiKey}
-                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium active:scale-95 transition-transform disabled:opacity-50"
               >
                 {isTesting ? '测试中…' : '测试'}
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium active:scale-95 transition-transform"
-              >
+              </Button>
+              <Button variant="ghost" className="flex-1" onClick={onClose}>
                 取消
-              </button>
-              <button
-                type="button"
-                onClick={onSave}
-                className="flex-[1.4] py-3 bg-blue-600 text-white rounded-lg text-sm font-medium active:scale-95 transition-transform"
-              >
+              </Button>
+              <Button className="flex-[1.4]" onClick={onSave}>
                 保存
-              </button>
+              </Button>
             </motion.div>
           )}
         </AnimatePresence>

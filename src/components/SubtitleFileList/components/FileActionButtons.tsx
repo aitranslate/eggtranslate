@@ -135,11 +135,20 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
             disabled={transcribeButtonDisabled}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-transform ${transcribeButtonDisabled ? '' : 'hover:scale-[1.03] active:scale-[0.96]'}`}
             style={{
-              background: transcribeButtonDisabled ? '#F2F2F7' : '#EBF3FF',
-              color: transcribeButtonDisabled ? '#86868B' : '#0066FF',
+              background: transcribeButtonDisabled ? 'var(--apple-bg-secondary)' : 'var(--apple-blue-soft)',
+              color: transcribeButtonDisabled ? 'var(--apple-text-secondary)' : 'var(--apple-blue)',
+              borderRadius: 'var(--apple-radius-control)',
             }}
-            onMouseEnter={(e) => { if (!transcribeButtonDisabled) (e.currentTarget.style.background = '#D9E8FF'); }}
-            onMouseLeave={(e) => { if (!transcribeButtonDisabled) (e.currentTarget.style.background = '#EBF3FF'); }}
+            onMouseEnter={(e) => {
+              if (!transcribeButtonDisabled) {
+                e.currentTarget.style.background = 'var(--apple-blue-soft-strong)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!transcribeButtonDisabled) {
+                e.currentTarget.style.background = 'var(--apple-blue-soft)';
+              }
+            }}
           >
             仅转录
           </button>
@@ -159,16 +168,27 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
               }
             }}
             disabled={primaryButtonDisabled}
-            className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto"
+            className="flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto"
             style={{
+              borderRadius: 'var(--apple-radius-button)',
               background: isQueued
-                ? '#8E8E93'
+                ? 'var(--apple-text-tertiary)'
                 : primaryButtonDisabled
-                  ? '#C4C4C4'
-                  : (canTranscribeAndTranslate || canTranslate) ? '#0066FF' : '#C4C4C4',
+                  ? 'var(--apple-border-light)'
+                  : canTranscribeAndTranslate || canTranslate
+                    ? 'var(--apple-blue)'
+                    : 'var(--apple-border-light)',
             }}
-            onMouseEnter={(e) => { if (!isQueued && !primaryButtonDisabled) (e.currentTarget.style.background = '#005ce6'); }}
-            onMouseLeave={(e) => { if (!isQueued && !primaryButtonDisabled) (e.currentTarget.style.background = '#0066FF'); }}
+            onMouseEnter={(e) => {
+              if (!isQueued && !primaryButtonDisabled) {
+                e.currentTarget.style.background = 'var(--apple-blue-hover)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isQueued && !primaryButtonDisabled) {
+                e.currentTarget.style.background = 'var(--apple-blue)';
+              }
+            }}
           >
             {isBusy ? (
               <>

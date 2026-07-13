@@ -153,7 +153,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
               <button
                 onClick={handleStartAll}
                 disabled={files.length === 0}
-                className="apple-button px-5 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="apple-button apple-button-sm"
               >
                 <Play className="h-4 w-4" />
                 <span>全部开始</span>
@@ -167,7 +167,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
               <button
                 onClick={handleClearAll}
                 disabled={files.length === 0}
-                className="apple-button apple-button-secondary px-5 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="apple-button apple-button-sm apple-button-secondary"
               >
                 <Trash2 className="h-4 w-4" />
                 <span>清空</span>

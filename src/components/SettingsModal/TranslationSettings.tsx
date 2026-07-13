@@ -16,7 +16,6 @@ interface TranslationSettingsProps {
   ) => void;
   onSelectProvider: (id: LlmProviderId) => void;
   onUpdateActiveProfile: (patch: Partial<Omit<LlmProfile, 'id' | 'presetId'>>) => void;
-  testResult: { success: boolean; message: string } | null;
 }
 
 const inputClass =
@@ -27,7 +26,6 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
   onConfigChange,
   onSelectProvider,
   onUpdateActiveProfile,
-  testResult,
 }) => {
   const [paramsOpen, setParamsOpen] = useState(false);
   const activeProfile = getActiveProfile(config);
@@ -44,7 +42,6 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
             activeProfile={activeProfile}
             onSelectProvider={onSelectProvider}
             onUpdateActiveProfile={onUpdateActiveProfile}
-            testResult={testResult}
           />
         </div>
       </div>

@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  AlertCircle,
-  CheckCircle,
   ChevronDown,
   Eye,
   EyeOff,
@@ -19,6 +17,7 @@ import {
   type LlmModelInfo,
 } from '@/utils/listLlmModels';
 import { toastError } from '@/utils/appToast';
+import { Input } from '@/components/ui';
 import { ProviderPresetPicker } from './ProviderPresetPicker';
 
 interface ApiTestFormProps {
@@ -27,7 +26,6 @@ interface ApiTestFormProps {
   activeProfile: LlmProfile;
   onSelectProvider: (id: LlmProviderId) => void;
   onUpdateActiveProfile: (patch: Partial<Omit<LlmProfile, 'id' | 'presetId'>>) => void;
-  testResult: { success: boolean; message: string } | null;
 }
 
 export const ApiTestForm: React.FC<ApiTestFormProps> = ({
@@ -35,7 +33,6 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
   activeProfile,
   onSelectProvider,
   onUpdateActiveProfile,
-  testResult,
 }) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const selectedId = (activeProfile.presetId || activeProfile.id) as LlmProviderId;
@@ -164,9 +161,6 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
 
   const canFetch = Boolean(activeProfile.baseURL?.trim() && activeProfile.apiKey?.trim());
 
-  const inputClass =
-    'w-full p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all';
-
   const modelMenu =
     pickerOpen &&
     chatModels.length > 0 &&
@@ -232,14 +226,13 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
       <div className="md:col-span-2">
         <label className="block text-sm font-medium text-gray-700 mb-2">API 密钥 *</label>
         <div className="relative">
-          <input
+          <Input
             type={showApiKey ? 'text' : 'password'}
             value={activeProfile.apiKey}
             onChange={(e) => onUpdateActiveProfile({ apiKey: e.target.value })}
             placeholder="粘贴 API Key…"
             autoComplete="off"
-            // 关闭浏览器自带的密码显示按钮，避免与右侧自定义眼睛重复
-            className={`${inputClass} pr-12 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden`}
+            className="!pr-11"
           />
           <button
             type="button"
@@ -282,12 +275,10 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Base URL</label>
-                  <input
-                    type="text"
+                  <Input
                     value={activeProfile.baseURL}
                     onChange={(e) => onUpdateActiveProfile({ baseURL: e.target.value })}
                     placeholder="https://api.example.com/v1"
-                    className={inputClass}
                   />
                 </div>
 
@@ -298,7 +289,7 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
                       type="button"
                       onClick={onFetchModels}
                       disabled={!canFetch || modelsLoading}
-                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed"
+                      className="inline-flex items-center gap-1 text-xs text-[var(--apple-blue)] hover:opacity-80 disabled:text-gray-400 disabled:cursor-not-allowed"
                     >
                       {modelsLoading ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -310,9 +301,8 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
                   </div>
 
                   <div className="relative">
-                    <input
+                    <Input
                       ref={inputRef}
-                      type="text"
                       value={pickerOpen ? filter : activeProfile.model}
                       onChange={(e) => {
                         if (pickerOpen) setFilter(e.target.value);
@@ -327,7 +317,7 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
                       placeholder={
                         chatModels.length > 0 ? '搜索或手填模型名' : '手填模型名，或点获取模型'
                       }
-                      className={`${inputClass} pr-10`}
+                      className="!pr-10"
                       autoComplete="off"
                     />
                     {chatModels.length > 0 && (
@@ -352,25 +342,6 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
           )}
         </AnimatePresence>
       </div>
-
-      {testResult && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className={`md:col-span-2 p-4 rounded-xl border flex items-center gap-2 ${
-            testResult.success
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-              : 'bg-red-50 border-red-200 text-red-700'
-          }`}
-        >
-          {testResult.success ? (
-            <CheckCircle className="h-5 w-5 shrink-0" />
-          ) : (
-            <AlertCircle className="h-5 w-5 shrink-0" />
-          )}
-          <span>{testResult.message}</span>
-        </motion.div>
-      )}
     </>
   );
 };

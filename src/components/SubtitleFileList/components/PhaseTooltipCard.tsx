@@ -75,10 +75,10 @@ export const PhaseTooltipCard: React.FC<PhaseTooltipCardProps> = ({
                     initial={{ width: 0 }}
                     animate={{ width: `${progress}%` }}
                     transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                    style={{ height: '100%', background: '#0066FF', borderRadius: 2 }}
+                    style={{ height: '100%', background: 'var(--apple-blue)', borderRadius: 2 }}
                   />
                 </div>
-                <span style={{ fontSize: 11, color: '#0066FF', fontWeight: 600 }}>{progress}%</span>
+                <span style={{ fontSize: 11, color: 'var(--apple-blue)', fontWeight: 600 }}>{progress}%</span>
               </div>
             </div>
           )}
