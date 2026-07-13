@@ -31,11 +31,6 @@ export const guideSections: GuideSection[] = [
 也支持 DeepSeek、通义千问、智谱、豆包等任意 OpenAI 兼容服务。`,
   },
   {
-    id: 'transcribe',
-    title: '音视频转录',
-    content: `上传音视频自动生成字幕，支持 MP3/WAV/M4A/WEBM 等格式，99+ 种语言自动识别。`,
-  },
-  {
     id: 'terms',
     title: '术语管理',
     content: `添加术语确保专有名词翻译一致。格式：原文 → 译文 [说明]`,
