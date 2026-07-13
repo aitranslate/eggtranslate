@@ -23,7 +23,7 @@ export interface SubtitleEntry {
   words?: SubtitleWord[];  // 单词级时间戳（转录产生，SRT 导入为空）
 }
 
-// LLM API 基础配置类型
+// LLM API 基础配置类型（调用时用）
 export interface LLMConfig {
   baseURL: string;
   apiKey: string;
@@ -31,14 +31,29 @@ export interface LLMConfig {
   rpm?: number;
 }
 
-// 翻译配置类型（继承 LLM 基础配置）
-export interface TranslationConfig extends LLMConfig {
+/** 一套可切换的 LLM 接口档案 */
+export interface LlmProfile {
+  id: string;
+  /** 展示名，如 Agnes / 公司中转 */
+  name: string;
+  baseURL: string;
+  apiKey: string;
+  model: string;
+  /** 来自哪个厂商预设（仅用于图标/匹配，可选） */
+  presetId?: string;
+}
+
+// 翻译配置：多套 LLM 档案 + 全局翻译参数
+export interface TranslationConfig {
+  profiles: LlmProfile[];
+  activeProfileId: string;
   sourceLanguage: string;
   targetLanguage: string;
   contextBefore: number;
   contextAfter: number;
   batchSize: number;
   threadCount: number;
+  rpm?: number;
 }
 
 // 翻译进度类型

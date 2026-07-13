@@ -63,7 +63,7 @@ export const ApiEndpointsSettings: React.FC<ApiKeysSettingsProps> = ({
             }
           }}
           placeholder="输入 AssemblyAI API KEY"
-          className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+          className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all [&::-ms-reveal]:hidden [&::-ms-clear]:hidden"
         />
         <button
           onClick={addKey}

@@ -40,9 +40,17 @@ describe('translationService', () => {
       isConfigured: false,
       isTranslating: false,
       config: {
-        baseURL: '',
-        apiKey: '',
-        model: '',
+        profiles: [
+          {
+            id: 'custom',
+            name: '自定义',
+            baseURL: '',
+            apiKey: '',
+            model: '',
+            presetId: 'custom',
+          },
+        ],
+        activeProfileId: 'custom',
         sourceLanguage: 'en',
         targetLanguage: 'zh',
         batchSize: 20,

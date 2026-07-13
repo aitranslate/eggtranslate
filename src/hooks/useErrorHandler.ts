@@ -5,6 +5,7 @@
 
 import { useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { toastError } from '@/utils/appToast';
 import {
   isAbortError,
   toAppError,
@@ -103,7 +104,7 @@ export function useErrorHandler() {
   ) => {
     const message = getUserMessage(error);
     const fullMessage = prefix ? `${prefix}: ${message}` : message;
-    toast.error(fullMessage);
+    toastError(fullMessage);
   }, []);
 
   /**

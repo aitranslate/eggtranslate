@@ -11,10 +11,8 @@ import { SubtitleEditor } from './SubtitleEditor';
 import { SettingsModal } from './SettingsModal';
 import { TermsManager } from './TermsManager';
 import { HistoryModal } from './HistoryModal';
-import { HelpButton } from './HelpButton';
 import { PWAInstallBanner } from './PWAInstallBanner';
 import { MobileMenu } from './MobileMenu';
-import { GuideModal } from './GuideModal';
 import { useFileCount } from '@/stores/filesStore';
 import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
 import { useHistoryStore } from '@/stores/historyStore';
@@ -50,7 +48,6 @@ export const MainApp: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [isEditingModalOpen, setIsEditingModalOpen] = useState(false);
@@ -185,16 +182,11 @@ export const MainApp: React.FC = () => {
         isOpen={isHistoryOpen}
         onClose={() => setIsHistoryOpen(false)}
       />
-      <GuideModal
-        isOpen={isGuideOpen}
-        onClose={() => setIsGuideOpen(false)}
-      />
       <SubtitleEditor
         isOpen={isEditingModalOpen}
         onClose={handleCloseEditModal}
         fileId={editingFileId || ''}
       />
-      <HelpButton onClick={() => setIsGuideOpen(true)} />
       <PWAInstallBanner />
       <MobileMenu
         isOpen={isMobileMenuOpen}
