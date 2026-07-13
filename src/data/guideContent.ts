@@ -16,6 +16,21 @@ export const guideSections: GuideSection[] = [
 4️⃣ 导出结果`,
   },
   {
+    id: 'api-recommend',
+    title: '免费翻译 API 推荐',
+    content: `推荐使用 Agnes AI（免费、兼容 OpenAI 接口，可直接填入本应用）：
+
+1. 打开 https://agnes-ai.com/ 注册并领取免费额度
+2. 在平台创建 API Key：https://platform.agnes-ai.com/
+3. 在本应用「设置 → 翻译设置」中填写：
+   · Base URL：https://apihub.agnes-ai.com/v1
+   · API Key：你的 Agnes 密钥
+   · 模型名：agnes-2.0-flash（或其他平台提供的模型）
+4. 点击「测试连接」，成功后即可开始翻译
+
+也支持 DeepSeek、通义千问、智谱、豆包等任意 OpenAI 兼容服务。`,
+  },
+  {
     id: 'transcribe',
     title: '音视频转录',
     content: `上传音视频自动生成字幕，支持 MP3/WAV/M4A/WEBM 等格式，99+ 种语言自动识别。`,

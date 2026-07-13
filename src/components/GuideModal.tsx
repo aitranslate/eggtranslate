@@ -9,6 +9,27 @@ interface GuideModalProps {
   onClose: () => void;
 }
 
+/** 将正文中的 URL 渲染为可点击外链 */
+function renderContentWithLinks(content: string) {
+  const parts = content.split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, i) => {
+    if (/^https?:\/\//.test(part)) {
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-700 underline break-all"
+        >
+          {part}
+        </a>
+      );
+    }
+    return <React.Fragment key={i}>{part}</React.Fragment>;
+  });
+}
+
 export const GuideModal: React.FC<GuideModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
@@ -61,7 +82,7 @@ export const GuideModal: React.FC<GuideModalProps> = ({ isOpen, onClose }) => {
               >
                 <h3 className="apple-heading-small mb-3">{section.title}</h3>
                 <div className="text-gray-700 leading-relaxed whitespace-pre-line">
-                  {section.content}
+                  {renderContentWithLinks(section.content)}
                 </div>
               </motion.section>
             ))}
