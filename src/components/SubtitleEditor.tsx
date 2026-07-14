@@ -6,6 +6,13 @@ import { useShallow } from 'zustand/react/shallow';
 import { SubtitleEntry } from '@/types';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useFilesStore, useFile } from '@/stores/filesStore';
+import {
+  EMPTY_STREAMING_OVERLAY,
+  calcDisplayTranslationProgress,
+  countStreamingLines,
+  mergeEntriesWithOverlay,
+  useStreamingOverlayStore,
+} from '@/stores/streamingOverlayStore';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useTranslationConfig } from '@/stores/translationConfigStore';
 import { LANGUAGE_OPTIONS } from '@/constants/languages';
@@ -31,6 +38,10 @@ interface DisplayRowProps {
   index: number;
   start: number;
   onStartEdit: (entry: SubtitleEntry, field?: FocusField) => void;
+  /** 仅「当前正在变长」的那一行显示闪烁光标 */
+  showStreamCaret?: boolean;
+  /** 任务处理中：禁止进入编辑 */
+  readOnly?: boolean;
 }
 
 /**
@@ -59,12 +70,25 @@ function MultiLineText({ text, emptyLabel }: { text: string; emptyLabel: string 
 }
 
 /** 只读行：序号 | 开始 | 结束 | 原文 | 译文 */
-export const SubtitleDisplayRow = memo<DisplayRowProps>(({ entry, index, start, onStartEdit }) => {
+export const SubtitleDisplayRow = memo<DisplayRowProps>(({
+  entry,
+  index,
+  start,
+  onStartEdit,
+  showStreamCaret = false,
+  readOnly = false,
+}) => {
+  const isStreaming = entry.translationStatus === 'streaming';
+  const tryEdit = (field: FocusField) => {
+    if (readOnly) return;
+    onStartEdit(entry, field);
+  };
   return (
     <div
       data-index={index}
       data-testid={`subtitle-row-${entry.id}`}
       data-editing="false"
+      data-readonly={readOnly ? 'true' : 'false'}
       style={{
         position: 'absolute',
         top: 0,
@@ -73,17 +97,19 @@ export const SubtitleDisplayRow = memo<DisplayRowProps>(({ entry, index, start, 
         height: ROW_HEIGHT,
         transform: `translateY(${start}px)`,
       }}
-      className="se-row"
-      onClick={() => onStartEdit(entry, 'translation')}
+      className={`se-row${readOnly ? ' is-readonly' : ''}`}
+      title={readOnly ? '任务处理中，完成后可编辑' : undefined}
+      onClick={() => tryEdit('translation')}
     >
       <div className="se-row-idx">#{index + 1}</div>
       <button
         type="button"
         className="se-row-time"
-        title="编辑开始时间"
+        title={readOnly ? '任务处理中，完成后可编辑' : '编辑开始时间'}
+        disabled={readOnly}
         onClick={(e) => {
           e.stopPropagation();
-          onStartEdit(entry, 'startTime');
+          tryEdit('startTime');
         }}
       >
         {entry.startTime}
@@ -91,10 +117,11 @@ export const SubtitleDisplayRow = memo<DisplayRowProps>(({ entry, index, start, 
       <button
         type="button"
         className="se-row-time"
-        title="编辑结束时间"
+        title={readOnly ? '任务处理中，完成后可编辑' : '编辑结束时间'}
+        disabled={readOnly}
         onClick={(e) => {
           e.stopPropagation();
-          onStartEdit(entry, 'endTime');
+          tryEdit('endTime');
         }}
       >
         {entry.endTime}
@@ -104,20 +131,30 @@ export const SubtitleDisplayRow = memo<DisplayRowProps>(({ entry, index, start, 
         title={entry.text}
         onClick={(e) => {
           e.stopPropagation();
-          onStartEdit(entry, 'text');
+          tryEdit('text');
         }}
       >
         <MultiLineText text={entry.text} emptyLabel="（空原文）" />
       </div>
       <div
-        className={`se-row-dst ${entry.translatedText ? '' : 'empty'}`}
-        title={entry.translatedText || undefined}
+        className={`se-row-dst ${entry.translatedText || isStreaming ? '' : 'empty'}${isStreaming ? ' is-streaming' : ''}`}
+        title={entry.translatedText || (readOnly ? '任务处理中，完成后可编辑' : undefined)}
         onClick={(e) => {
           e.stopPropagation();
-          onStartEdit(entry, 'translation');
+          tryEdit('translation');
         }}
       >
-        <MultiLineText text={entry.translatedText || ''} emptyLabel="点击编辑译文" />
+        {isStreaming ? (
+          <span className="se-text-plain se-stream-text">
+            {entry.translatedText || ''}
+            {showStreamCaret && <span className="se-stream-caret" aria-hidden />}
+          </span>
+        ) : (
+          <MultiLineText
+            text={entry.translatedText || ''}
+            emptyLabel={readOnly ? '处理中…' : '点击编辑译文'}
+          />
+        )}
       </div>
     </div>
   );
@@ -350,6 +387,29 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     }),
   );
 
+  // 流式 partial：独立 store，不触发 filesStore / persist
+  const streamingOverlay = useStreamingOverlayStore(
+    useShallow((s) => s.overlays[fileId] ?? EMPTY_STREAMING_OVERLAY)
+  );
+  const streamCaretEntryId = useStreamingOverlayStore(
+    (s) => s.activeCaretByFile[fileId] ?? null
+  );
+  const displayEntries = useMemo(
+    () => mergeEntriesWithOverlay(fileEntries, streamingOverlay),
+    [fileEntries, streamingOverlay]
+  );
+
+  /** 转码 / 转录 / 翻译进行中：禁止编辑（完成、失败、未开始可编） */
+  const isTaskBusy = useMemo(() => {
+    const p = file?.phases;
+    if (!p) return false;
+    return (
+      p.converting?.status === 'active' ||
+      p.transcribing?.status === 'active' ||
+      p.translating?.status === 'active'
+    );
+  }, [file?.phases]);
+
   const { handleError } = useErrorHandler();
 
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -400,7 +460,16 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
             original.startTime === nextStart &&
             original.endTime === nextEnd;
           if (!unchanged) {
-            updateEntry(draft.fileId!, draft.id, draft.text, draft.translation, undefined, nextStart, nextEnd);
+            const nextStatus = draft.translation.trim() ? 'completed' : 'pending';
+            updateEntry(
+              draft.fileId!,
+              draft.id,
+              draft.text,
+              draft.translation,
+              nextStatus,
+              nextStart,
+              nextEnd
+            );
           }
         }
       }
@@ -416,7 +485,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   }, [fileId, updateEntry]);
 
   const filteredEntries = useMemo(() => {
-    let filtered = fileEntries || [];
+    let filtered = displayEntries || [];
 
     if (filterType === 'translated') {
       filtered = filtered.filter((entry) => entry.translatedText);
@@ -433,7 +502,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     }
 
     return filtered;
-  }, [fileEntries, filterType, searchTerm]);
+  }, [displayEntries, filterType, searchTerm]);
 
   const parentRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -451,19 +520,35 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     setEditEndTime('');
   }, []);
 
-  const onStartEdit = useCallback((entry: SubtitleEntry, field: FocusField = 'translation') => {
-    setEditingId(entry.id);
-    setFocusField(field);
-    setEditText(entry.text);
-    setEditTranslation(entry.translatedText || '');
-    setEditStartTime(entry.startTime);
-    setEditEndTime(entry.endTime);
-  }, []);
+  const onStartEdit = useCallback(
+    (entry: SubtitleEntry, field: FocusField = 'translation') => {
+      if (isTaskBusy) return;
+      setEditingId(entry.id);
+      setFocusField(field);
+      setEditText(entry.text);
+      setEditTranslation(entry.translatedText || '');
+      setEditStartTime(entry.startTime);
+      setEditEndTime(entry.endTime);
+    },
+    [isTaskBusy]
+  );
+
+  // 任务进入处理中时，强制退出编辑（不落盘，避免与流水线冲突）
+  useEffect(() => {
+    if (isTaskBusy && editingId !== null) {
+      clearDraft();
+    }
+  }, [isTaskBusy, editingId, clearDraft]);
 
   const onSaveEdit = useCallback(() => {
     const { id, text, translation, startTime, endTime } = draftRef.current;
     if (id === null || !fileId) return;
+    if (isTaskBusy) {
+      clearDraft();
+      return;
+    }
 
+    // 编辑以正式 entries 为准，避免流式 overlay 污染落盘
     const original = fileEntries.find((e) => e.id === id);
     if (!original) {
       clearDraft();
@@ -486,14 +571,16 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     }
 
     try {
-      updateEntry(fileId, id, text, translation, undefined, nextStart, nextEnd);
+      // 与 filesStore 计数语义对齐：有译文 → completed，清空 → pending
+      const nextStatus = translation.trim() ? 'completed' : 'pending';
+      updateEntry(fileId, id, text, translation, nextStatus, nextStart, nextEnd);
       clearDraft();
     } catch (error) {
       handleError(error, {
         context: { operation: '保存字幕编辑' }
       });
     }
-  }, [fileId, fileEntries, updateEntry, handleError, clearDraft]);
+  }, [fileId, fileEntries, updateEntry, handleError, clearDraft, isTaskBusy]);
 
   const onCancelEdit = useCallback(() => {
     clearDraft();
@@ -506,16 +593,26 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     }
   }, [filteredEntries, editingId, onSaveEdit]);
 
+  // 进度跟流式可见译文同步：已完成 + overlay 里已出字的行
+  const streamingLineCount = useMemo(
+    () => countStreamingLines(streamingOverlay),
+    [streamingOverlay]
+  );
   const translationStats = useMemo(() => {
     const total = file?.entryCount ?? 0;
-    const translated = file?.translatedCount ?? 0;
+    const hard = file?.translatedCount ?? 0;
+    const { translated, percentage } = calcDisplayTranslationProgress(
+      hard,
+      total,
+      streamingLineCount
+    );
     return {
       total,
       translated,
-      untranslated: total - translated,
-      percentage: total > 0 ? Math.round((translated / total) * 100) : 0,
+      untranslated: Math.max(0, total - translated),
+      percentage,
     };
-  }, [file?.entryCount, file?.translatedCount]);
+  }, [file?.entryCount, file?.translatedCount, streamingLineCount]);
 
   const langStrip = useMemo(() => {
     const src = langLabel(config.sourceLanguage);
@@ -622,7 +719,8 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
             >
               {virtualizer.getVirtualItems().map((vItem) => {
                 const entry = filteredEntries[vItem.index];
-                if (editingId === entry.id) {
+                // 处理中不允许进入/停留编辑态
+                if (!isTaskBusy && editingId === entry.id) {
                   return (
                     <SubtitleEditingRow
                       key={entry.id}
@@ -650,6 +748,8 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                     index={vItem.index}
                     start={vItem.start}
                     onStartEdit={onStartEdit}
+                    showStreamCaret={entry.id === streamCaretEntryId}
+                    readOnly={isTaskBusy}
                   />
                 );
               })}

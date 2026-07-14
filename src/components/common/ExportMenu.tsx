@@ -67,15 +67,28 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
 }) => {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
-  // 计算并更新菜单位置（基于触发按钮的视口位置）
+  // 计算并更新菜单位置（基于触发按钮的视口位置，并钳制在视口内）
   const updatePos = useCallback(() => {
     const el = triggerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    setPos({
-      top: rect.bottom + 8,
-      left: rect.right - MENU_WIDTH,
-    });
+    const pad = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // 默认右对齐触发按钮；若左侧溢出则改为左对齐按钮；最后钳制进视口
+    let left = rect.right - MENU_WIDTH;
+    if (left < pad) left = rect.left;
+    left = Math.max(pad, Math.min(left, vw - MENU_WIDTH - pad));
+
+    // 默认向下展开；下方不够则翻到按钮上方
+    const menuApproxH = 220;
+    let top = rect.bottom + 6;
+    if (top + menuApproxH > vh - pad && rect.top > menuApproxH + pad) {
+      top = Math.max(pad, rect.top - menuApproxH - 6);
+    }
+
+    setPos({ top, left });
   }, [triggerRef]);
 
   // 菜单打开时计算位置，并监听 scroll/resize 重新定位

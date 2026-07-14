@@ -1,5 +1,5 @@
-// 翻译状态类型
-export type TranslationStatus = 'pending' | 'completed';
+// 翻译状态类型（streaming = 当前批次流式输出中）
+export type TranslationStatus = 'pending' | 'streaming' | 'completed';
 
 // 文件类型（从 transcription.ts 导入并导出）
 import type { FileType } from './transcription';

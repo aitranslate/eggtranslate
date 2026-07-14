@@ -22,6 +22,8 @@ interface ExportButtonProps {
   hasTranslation?: boolean;
   /** 选择格式后回调（触发导出） */
   onSelect: (format: ExportFormat) => void;
+  /** 图标按钮 hover 提示（默认「导出」） */
+  title?: string;
 }
 
 const DEFAULT_FORMAT: ExportFormat = 'trans';
@@ -31,6 +33,7 @@ export const ExportButton: React.FC<ExportButtonProps> = ({
   disabled = false,
   hasTranslation = true,
   onSelect,
+  title = '导出',
 }) => {
   const [open, setOpen] = useState(false);
   const [currentFormat, setCurrentFormat] = useState<ExportFormat>(DEFAULT_FORMAT);
@@ -56,7 +59,7 @@ export const ExportButton: React.FC<ExportButtonProps> = ({
     setOpen((prev) => !prev);
   };
 
-  // 图标变体：单文件导出按钮
+  // 图标变体：导出按钮（侧栏工具条 / 任务行）
   if (variant === 'icon') {
     return (
       <div className="relative inline-flex" onClick={(e) => e.stopPropagation()}>
@@ -64,11 +67,11 @@ export const ExportButton: React.FC<ExportButtonProps> = ({
           ref={buttonRef}
           onClick={toggleMenu}
           disabled={disabled}
-          className="flex items-center justify-center w-8 h-8 rounded-md transition-all duration-200 hover:bg-gray-100 text-gray-500 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed"
-          title="导出"
-          aria-label="导出"
+          className="wb-tasks-export-btn"
+          title={title}
+          aria-label={title}
         >
-          <Download className="w-4 h-4" />
+          <Download className="w-3.5 h-3.5" />
         </button>
         <ExportMenu
           isOpen={open}

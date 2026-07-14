@@ -434,6 +434,77 @@ describe('processBatch batch apply', () => {
     expect(updated.translatedCount).toBe(3);
     expect(progressCb).toHaveBeenCalledWith(3, 9);
   });
+
+  it('streams partials via overlay callbacks then finalizes completed once', async () => {
+    const entries = [makeEntry(1), makeEntry(2)];
+    const batchUpdateEntries = vi.fn();
+    const applyStreamingPartials = vi.fn();
+    const clearStreamingIds = vi.fn();
+
+    const callbacks: TranslationCallbacks = {
+      translateBatch: vi.fn(
+        async (
+          _texts,
+          _signal?,
+          _before?,
+          _after?,
+          _terms?,
+          onPartial?
+        ) => {
+          onPartial?.({ '1': { direct: '你' } });
+          onPartial?.({ '1': { direct: '你好' }, '2': { direct: '世' } });
+          return {
+            translations: {
+              '1': { direct: '你好' },
+              '2': { direct: '世界' },
+            },
+            tokensUsed: 4,
+          };
+        }
+      ),
+      batchUpdateEntries,
+      applyStreamingPartials,
+      clearStreamingIds,
+      updateProgress: vi.fn().mockResolvedValue(undefined),
+      getRelevantTerms: vi.fn(() => [] as Term[]),
+      formatTermsForPrompt: vi.fn(() => ''),
+    };
+
+    const batch: BatchInfo = {
+      batchIndex: 0,
+      untranslatedEntries: entries,
+      textsToTranslate: entries.map((e) => e.text),
+      contextBeforeTexts: '',
+      contextAfterTexts: '',
+      relevantTerms: [],
+    };
+
+    const progressCb = vi.fn().mockResolvedValue(undefined);
+    await processBatch(
+      batch,
+      new AbortController(),
+      callbacks,
+      callbacks.formatTermsForPrompt,
+      progressCb
+    );
+
+    // partial 只走 overlay，不写 filesStore
+    expect(applyStreamingPartials).toHaveBeenCalledTimes(2);
+    expect(applyStreamingPartials.mock.calls[0][0]).toEqual([{ id: 1, text: '你' }]);
+    expect(applyStreamingPartials.mock.calls[1][0]).toEqual([
+      { id: 1, text: '你好' },
+      { id: 2, text: '世' },
+    ]);
+
+    // 定稿：清 overlay + 一次 batch 落库
+    expect(clearStreamingIds).toHaveBeenCalledWith([1, 2]);
+    expect(batchUpdateEntries).toHaveBeenCalledTimes(1);
+    expect(batchUpdateEntries.mock.calls[0][0]).toEqual([
+      { id: 1, text: 'text-1', translatedText: '你好', status: 'completed' },
+      { id: 2, text: 'text-2', translatedText: '世界', status: 'completed' },
+    ]);
+    expect(progressCb).toHaveBeenCalledWith(2, 4);
+  });
 });
 
 

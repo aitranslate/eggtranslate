@@ -76,8 +76,55 @@ describe('filesStore batchUpdateEntries', () => {
     expect(updated.subtitle_entries[1].translationStatus).toBe('completed');
     expect(updated.subtitle_entries[2].translatedText).toBe('');
     expect(updated.subtitle_entries[2].translationStatus).toBe('completed');
-    // only entries with non-empty translatedText count as translated
-    expect(updated.translatedCount).toBe(2);
+    // completed 计入已译（含合并策略空译文）；streaming 不计入
+    expect(updated.translatedCount).toBe(3);
+  });
+
+  it('streaming partial text does not inflate translatedCount', () => {
+    const task = makeTask();
+    useFilesStore.setState({ tasks: [task] });
+    const fileId = generateStableFileId('t1');
+
+    useFilesStore.getState().batchUpdateEntries(fileId, [
+      { id: 1, text: 'text-1', translatedText: '部', status: 'streaming' },
+      { id: 2, text: 'text-2', translatedText: '分', status: 'streaming' },
+    ]);
+
+    expect(useFilesStore.getState().tasks[0].translatedCount).toBe(0);
+    expect(useFilesStore.getState().tasks[0].subtitle_entries[0].translatedText).toBe('部');
+
+    useFilesStore.getState().batchUpdateEntries(fileId, [
+      { id: 1, text: 'text-1', translatedText: '完整1', status: 'completed' },
+      { id: 2, text: 'text-2', translatedText: '完整2', status: 'completed' },
+    ]);
+    expect(useFilesStore.getState().tasks[0].translatedCount).toBe(2);
+  });
+
+  it('manual edit: non-empty translation + completed bumps count; clear resets', () => {
+    const fileId = generateStableFileId('t1');
+    useFilesStore.setState({
+      tasks: [
+        makeTask({
+          subtitle_entries: [makeEntry(1)],
+          entryCount: 1,
+          translatedCount: 0,
+        }),
+      ],
+    });
+
+    // 模拟编辑器保存：有译文 → completed
+    useFilesStore.getState().updateEntry(fileId, 1, 'text-1', '手动译文', 'completed');
+    expect(useFilesStore.getState().tasks[0].translatedCount).toBe(1);
+    expect(useFilesStore.getState().tasks[0].subtitle_entries[0].translationStatus).toBe(
+      'completed'
+    );
+
+    // 清空译文 → pending，计数回落
+    useFilesStore.getState().updateEntry(fileId, 1, 'text-1', '', 'pending');
+    expect(useFilesStore.getState().tasks[0].translatedCount).toBe(0);
+    expect(useFilesStore.getState().tasks[0].subtitle_entries[0].translationStatus).toBe(
+      'pending'
+    );
   });
 
   it('matches single updateEntry semantics for one line (status + count)', () => {

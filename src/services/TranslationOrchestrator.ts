@@ -32,7 +32,9 @@ export interface TranslationCallbacks {
     signal?: AbortSignal,
     contextBefore?: string,
     contextAfter?: string,
-    terms?: string
+    terms?: string,
+    /** 流式 partial：key 为 "1"|"2"|...，与 texts 下标对应 */
+    onPartial?: (translations: Record<string, { direct: string }>) => void
   ) => Promise<{ translations: Record<string, { direct: string }>; tokensUsed: number }>;
   /**
    * Apply an entire batch of entry patches in one store mutation.
@@ -46,6 +48,13 @@ export interface TranslationCallbacks {
       status?: TranslationStatus;
     }>
   ) => void | Promise<void>;
+  /**
+   * 流式 UI 层：只更新内存 overlay，不写 filesStore / 不触发 persist。
+   * 缺省时降级忽略 partial（仅最终 batch 落库）。
+   */
+  applyStreamingPartials?: (updates: Array<{ id: number; text: string }>) => void;
+  /** 批次定稿或失败后清掉对应条目的流式 overlay */
+  clearStreamingIds?: (ids: number[]) => void;
   updateProgress: (
     current: number,
     total: number,
@@ -147,16 +156,36 @@ export async function processBatch(
   updateProgressCallback: (completed: number, tokensUsed?: number) => Promise<void>
 ): Promise<{ batchIndex: number; success: boolean }> {
   logger.info(`开始处理批次 ${batch.batchIndex + 1}，包含 ${batch.untranslatedEntries.length} 个未翻译条目`);
+  const batchEntryIds = batch.untranslatedEntries.map((e) => e.id);
+
   try {
     // 使用 formatTermsForPrompt 格式化术语
     const termsText = formatTermsForPrompt(batch.relevantTerms);
+
+    // 流式 partial → 内存 overlay（不写 filesStore，避免卡顿）
+    const onPartial = (partial: Record<string, { direct: string }>) => {
+      if (!callbacks.applyStreamingPartials) return;
+      const streamingUpdates: Array<{ id: number; text: string }> = [];
+
+      for (const [key, value] of Object.entries(partial)) {
+        const resultIndex = parseInt(key, 10) - 1;
+        const entry = batch.untranslatedEntries[resultIndex];
+        if (!entry || typeof value !== 'object' || !value.direct) continue;
+        streamingUpdates.push({ id: entry.id, text: value.direct });
+      }
+
+      if (streamingUpdates.length > 0) {
+        callbacks.applyStreamingPartials(streamingUpdates);
+      }
+    };
 
     const translationResult = await callbacks.translateBatch(
       batch.textsToTranslate,
       controller.signal,
       batch.contextBeforeTexts,
       batch.contextAfterTexts,
-      termsText  // 使用格式化后的术语
+      termsText,  // 使用格式化后的术语
+      onPartial
     );
 
     const batchUpdates: { id: number; text: string; translatedText: string; status: TranslationStatus }[] = [];
@@ -191,6 +220,9 @@ export async function processBatch(
       }
     }
 
+    // 先清 overlay 再落正式数据，避免一帧内 overlay 盖住 completed
+    callbacks.clearStreamingIds?.(batchEntryIds);
+
     if (batchUpdates.length > 0) {
       // One store mutation for the whole batch (not one per line)
       await callbacks.batchUpdateEntries(batchUpdates);
@@ -203,6 +235,7 @@ export async function processBatch(
 
     return { batchIndex: batch.batchIndex, success: true };
   } catch (error) {
+    callbacks.clearStreamingIds?.(batchEntryIds);
     if (error instanceof Error && error.name !== 'AbortError') {
       const appError = toAppError(error);
       logger.error(`批次 ${batch.batchIndex + 1} 翻译失败:`, appError.message);

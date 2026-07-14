@@ -8,9 +8,10 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { TranslationConfig, TranslationProgress, LlmProfile } from '@/types';
 import type { LlmModelInfo } from '@/utils/listLlmModels';
-import { callLLM } from '@/utils/llmApi';
+import { callLLM, callLLMStream } from '@/utils/llmApi';
 import { jsonrepair } from 'jsonrepair';
 import { generateSharedPrompt, generateDirectPrompt } from '@/utils/translationPrompts';
+import { extractStreamingDirects } from '@/utils/streamingJson';
 import toast from 'react-hot-toast';
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
@@ -45,7 +46,9 @@ interface TranslationConfigStore {
     signal?: AbortSignal,
     contextBefore?: string,
     contextAfter?: string,
-    terms?: string
+    terms?: string,
+    /** 流式过程中：已解析出的 partial direct，按 "1"|"2"|... 索引 */
+    onPartial?: (translations: Record<string, { direct: string }>) => void
   ) => Promise<{ translations: Record<string, { direct: string }>; tokensUsed: number }>;
   updateProgress: (
     current: number,
@@ -171,7 +174,8 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
         signal,
         contextBefore = '',
         contextAfter = '',
-        terms = ''
+        terms = '',
+        onPartial
       ) => {
         const config = get().config;
         const llm = getActiveLlmConfig(config);
@@ -196,29 +200,97 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
           '\n\nCRITICAL: You MUST return valid JSON with "direct" field for EVERY single line. Do NOT skip any entries.',
         ];
 
+        const llmConfig = {
+          baseURL: llm.baseURL,
+          apiKey: llm.apiKey,
+          model: llm.model,
+          rpm: config.rpm,
+        };
+
         for (let attempt = 1; attempt <= 3; attempt++) {
           const promptWithEmphasis = directPrompt + formatEmphasis[attempt - 1];
-          const llmResult = await callLLM(
-            {
-              baseURL: llm.baseURL,
-              apiKey: llm.apiKey,
-              model: llm.model,
-              rpm: config.rpm,
-            },
-            [{ role: 'user', content: promptWithEmphasis }],
-            {
-              signal,
-              temperature: retryTemperatures[attempt - 1],
-              maxRetries: 1,
+          let lastPartialSig = '';
+          let latestAccumulated = '';
+          let parseRaf = 0;
+
+          const emitPartialsFromLatest = () => {
+            parseRaf = 0;
+            if (!onPartial || !latestAccumulated) return;
+            const directs = extractStreamingDirects(latestAccumulated);
+            const keys = Object.keys(directs);
+            if (keys.length === 0) return;
+            // 仅长度签名变化时下发，避免同帧重复
+            const sig = keys.map((k) => `${k}:${directs[k].length}`).join('|');
+            if (sig === lastPartialSig) return;
+            lastPartialSig = sig;
+            const partial: Record<string, { direct: string }> = {};
+            for (const k of keys) {
+              partial[k] = { direct: directs[k] };
             }
-          );
+            onPartial(partial);
+          };
+
+          const scheduleEmit = (accumulated: string) => {
+            if (!onPartial) return;
+            latestAccumulated = accumulated;
+            // 每帧最多解析一次 JSON partial（多 token 合并）
+            if (parseRaf !== 0) return;
+            parseRaf =
+              typeof requestAnimationFrame === 'function'
+                ? requestAnimationFrame(emitPartialsFromLatest)
+                : (setTimeout(emitPartialsFromLatest, 16) as unknown as number);
+          };
+
+          const cancelParseRaf = () => {
+            if (parseRaf === 0) return;
+            if (typeof cancelAnimationFrame === 'function') {
+              cancelAnimationFrame(parseRaf);
+            } else {
+              clearTimeout(parseRaf);
+            }
+            parseRaf = 0;
+          };
 
           try {
+            let llmResult: { content: string; tokensUsed: number };
+            try {
+              llmResult = await callLLMStream(
+                llmConfig,
+                [{ role: 'user', content: promptWithEmphasis }],
+                {
+                  signal,
+                  temperature: retryTemperatures[attempt - 1],
+                  maxRetries: 1,
+                  onDelta: (_delta, accumulated) => scheduleEmit(accumulated),
+                }
+              );
+            } catch (streamErr) {
+              // 流式失败：回退非流式（仍保证能译完）
+              if (streamErr instanceof Error && streamErr.name === 'AbortError') {
+                throw streamErr;
+              }
+              logger.error('流式翻译失败，回退非流式:', streamErr);
+              llmResult = await callLLM(
+                llmConfig,
+                [{ role: 'user', content: promptWithEmphasis }],
+                {
+                  signal,
+                  temperature: retryTemperatures[attempt - 1],
+                  maxRetries: 1,
+                }
+              );
+            } finally {
+              cancelParseRaf();
+              // 流结束再刷一次，吃掉最后几个 token
+              if (latestAccumulated) emitPartialsFromLatest();
+            }
+
             const repairedDirectJson = jsonrepair(llmResult.content);
             const directResult: Record<string, { direct: string }> = JSON.parse(repairedDirectJson);
             validateTranslationResult(directResult, texts);
             return { translations: directResult, tokensUsed: llmResult.tokensUsed };
           } catch (error) {
+            cancelParseRaf();
             logger.error(`批次翻译失败（第${attempt}次尝试）:`, error);
             if (attempt === 3) throw error;
           }

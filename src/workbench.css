@@ -1,6 +1,11 @@
 /* ── Workbench shell: desktop-client chrome ── */
 
-.workbench {
+/*
+ * Token 必须挂在 :root / html.dark：
+ * SettingsModal 等 UI 会 createPortal 到 document.body，
+ * 若不在根上定义 --wb-*，body 下 var(--wb-panel) 会失效 → 抽屉变透明。
+ */
+:root {
   --wb-bg: #f0f1f3;
   --wb-panel: #ffffff;
   --wb-panel-2: #f7f7f8;
@@ -15,28 +20,13 @@
   --wb-sidebar-w: 320px;
   --wb-top-h: 54px;
   --wb-status-h: 32px;
-
-  display: grid;
-  grid-template-columns: var(--wb-sidebar-w) 1fr;
-  grid-template-rows: var(--wb-top-h) 1fr var(--wb-status-h);
-  height: 100vh;
-  height: 100dvh;
-  width: 100%;
-  max-width: 100vw;
-  overflow: hidden;
-  background: var(--wb-bg);
-  color: var(--wb-text);
-  font-family: var(--apple-font-stack);
-  -webkit-font-smoothing: antialiased;
-  font-size: 15px;
 }
 
 /*
  * Dark: 三层面 + 更柔的蓝 + 辅文可读
  * 画布最深 → 侧栏/顶栏 → 内容区略亮
  */
-html.dark .workbench,
-.workbench[data-theme='dark'] {
+html.dark {
   --wb-bg: #0b0c0f;
   --wb-panel: #12141a;
   --wb-panel-2: #1a1d26;
@@ -67,6 +57,38 @@ html.dark .workbench,
   --apple-danger-soft: rgba(255, 69, 58, 0.14);
   --apple-warning: #ff9f0a;
   color-scheme: dark;
+}
+
+/* 兼容旧写法：data-theme 挂在 .workbench 上时同样生效 */
+.workbench[data-theme='dark'] {
+  --wb-bg: #0b0c0f;
+  --wb-panel: #12141a;
+  --wb-panel-2: #1a1d26;
+  --wb-border: #2c303c;
+  --wb-border-strong: #3d4354;
+  --wb-text: #eceef2;
+  --wb-text-2: #a8afbb;
+  --wb-text-3: #8b929e;
+  --wb-brand: #0a84ff;
+  --wb-brand-soft: rgba(10, 132, 255, 0.12);
+  --wb-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+.workbench {
+  display: grid;
+  grid-template-columns: var(--wb-sidebar-w) 1fr;
+  grid-template-rows: var(--wb-top-h) 1fr var(--wb-status-h);
+  height: 100vh;
+  height: 100dvh;
+  width: 100%;
+  max-width: 100vw;
+  overflow: hidden;
+  background: var(--wb-bg);
+  color: var(--wb-text);
+  font-family: var(--apple-font-stack);
+  -webkit-font-smoothing: antialiased;
+  font-size: 15px;
 }
 
 /* ── Top bar ── */
@@ -212,12 +234,20 @@ html.dark .wb-nav-btn.active,
   flex-direction: column;
 }
 
+/* 侧栏列表根：撑满高度，头固定、列表滚动 */
+.wb-task-list-root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .wb-tasks-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px 6px;
+  padding: 10px 10px 8px 12px;
   flex-shrink: 0;
 }
 
@@ -225,6 +255,17 @@ html.dark .wb-nav-btn.active,
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+/* 右侧操作组：+ → 全部开始 → 导出 → 清空 */
+.wb-tasks-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
   min-width: 0;
 }
 
@@ -245,29 +286,37 @@ html.dark .wb-nav-btn.active,
   border-radius: 999px;
 }
 
-/* 侧栏常驻导入（有任务选中时仍可用） */
-.wb-tasks-import {
+/* 侧栏导入 / 导出图标：与列表按钮同高 */
+.wb-tasks-import,
+.wb-tasks-export-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
   border: 1px solid var(--wb-border);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--wb-panel-2);
   color: var(--wb-text-2);
   cursor: pointer;
+  padding: 0;
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease,
     color 0.15s ease;
 }
 
-.wb-tasks-import:hover {
+.wb-tasks-import:hover,
+.wb-tasks-export-btn:hover:not(:disabled) {
   background: var(--wb-brand-soft);
   border-color: var(--wb-brand);
   color: var(--wb-brand);
+}
+
+.wb-tasks-export-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .wb-task-list {
@@ -279,14 +328,9 @@ html.dark .wb-nav-btn.active,
 }
 
 /* 列表区域撑满，便于点下方空白取消选中 */
-.wb-task-list > * {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
 .wb-task-list .wb-proj-list {
   flex: 1;
+  min-height: 100%;
 }
 
 .wb-task-list-empty {
@@ -312,14 +356,6 @@ html.dark .wb-nav-btn.active,
   flex-direction: column;
   gap: 1px;
   padding: 0 4px 8px;
-}
-
-.wb-proj-list-tools {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 8px 8px;
-  flex-wrap: wrap;
 }
 
 .wb-proj-list-btn {
@@ -504,6 +540,21 @@ html.dark .wb-proj-tool.primary:disabled,
   background: var(--wb-text-3);
 }
 
+.wb-proj-dot.tone-done {
+  background: var(--apple-success, #34c759);
+}
+.wb-proj-dot.tone-run {
+  background: var(--wb-brand);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--wb-brand) 25%, transparent);
+  animation: wb-proj-pulse 1.4s ease-in-out infinite;
+}
+.wb-proj-dot.tone-fail {
+  background: var(--apple-danger, #ff3b30);
+}
+.wb-proj-dot.tone-wait {
+  background: var(--apple-warning, #ff9500);
+}
+
 @keyframes wb-proj-pulse {
   0%,
   100% {
@@ -518,6 +569,19 @@ html.dark .wb-proj-tool.primary:disabled,
   font-weight: 500;
   flex-shrink: 0;
   color: var(--wb-text-3);
+}
+
+.wb-proj-state.tone-done {
+  color: color-mix(in srgb, var(--apple-success) 85%, var(--wb-text));
+}
+.wb-proj-state.tone-run {
+  color: var(--wb-brand);
+}
+.wb-proj-state.tone-fail {
+  color: var(--apple-danger);
+}
+.wb-proj-state.tone-wait {
+  color: var(--apple-warning);
 }
 
 .wb-proj-meta {
@@ -660,6 +724,30 @@ html.dark .wb-proj-tool.primary:disabled,
   background: var(--wb-panel-2);
   border: 1px solid transparent;
   font-variant-numeric: tabular-nums;
+}
+
+.wb-proj-phase.st-completed {
+  color: color-mix(in srgb, var(--apple-success) 80%, var(--wb-text));
+  background: var(--apple-success-soft, #ecfdf5);
+}
+
+.wb-proj-phase.st-active {
+  color: var(--wb-brand);
+  background: var(--wb-brand-soft);
+  border-color: color-mix(in srgb, var(--wb-brand) 18%, transparent);
+}
+
+.wb-proj-phase.st-failed {
+  color: var(--apple-danger);
+  background: var(--apple-danger-soft, #fff5f5);
+}
+
+.wb-proj-phase-spin {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  color: currentColor;
+  animation: wb-spin 0.85s linear infinite;
 }
 
 .wb-proj-toolbar {
@@ -946,6 +1034,25 @@ html.dark .se-list::-webkit-scrollbar-thumb:hover {
   background: var(--wb-panel-2);
 }
 
+.se-row.is-readonly {
+  cursor: default;
+}
+
+.se-row.is-readonly:hover {
+  background: transparent;
+}
+
+.se-row.is-readonly .se-row-src,
+.se-row.is-readonly .se-row-dst,
+.se-row.is-readonly button.se-row-time {
+  cursor: default;
+}
+
+.se-row.is-readonly button.se-row-time:disabled {
+  opacity: 1;
+  color: inherit;
+}
+
 .se-row-editing {
   background: var(--apple-blue-soft);
   box-shadow: inset 3px 0 0 var(--wb-brand);
@@ -1054,6 +1161,46 @@ html.dark .se-time-input,
   font-weight: 400;
   font-style: italic;
   opacity: 0.9;
+}
+
+/* 流式翻译：译文逐字出现 + 行尾光标 */
+.se-row-dst.is-streaming {
+  color: var(--wb-brand);
+  font-weight: 500;
+  font-style: normal;
+  opacity: 1;
+}
+
+.se-stream-text {
+  white-space: pre-wrap;
+}
+
+.se-stream-caret {
+  display: inline-block;
+  width: 2px;
+  height: 0.95em;
+  margin-left: 1px;
+  vertical-align: -0.12em;
+  background: currentColor;
+  border-radius: 1px;
+  animation: se-caret-blink 0.95s step-end infinite;
+}
+
+@keyframes se-caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .se-stream-caret {
+    animation: none;
+    opacity: 0.85;
+  }
 }
 
 /* 多行字幕：每行一块，可再自然折行，不用 nowrap */
@@ -1716,10 +1863,11 @@ html.dark .se-toolbar,
   max-width: 100vw;
   display: flex;
   flex-direction: column;
-  background: var(--wb-panel);
-  border-left: 1px solid var(--wb-border);
+  /* 硬兜底：portal 到 body 时也绝不能透明 */
+  background: var(--wb-panel, #ffffff);
+  border-left: 1px solid var(--wb-border, #e5e5ea);
   box-shadow: -8px 0 32px rgba(0, 0, 0, 0.12);
-  color: var(--wb-text);
+  color: var(--wb-text, #1d1d1f);
   color-scheme: inherit;
 }
 

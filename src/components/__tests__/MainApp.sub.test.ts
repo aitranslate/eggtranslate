@@ -31,7 +31,9 @@ describe('MainApp workbench shell', () => {
     expect(src).toContain('openEditor');
     expect(src).not.toMatch(/if\s*\(\s*!isConfigured\s*\)\s*\{\s*openSettings/);
     expect(src).toContain('useFileImport');
-    expect(src).toContain('wb-tasks-import');
+    // 侧栏导入按钮在 SubtitleFileList 头栏，MainApp 只传 onImport
+    expect(src).toContain('onImport={openFilePicker}');
+    expect(src).toContain('importShortcut={importShortcut}');
   });
 
   it('branches to MobileShell on mobile breakpoint', () => {

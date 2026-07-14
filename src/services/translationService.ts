@@ -13,6 +13,7 @@
 import { useFilesStore, flushFilesStorePersist } from '@/stores/filesStore';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { useTermsStore } from '@/stores/termsStore';
+import { useStreamingOverlayStore } from '@/stores/streamingOverlayStore';
 import { executeTranslation } from './TranslationOrchestrator';
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
@@ -77,16 +78,26 @@ export async function startTranslation(
         batchUpdateEntries: (updates) => {
           useFilesStore.getState().batchUpdateEntries(fileId, updates);
         },
+        // 流式只打内存 overlay，不碰 filesStore / persist
+        applyStreamingPartials: (updates) => {
+          useStreamingOverlayStore.getState().applyPartials(fileId, updates);
+        },
+        clearStreamingIds: (ids) => {
+          useStreamingOverlayStore.getState().clearIds(fileId, ids);
+        },
         updateProgress: async (current: number, total: number, phase: 'direct' | 'completed', status: string, taskId: string, newTokens?: number) => {
           await translationConfigStore.updateProgress(current, total, phase, status, taskId);
 
+          // 进度与 token 解耦：即使流式未返回 usage，phase 进度也要推进
+          const progress = total > 0 ? Math.round((current / total) * 100) : 0;
           if (newTokens !== undefined && newTokens > 0) {
             const prevTokens = useFilesStore.getState().getFile(fileId)?.tokensUsed || 0;
-            const currentTokens = prevTokens + newTokens;
             useFilesStore.getState().updatePhase(fileId, 'translating', {
-              progress: total > 0 ? Math.round((current / total) * 100) : 0,
-              tokens: currentTokens
+              progress,
+              tokens: prevTokens + newTokens,
             });
+          } else {
+            useFilesStore.getState().updatePhase(fileId, 'translating', { progress });
           }
         },
         getRelevantTerms: (batchText: string, before: string, after: string): Term[] => {
@@ -99,10 +110,12 @@ export async function startTranslation(
 
     if (controller.signal.aborted) {
       logger.info('翻译已中止（文件已删除）');
+      useStreamingOverlayStore.getState().clearFile(fileId);
       return null;
     }
 
     // 完成翻译 — 更新 tasks（内存操作）；updatePhase(completed) 会 flush persist
+    useStreamingOverlayStore.getState().clearFile(fileId);
     const finalTokens = useFilesStore.getState().getFile(fileId)?.tokensUsed || 0;
     useFilesStore.getState().updatePhase(fileId, 'translating', { status: 'completed', progress: 100, tokens: finalTokens });
     await flushFilesStorePersist();
@@ -114,6 +127,7 @@ export async function startTranslation(
     logger.info(`任务完成，总消耗 ${finalTokens} tokens`);
     return { tokens: finalTokens, entries: lastEntries, phases: finalPhases! };
   } catch (error) {
+    useStreamingOverlayStore.getState().clearFile(fileId);
     const appError = toAppError(error, '翻译失败');
     logger.error(appError.message, appError);
     toast.error(`翻译失败: ${appError.message}`);

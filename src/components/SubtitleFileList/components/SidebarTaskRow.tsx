@@ -19,6 +19,12 @@ import { ALL_PHASES } from '@/types';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useFilesStore } from '@/stores/filesStore';
 import { getCardBadge } from '@/utils/badgeHelper';
+import {
+  calcDisplayTranslationProgress,
+  countStreamingLines,
+  EMPTY_STREAMING_OVERLAY,
+  useStreamingOverlayStore,
+} from '@/stores/streamingOverlayStore';
 import { canRetranscribe } from '@/utils/fileUtils';
 import type { ExportFormat } from '@/utils/fileExport';
 import { ExportButton } from '@/components/common/ExportButton';
@@ -74,10 +80,18 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
   );
 
   const badge = getCardBadge(file.phases, displayPhases, isQueued, queuePosition);
-  const pct =
-    (file.entryCount ?? 0) > 0
-      ? Math.round(((file.translatedCount ?? 0) / (file.entryCount ?? 1)) * 100)
-      : 0;
+  // 侧栏进度轨与流式可见行同步（不写 filesStore）
+  const streamOverlay = useStreamingOverlayStore(
+    (s) => s.overlays[file.id] ?? EMPTY_STREAMING_OVERLAY
+  );
+  const pct = useMemo(() => {
+    const { percentage } = calcDisplayTranslationProgress(
+      file.translatedCount ?? 0,
+      file.entryCount ?? 0,
+      countStreamingLines(streamOverlay)
+    );
+    return percentage;
+  }, [file.translatedCount, file.entryCount, streamOverlay]);
 
   const isFailed = badge.color === 'red';
   const isDone = badge.color === 'green';
@@ -196,9 +210,7 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
         </div>
 
         <div className="wb-proj-trail" onClick={(e) => e.stopPropagation()}>
-          {isRunning && (
-            <Loader2 className="wb-proj-spin" aria-hidden />
-          )}
+          {/* 进行中指示只放在阶段 chip / 进度条，避免与下方重复转圈 */}
           <div className="wb-proj-hover-acts">
             <ExportButton
               variant="icon"
@@ -239,9 +251,25 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
                 <span
                   key={phase}
                   className={`wb-proj-phase st-${st || 'upcoming'}`}
-                  title={label}
+                  title={
+                    st === 'active'
+                      ? `${label}中`
+                      : st === 'completed'
+                        ? `${label}完成`
+                        : st === 'failed'
+                          ? `${label}失败`
+                          : label
+                  }
                 >
-                  {st === 'completed' ? '✓' : st === 'failed' ? '!' : st === 'active' ? '…' : '·'}
+                  {st === 'completed' ? (
+                    '✓'
+                  ) : st === 'failed' ? (
+                    '!'
+                  ) : st === 'active' ? (
+                    <Loader2 className="wb-proj-phase-spin" aria-hidden />
+                  ) : (
+                    '·'
+                  )}
                   <span>{label}</span>
                 </span>
               );
@@ -291,9 +319,8 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
               title={primaryLabel}
               onClick={handlePrimary}
             >
-              {isBusy && !isQueued ? (
-                <Loader2 className="w-3.5 h-3.5 wb-proj-spin" />
-              ) : isQueued ? (
+              {/* 忙时不再转圈：阶段 chip 上已有唯一 spinner */}
+              {isBusy && !isQueued ? null : isQueued ? (
                 <Square className="w-3 h-3" />
               ) : (
                 <Play className="w-3.5 h-3.5" />

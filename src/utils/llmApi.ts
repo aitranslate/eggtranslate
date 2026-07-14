@@ -16,6 +16,11 @@ interface CallLLMOptions {
   signal?: AbortSignal;
 }
 
+interface CallLLMStreamOptions extends CallLLMOptions {
+  /** 每个 content delta 回调；accumulated 为截至目前的完整文本 */
+  onDelta?: (delta: string, accumulated: string) => void;
+}
+
 interface CallLLMResult {
   content: string;
   tokensUsed: number;
@@ -39,19 +44,38 @@ function getNextApiKey(apiKeyStr: string): string {
   return apiKeys[currentIndex];
 }
 
+function buildHeaders(apiKey: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
+  return headers;
+}
+
+function emptyContentError(finishReason: string): Error {
+  if (finishReason === 'length') {
+    return new Error(
+      '模型输出被 max_tokens 截断，未生成最终内容。' +
+        '推理类模型(如 step-3.7-flash / DeepSeek-R1)的思考过程会消耗大量 token，' +
+        '请在配置中减小批次大小(batchSize)。'
+    );
+  }
+  return new Error(
+    '模型返回内容为空(content 为空)。该模型可能不兼容 OpenAI 格式，' +
+      '或为推理模型将答案放在 reasoning_content 字段中。'
+  );
+}
+
 /**
- * 统一的 LLM API 调用函数
+ * 统一的 LLM API 调用函数（非流式）
  *
  * 自动具备以下能力：
  * 1. 失败重试（最多 MAX_RETRIES 次，指数退避）
  * 2. 多 API Key 轮询（支持用 | 分隔多个 key）
  * 3. 频率限制（通过 RPM 配置）
  * 4. Token 统计（自动返回消耗的 tokens）
- *
- * @param config LLM 配置
- * @param messages 消息数组
- * @param options 选项
- * @returns LLM 响应内容和 Token 消耗
  */
 export async function callLLM(
   config: LLMConfig,
@@ -62,7 +86,6 @@ export async function callLLM(
           temperature = API_CONSTANTS.DEFAULT_TEMPERATURE,
           signal } = options;
 
-  // 设置频率限制
   if (config.rpm !== undefined) {
     rateLimiter.setRPM(config.rpm);
   }
@@ -75,26 +98,17 @@ export async function callLLM(
     }
 
     try {
-      // 频率限制：等待可用
       await rateLimiter.waitForAvailability();
 
       if (signal?.aborted) {
         throw new DOMException('请求被取消', 'AbortError');
       }
 
-      // 多 key 轮询：获取下一个可用的 API key（免 Key 服务商允许空字符串）
       const apiKey = config.apiKey?.trim() ? getNextApiKey(config.apiKey) : '';
-
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (apiKey) {
-        headers.Authorization = `Bearer ${apiKey}`;
-      }
 
       const response = await fetch(`${config.baseURL}/chat/completions`, {
         method: 'POST',
-        headers,
+        headers: buildHeaders(apiKey),
         body: JSON.stringify({
           model: config.model,
           messages: messages,
@@ -112,44 +126,254 @@ export async function callLLM(
       const choice = data.choices?.[0];
       const content: string = choice?.message?.content ?? '';
       const finishReason: string = choice?.finish_reason ?? '';
-
-      // 计算 token 消耗（粗略估计，实际应该使用 usage.total_tokens）
       const tokensUsed = data.usage?.total_tokens || 0;
 
-      // 友好错误：content 为空（常见于推理模型 token 被推理吃光、或模型返回 null）
       if (!content) {
-        if (finishReason === 'length') {
-          throw new Error(
-            '模型输出被 max_tokens 截断，未生成最终内容。' +
-            '推理类模型(如 step-3.7-flash / DeepSeek-R1)的思考过程会消耗大量 token，' +
-            '请在配置中减小批次大小(batchSize)。'
-          );
-        }
-        throw new Error(
-          '模型返回内容为空(content 为空)。该模型可能不兼容 OpenAI 格式，' +
-          '或为推理模型将答案放在 reasoning_content 字段中。'
-        );
+        throw emptyContentError(finishReason);
       }
 
       return { content, tokensUsed };
     } catch (error) {
       lastError = error;
 
-      // 如果是取消错误，直接抛出
       if (error instanceof Error && error.name === 'AbortError') {
         throw error;
       }
 
-      // 最后一次尝试失败，抛出错误
       if (attempt === maxRetries) {
         throw error;
       }
 
-      // 指数退避
       const delay = 1000 * Math.pow(2, attempt - 1);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
 
   throw lastError;
+}
+
+/**
+ * 流式 LLM 调用（OpenAI-compatible SSE）。
+ * onDelta 在每个 content 增量时触发；最终返回完整 content + tokens。
+ * 若服务端未返回 body 流，自动回退为非流式 callLLM（仍会触发一次 onDelta）。
+ */
+export async function callLLMStream(
+  config: LLMConfig,
+  messages: LLMMessage[],
+  options: CallLLMStreamOptions = {}
+): Promise<CallLLMResult> {
+  const {
+    maxRetries = API_CONSTANTS.MAX_RETRIES,
+    temperature = API_CONSTANTS.DEFAULT_TEMPERATURE,
+    signal,
+    onDelta,
+  } = options;
+
+  if (config.rpm !== undefined) {
+    rateLimiter.setRPM(config.rpm);
+  }
+
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    if (signal?.aborted) {
+      throw new DOMException('请求被取消', 'AbortError');
+    }
+
+    try {
+      await rateLimiter.waitForAvailability();
+
+      if (signal?.aborted) {
+        throw new DOMException('请求被取消', 'AbortError');
+      }
+
+      const apiKey = config.apiKey?.trim() ? getNextApiKey(config.apiKey) : '';
+
+      const response = await fetch(`${config.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: buildHeaders(apiKey),
+        body: JSON.stringify({
+          model: config.model,
+          messages,
+          temperature,
+          stream: true,
+          // OpenAI 兼容：末帧附带 usage，避免流式 token 统计恒为 0
+          stream_options: { include_usage: true },
+        }),
+        signal,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }));
+        throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+      }
+
+      // 无流式 body：回退非流式
+      if (!response.body) {
+        const fallback = await callLLM(config, messages, {
+          maxRetries: 1,
+          temperature,
+          signal,
+        });
+        onDelta?.(fallback.content, fallback.content);
+        return fallback;
+      }
+
+      const result = await consumeChatCompletionStream(response.body, onDelta, signal);
+
+      if (!result.content) {
+        throw emptyContentError(result.finishReason);
+      }
+
+      return { content: result.content, tokensUsed: result.tokensUsed };
+    } catch (error) {
+      lastError = error;
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+
+      if (attempt === maxRetries) {
+        throw error;
+      }
+
+      const delay = 1000 * Math.pow(2, attempt - 1);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError;
+}
+
+interface StreamConsumeResult {
+  content: string;
+  tokensUsed: number;
+  finishReason: string;
+}
+
+/**
+ * 解析 OpenAI chat.completions SSE 流。
+ * 同时兼容少数网关把完整 JSON 当 body 一次返回的情况。
+ */
+async function consumeChatCompletionStream(
+  body: ReadableStream<Uint8Array>,
+  onDelta: ((delta: string, accumulated: string) => void) | undefined,
+  signal?: AbortSignal
+): Promise<StreamConsumeResult> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+  let tokensUsed = 0;
+  let finishReason = '';
+
+  try {
+    while (true) {
+      if (signal?.aborted) {
+        throw new DOMException('请求被取消', 'AbortError');
+      }
+
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE 按行解析；也容忍 \r\n
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() ?? '';
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith(':')) continue;
+
+        // 非 SSE：整段 JSON 一次性响应
+        if (line.startsWith('{') && !line.startsWith('data:')) {
+          try {
+            const data = JSON.parse(line);
+            const full: string = data.choices?.[0]?.message?.content ?? '';
+            if (full) {
+              const delta = full.slice(content.length);
+              content = full;
+              if (delta) onDelta?.(delta, content);
+            }
+            tokensUsed = data.usage?.total_tokens || tokensUsed;
+            finishReason = data.choices?.[0]?.finish_reason ?? finishReason;
+          } catch {
+            // 可能是不完整 JSON，拼回 buffer 等待后续
+            buffer = line + '\n' + buffer;
+          }
+          continue;
+        }
+
+        if (!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+
+        try {
+          const data = JSON.parse(payload);
+          const delta: string =
+            data.choices?.[0]?.delta?.content ??
+            data.choices?.[0]?.message?.content ??
+            '';
+          if (delta) {
+            content += delta;
+            onDelta?.(delta, content);
+          }
+          if (data.choices?.[0]?.finish_reason) {
+            finishReason = data.choices[0].finish_reason;
+          }
+          // 末帧 usage 可能 total_tokens=0 以外的合法值；用 nullish 判断
+          if (data.usage?.total_tokens != null) {
+            tokensUsed = data.usage.total_tokens;
+          }
+        } catch {
+          // 忽略单行解析失败（残缺 chunk）
+        }
+      }
+    }
+
+    // 处理尾巴
+    const tail = buffer.trim();
+    if (tail.startsWith('data:')) {
+      const payload = tail.slice(5).trim();
+      if (payload && payload !== '[DONE]') {
+        try {
+          const data = JSON.parse(payload);
+          const delta: string = data.choices?.[0]?.delta?.content ?? '';
+          if (delta) {
+            content += delta;
+            onDelta?.(delta, content);
+          }
+          if (data.usage?.total_tokens != null) {
+            tokensUsed = data.usage.total_tokens;
+          }
+          if (data.choices?.[0]?.finish_reason) {
+            finishReason = data.choices[0].finish_reason;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    } else if (tail.startsWith('{')) {
+      try {
+        const data = JSON.parse(tail);
+        const full: string = data.choices?.[0]?.message?.content ?? '';
+        if (full && full !== content) {
+          const delta = full.slice(content.length) || full;
+          content = full;
+          onDelta?.(delta, content);
+        }
+        if (data.usage?.total_tokens != null) {
+          tokensUsed = data.usage.total_tokens;
+        }
+        finishReason = data.choices?.[0]?.finish_reason ?? finishReason;
+      } catch {
+        /* ignore */
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return { content, tokensUsed, finishReason };
 }

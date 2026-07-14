@@ -10,7 +10,6 @@ import {
   Moon,
   Sun,
   LayoutList,
-  Plus,
 } from 'lucide-react';
 import { SubtitleFileList } from './SubtitleFileList';
 import { SubtitleEditor } from './SubtitleEditor';
@@ -101,7 +100,8 @@ export const MainApp: React.FC = () => {
     (e: React.MouseEvent) => {
       const t = e.target as HTMLElement;
       if (t.closest('.wb-proj')) return;
-      if (t.closest('.wb-proj-list-tools')) return;
+      if (t.closest('.wb-tasks-head')) return;
+      if (t.closest('.wb-tasks-actions')) return;
       if (t.closest('button, a, input, select, textarea, label')) return;
       if (!selectedFileId) return;
       clearTaskSelection();
@@ -248,38 +248,14 @@ export const MainApp: React.FC = () => {
 
       <aside className="wb-sidebar">
         <div className="wb-tasks" onClick={handleTasksAreaClick}>
-          <div className="wb-tasks-head">
-            <div className="wb-tasks-head-main">
-              <h2>项目</h2>
-              {fileCount > 0 && <span className="wb-tasks-count">{fileCount}</span>}
-            </div>
-            <button
-              type="button"
-              className="wb-tasks-import"
-              onClick={(e) => {
-                e.stopPropagation();
-                openFilePicker();
-              }}
-              title={`导入文件（${importShortcut}）`}
-              aria-label="导入文件"
-            >
-              <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
-            </button>
-          </div>
-
-          {fileCount > 0 ? (
-            <div className="wb-task-list">
-              <SubtitleFileList
-                variant="sidebar"
-                selectedFileId={selectedFileId}
-                onSelectFile={handleSelectTask}
-              />
-            </div>
-          ) : (
-            <div className="wb-task-list-empty">
-              暂无项目
-            </div>
-          )}
+          {/* 侧栏头+列表由 SubtitleFileList 统一：项目 | [+] [全部开始] [导出] [清空] */}
+          <SubtitleFileList
+            variant="sidebar"
+            selectedFileId={selectedFileId}
+            onSelectFile={handleSelectTask}
+            onImport={openFilePicker}
+            importShortcut={importShortcut}
+          />
         </div>
       </aside>
 

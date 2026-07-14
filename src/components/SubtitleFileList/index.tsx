@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { Trash2, Play } from 'lucide-react';
+import { Trash2, Play, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { downloadZipFile, type ExportFormat } from '@/utils/fileExport';
 import { exportFile, exportAllPackage, exportAllFormat } from '@/services/SubtitleExporter';
@@ -21,6 +21,10 @@ interface SubtitleFileListProps {
   onSelectFile?: (file: SubtitleFileMetadata) => void;
   selectedFileId?: string | null;
   variant?: 'default' | 'sidebar';
+  /** 侧栏：导入文件（与批量操作同一行） */
+  onImport?: () => void;
+  /** 侧栏导入快捷键提示，如 ⌘+O */
+  importShortcut?: string;
 }
 
 export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
@@ -29,6 +33,8 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   onSelectFile,
   selectedFileId = null,
   variant = 'default',
+  onImport,
+  importShortcut,
 }) => {
   const files = useFiles();
   const taskQueue = useQueueStore((state) => state.taskQueue);
@@ -140,15 +146,78 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   }, [files, handleError]);
 
   const hasAnyTranslated = files.some(f => (f.translatedCount ?? 0) > 0);
+  const isSidebar = variant === 'sidebar';
+  const hasFiles = files.length > 0;
 
-  if (files.length === 0) {
+  // 非侧栏且无文件时不渲染
+  if (!isSidebar && !hasFiles) {
     return null;
   }
 
-  const isSidebar = variant === 'sidebar';
+  const importTitle = importShortcut ? `导入文件（${importShortcut}）` : '导入文件';
 
   return (
-    <div className={className}>
+    <div className={className ?? (isSidebar ? 'wb-task-list-root' : undefined)}>
+      {/* 侧栏：标题 + 操作同一行  [+] [全部开始] [导出] [清空] */}
+      {isSidebar && (
+        <div className="wb-tasks-head">
+          <div className="wb-tasks-head-main">
+            <h2>项目</h2>
+            {hasFiles && <span className="wb-tasks-count">{files.length}</span>}
+          </div>
+          <div className="wb-tasks-actions" role="toolbar" aria-label="项目操作">
+            {onImport && (
+              <button
+                type="button"
+                className="wb-tasks-import"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onImport();
+                }}
+                title={importTitle}
+                aria-label="导入文件"
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
+              </button>
+            )}
+            {hasFiles && (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleStartAll();
+                  }}
+                  className="wb-proj-list-btn primary"
+                >
+                  <Play className="h-3 w-3" />
+                  全部开始
+                </button>
+                <ExportButton
+                  variant="icon"
+                  disabled={!hasFiles}
+                  hasTranslation={hasAnyTranslated}
+                  onSelect={handleExportAll}
+                  title="批量导出"
+                />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleClearAll();
+                  }}
+                  className="wb-tasks-export-btn"
+                  title="清空全部"
+                  aria-label="清空全部"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {!isSidebar && (
         <div className="flex items-center justify-between mb-4">
           <h3 className="apple-heading-medium">文件列表</h3>
@@ -182,98 +251,76 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
         </div>
       )}
 
-      {isSidebar && (
-        <div className="wb-proj-list-tools">
-          <button
-            type="button"
-            onClick={handleStartAll}
-            className="wb-proj-list-btn primary"
-          >
-            <Play className="h-3 w-3" />
-            全部开始
-          </button>
-          <ExportButton
-            variant="icon"
-            disabled={files.length === 0}
-            hasTranslation={hasAnyTranslated}
-            onSelect={handleExportAll}
-          />
-          <button
-            type="button"
-            onClick={handleClearAll}
-            className="wb-proj-list-btn"
-            title="清空全部"
-          >
-            <Trash2 className="h-3 w-3" />
-            清空
-          </button>
+      {isSidebar && !hasFiles ? (
+        <div className="wb-task-list-empty">暂无项目</div>
+      ) : (
+        <div className={isSidebar ? 'wb-task-list' : undefined}>
+          <div className={isSidebar ? 'wb-proj-list' : 'space-y-4'}>
+            {files.map((file) => {
+              const queuePosition = queueMeta.get(file.id) ?? 0;
+              const isActive = activeTaskId === file.id;
+              const isQueued = queuePosition > 0 && !isActive;
+
+              if (isSidebar) {
+                return (
+                  <SidebarTaskRow
+                    key={file.id}
+                    file={file}
+                    selected={selectedFileId === file.id}
+                    onSelect={handleOpen}
+                    onStartTranslation={async () => {
+                      useFilesStore.getState().setWorkflow(file.id, 'translate');
+                      enqueueTask(file.id);
+                    }}
+                    onExportFormat={handleExportFile}
+                    onDelete={handleDeleteFile}
+                    onTranscribeAndTranslate={async () => {
+                      useFilesStore.getState().setWorkflow(file.id, 'full');
+                      enqueueTask(file.id);
+                    }}
+                    onTranscribe={async () => {
+                      useFilesStore.getState().setWorkflow(file.id, 'transcribe');
+                      enqueueTask(file.id);
+                    }}
+                    onDequeue={() => dequeueTask(file.id)}
+                    isQueued={isQueued}
+                    queuePosition={queuePosition}
+                    isActive={isActive}
+                  />
+                );
+              }
+
+              return (
+                <SubtitleFileItem
+                  key={file.id}
+                  file={file}
+                  selected={selectedFileId === file.id}
+                  onSelect={handleOpen}
+                  onEdit={handleOpen}
+                  onStartTranslation={async () => {
+                    useFilesStore.getState().setWorkflow(file.id, 'translate');
+                    enqueueTask(file.id);
+                  }}
+                  onExportFormat={handleExportFile}
+                  onDelete={handleDeleteFile}
+                  onTranscribeAndTranslate={async () => {
+                    useFilesStore.getState().setWorkflow(file.id, 'full');
+                    enqueueTask(file.id);
+                  }}
+                  onTranscribe={async () => {
+                    useFilesStore.getState().setWorkflow(file.id, 'transcribe');
+                    enqueueTask(file.id);
+                  }}
+                  onDequeue={() => dequeueTask(file.id)}
+                  isQueued={isQueued}
+                  queuePosition={queuePosition}
+                  isActive={isActive}
+                />
+              );
+            })}
+          </div>
         </div>
       )}
-
-      <div className={isSidebar ? 'wb-proj-list' : 'space-y-4'}>
-        {files.map((file) => {
-          const queuePosition = queueMeta.get(file.id) ?? 0;
-          const isActive = activeTaskId === file.id;
-          const isQueued = queuePosition > 0 && !isActive;
-
-          if (isSidebar) {
-            return (
-              <SidebarTaskRow
-                key={file.id}
-                file={file}
-                selected={selectedFileId === file.id}
-                onSelect={handleOpen}
-                onStartTranslation={async () => {
-                  useFilesStore.getState().setWorkflow(file.id, 'translate');
-                  enqueueTask(file.id);
-                }}
-                onExportFormat={handleExportFile}
-                onDelete={handleDeleteFile}
-                onTranscribeAndTranslate={async () => {
-                  useFilesStore.getState().setWorkflow(file.id, 'full');
-                  enqueueTask(file.id);
-                }}
-                onTranscribe={async () => {
-                  useFilesStore.getState().setWorkflow(file.id, 'transcribe');
-                  enqueueTask(file.id);
-                }}
-                onDequeue={() => dequeueTask(file.id)}
-                isQueued={isQueued}
-                queuePosition={queuePosition}
-                isActive={isActive}
-              />
-            );
-          }
-
-          return (
-            <SubtitleFileItem
-              key={file.id}
-              file={file}
-              selected={selectedFileId === file.id}
-              onSelect={handleOpen}
-              onEdit={handleOpen}
-              onStartTranslation={async () => {
-                useFilesStore.getState().setWorkflow(file.id, 'translate');
-                enqueueTask(file.id);
-              }}
-              onExportFormat={handleExportFile}
-              onDelete={handleDeleteFile}
-              onTranscribeAndTranslate={async () => {
-                useFilesStore.getState().setWorkflow(file.id, 'full');
-                enqueueTask(file.id);
-              }}
-              onTranscribe={async () => {
-                useFilesStore.getState().setWorkflow(file.id, 'transcribe');
-                enqueueTask(file.id);
-              }}
-              onDequeue={() => dequeueTask(file.id)}
-              isQueued={isQueued}
-              queuePosition={queuePosition}
-              isActive={isActive}
-            />
-          );
-        })}
-      </div>
 
       <ConfirmDialog
         isOpen={showClearConfirm}

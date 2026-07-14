@@ -204,8 +204,10 @@ export const useFilesStore = create<FilesState>()(
           const newTasks = state.tasks.map((t) => {
             if (t.taskId !== file.taskId) return t;
             const oldEntry = t.subtitle_entries?.find((e) => e.id === entryId);
-            const wasTranslated = !!oldEntry?.translatedText;
-            const willBeTranslated = !!(translatedText ?? oldEntry?.translatedText);
+            const nextStatus = status ?? oldEntry?.translationStatus ?? 'pending';
+            // 仅 completed 计入已译（streaming 部分文本不推高计数）
+            const wasTranslated = oldEntry?.translationStatus === 'completed';
+            const willBeTranslated = nextStatus === 'completed';
             const delta = wasTranslated === willBeTranslated ? 0 : willBeTranslated ? 1 : -1;
             return {
               ...t,
@@ -215,7 +217,7 @@ export const useFilesStore = create<FilesState>()(
                   ...e,
                   text,
                   translatedText: translatedText ?? e.translatedText,
-                  translationStatus: status ?? e.translationStatus,
+                  translationStatus: nextStatus,
                   startTime: startTime ?? e.startTime,
                   endTime: endTime ?? e.endTime,
                   words: words ?? e.words,
@@ -235,7 +237,7 @@ export const useFilesStore = create<FilesState>()(
           const newTasks = state.tasks.map((t) => {
             if (t.taskId !== file.taskId) return t;
             const removed = t.subtitle_entries?.find((e) => e.id === entryId);
-            const wasTranslated = !!removed?.translatedText;
+            const wasTranslated = removed?.translationStatus === 'completed';
             return {
               ...t,
               subtitle_entries: (t.subtitle_entries || []).filter((e) => e.id !== entryId),
@@ -258,7 +260,7 @@ export const useFilesStore = create<FilesState>()(
             for (const update of updates) {
               const prev = byId.get(update.id);
               if (!prev) continue;
-              const wasTranslated = !!prev.translatedText;
+              const wasTranslated = prev.translationStatus === 'completed';
               const nextTranslated =
                 update.translatedText !== undefined ? update.translatedText : prev.translatedText;
               const next: SubtitleEntry = {
@@ -267,7 +269,7 @@ export const useFilesStore = create<FilesState>()(
                 translatedText: nextTranslated,
                 translationStatus: update.status ?? prev.translationStatus,
               };
-              const willBeTranslated = !!next.translatedText;
+              const willBeTranslated = next.translationStatus === 'completed';
               if (wasTranslated !== willBeTranslated) {
                 delta += willBeTranslated ? 1 : -1;
               }
