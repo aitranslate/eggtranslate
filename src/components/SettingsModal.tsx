@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslationConfigStore, useTranslationConfig } from '@/stores/translationConfigStore';
 import { TranslationSettings } from './SettingsModal/TranslationSettings';
 import { TranscriptionSettings } from './TranscriptionSettings';
@@ -16,6 +17,7 @@ import {
 } from '@/utils/llmProfiles';
 import { toastError } from '@/utils/appToast';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 interface SettingsModalProps {
   isOpen?: boolean;
@@ -32,11 +34,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const updateConfig = useTranslationConfigStore((state) => state.updateConfig);
   const closeSettings = useWorkspaceStore((s) => s.closeSettings);
   const openEditor = useWorkspaceStore((s) => s.openEditor);
+  const isMobile = useIsMobile();
 
   const handleClose = useCallback(() => {
     onClose?.();
     closeSettings();
   }, [onClose, closeSettings]);
+
+  // 打开时锁 body 滚动，避免底层页跟着滑
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
 
   const [isTesting, setIsTesting] = useState(false);
   const { handleError } = useErrorHandler();
@@ -130,7 +143,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     []
   );
 
-  return (
+  const sheet = (
     <AnimatePresence>
       {isOpen && (
         <>
@@ -144,13 +157,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             aria-hidden
           />
           <motion.aside
-            className="wb-drawer"
+            className={`wb-drawer${isMobile ? ' is-mobile-sheet' : ''}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="wb-settings-title"
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
+            initial={isMobile ? { y: '100%' } : { x: '100%' }}
+            animate={isMobile ? { y: 0 } : { x: 0 }}
+            exit={isMobile ? { y: '100%' } : { x: '100%' }}
             transition={{ type: 'tween', duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
           >
             <header className="wb-drawer-header">
@@ -248,4 +261,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       )}
     </AnimatePresence>
   );
+
+  // Portal 到 body，避免被 m-shell / workbench 层叠上下文裁切或压住
+  if (typeof document !== 'undefined') {
+    return createPortal(sheet, document.body);
+  }
+  return sheet;
 };

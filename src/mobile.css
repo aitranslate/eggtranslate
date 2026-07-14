@@ -597,26 +597,246 @@
   color: var(--wb-brand);
 }
 
-/* Settings drawer → full sheet on mobile shell sibling / when body narrow */
+/* ── Mobile menu (portal) ── */
+.m-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.m-menu-panel {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top, 0px));
+  left: 12px;
+  right: 12px;
+  z-index: 2201;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--wb-panel, #ffffff);
+  color: var(--wb-text, #1d1d1f);
+  border: 1px solid var(--wb-border, #e5e5ea);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+}
+
+html.dark .m-menu-panel {
+  background: #12141a;
+  color: #eceef2;
+  border-color: #2c303c;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+.m-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--wb-border, #e5e5ea);
+}
+
+html.dark .m-menu-head {
+  border-bottom-color: #2c303c;
+}
+
+.m-menu-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--wb-text, #1d1d1f);
+}
+
+html.dark .m-menu-title {
+  color: #eceef2;
+}
+
+.m-menu-close {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: var(--wb-panel-2, #f5f5f7);
+  color: var(--wb-text-2, #6e6e73);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+html.dark .m-menu-close {
+  background: #1a1d26;
+  color: #a8afbb;
+}
+
+.m-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.m-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--wb-text, #1d1d1f);
+  font-family: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+
+html.dark .m-menu-row {
+  color: #eceef2;
+}
+
+.m-menu-row:active {
+  background: var(--wb-panel-2, #f5f5f7);
+}
+
+html.dark .m-menu-row:active {
+  background: #1a1d26;
+}
+
+.m-menu-row.is-warn {
+  background: color-mix(in srgb, var(--apple-warning, #ff9500) 14%, transparent);
+  color: var(--apple-warning, #ff9500);
+}
+
+.m-menu-row-label {
+  flex: 1;
+  font-weight: 500;
+}
+
+.m-menu-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--wb-brand, #0071e3);
+  color: #fff;
+}
+
+.m-menu-badge.warn {
+  background: var(--apple-warning, #ff9500);
+}
+
+/* Settings: 高 z-index + 窄屏强制不透明全屏（不依赖 JS class） */
+.wb-drawer-backdrop {
+  z-index: 2300 !important;
+  background: rgba(0, 0, 0, 0.45) !important;
+}
+
+.wb-drawer {
+  z-index: 2301 !important;
+}
+
 @media (max-width: 767.98px) {
-  .wb-drawer {
-    width: 100% !important;
-    max-width: 100% !important;
-    border-radius: 0 !important;
+  .wb-drawer,
+  .wb-drawer.is-mobile-sheet {
     left: 0 !important;
     right: 0 !important;
     top: 0 !important;
     bottom: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
     height: 100% !important;
     height: 100dvh !important;
+    border-left: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #1d1d1f !important;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
-  .wb-drawer-backdrop {
-    /* full cover */
+  html.dark .wb-drawer,
+  html.dark .wb-drawer.is-mobile-sheet,
+  .workbench[data-theme='dark'] ~ .wb-drawer,
+  body:has([data-theme='dark']) .wb-drawer {
+    background: #12141a !important;
+    color: #eceef2 !important;
   }
 
+  html.dark .wb-drawer .wb-drawer-title,
+  html.dark .wb-drawer .wb-prefs-section-head h3,
+  html.dark .wb-drawer .wb-prefs-block-title,
+  body:has([data-theme='dark']) .wb-drawer .wb-drawer-title {
+    color: #eceef2 !important;
+  }
+
+  html.dark .wb-drawer .wb-prefs-section-head p,
+  body:has([data-theme='dark']) .wb-drawer .wb-prefs-section-head p {
+    color: #a8afbb !important;
+  }
+}
+
+/* 移动壳内：隐藏桌面 panel 大标题（顶栏已有） */
+.m-shell .wb-panel-header {
+  display: none !important;
+}
+
+.m-shell .wb-panel {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: 100%;
+}
+
+.m-shell .wb-panel-body {
+  padding: 8px 4px 16px;
+}
+
+/* 术语表单：移动端单列 */
+.m-shell .wb-glossary-add {
+  grid-template-columns: 1fr !important;
+  gap: 10px !important;
+}
+
+.m-shell .wb-glossary-toolbar {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.m-shell .wb-tool-row {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.m-shell .wb-tool.primary,
+.m-shell button.wb-tool.primary {
+  min-height: 44px;
+  opacity: 1 !important;
+  background: var(--wb-brand, #0071e3) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+
+/* 历史空状态：无记录时隐藏统计四宫格 */
+.m-shell .wb-panel-stack:has(.wb-empty) .wb-stats {
+  display: none;
+}
+
+.m-shell .wb-stats {
+  gap: 8px;
+  padding: 10px 8px;
+}
+
+.m-shell .wb-empty {
+  padding: 40px 16px;
+  font-size: 14px;
+  color: var(--wb-text-3);
+}
+
+@media (max-width: 767.98px) {
   .wb-stage-cta-keys {
     display: none !important;
   }

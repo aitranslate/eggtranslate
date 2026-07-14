@@ -5,8 +5,11 @@
 ## 日常命令
 
 ```bash
-# 冒烟：落地导入壳 / 主题 / 术语 / 导入字幕 / Esc 取消选中 / 编辑器 / 设置 / 无 Key 守卫
+# 冒烟全流程：桌面 1440 + 移动 390（底栏 / 设置 sheet / 示例详情）
 pnpm test:e2e
+
+# 仅移动端冒烟（更快，改 mobile shell 时用）
+pnpm test:e2e:mobile
 
 # 真实翻译（sample-en + E2E_LLM_*）
 pnpm test:e2e:live
@@ -38,8 +41,10 @@ E2E_LLM_MODEL=mistral-small-latest
 
 ## 产物
 
-- `e2e/output/report.txt` — 通过/失败清单  
-- `e2e/output/*.png` — 逐步截图  
+- `e2e/output/report.txt` — 通过/失败清单（桌面 + 移动）  
+- `e2e/output/01-*.png` … — 桌面逐步截图  
+- `e2e/output/m-*.png` — 移动端截图  
+- `e2e/output/mobile-report.txt` — 仅 `test:e2e:mobile` 时写入  
 
 `e2e/output/` 已 gitignore。
 
@@ -56,9 +61,10 @@ E2E_LLM_MODEL=mistral-small-latest
 
 ```
 e2e/
-  run.mjs           # 冒烟入口
+  run.mjs           # 冒烟入口（桌面 + 移动）
+  run-mobile.mjs    # 仅移动端冒烟
   run-live.mjs      # 完整 live 入口
-  lib/              # agent-browser / server / report
+  lib/              # agent-browser / server / report / mobile-smoke
   fixtures/         # 提交进仓库的小字幕等
   output/           # 运行产物（忽略）
   .env.example

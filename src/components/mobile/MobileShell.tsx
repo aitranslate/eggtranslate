@@ -6,8 +6,8 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   BookOpen,
+  FolderKanban,
   History,
-  Menu,
   Moon,
   Plus,
   Settings,
@@ -21,7 +21,6 @@ import { SubtitleEditor } from '@/components/SubtitleEditor';
 import { SettingsModal } from '@/components/SettingsModal';
 import { TermsManager } from '@/components/TermsManager';
 import { HistoryModal } from '@/components/HistoryModal';
-import { MobileMenu } from '@/components/MobileMenu';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { MobileTaskCard } from '@/components/mobile/MobileTaskCard';
 import { MobileDetailBar } from '@/components/mobile/MobileDetailBar';
@@ -44,7 +43,6 @@ export interface MobileShellProps {
 }
 
 export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileInput }) => {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -161,7 +159,8 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
           </div>
         </div>
         <div className="m-top-right">
-          {!inDetail && (
+          {/* 列表页主 CTA 已是导入，顶栏 + 仅在非列表时保留 */}
+          {!inList && !inDetail && (
             <button
               type="button"
               className="m-icon-btn"
@@ -187,14 +186,6 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
           >
             <Settings className="h-5 w-5" />
             {!isConfigured && <span className="m-dot-warn" />}
-          </button>
-          <button
-            type="button"
-            className="m-icon-btn"
-            onClick={() => setMenuOpen(true)}
-            aria-label="菜单"
-          >
-            <Menu className="h-5 w-5" />
           </button>
         </div>
       </header>
@@ -292,16 +283,30 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
         )}
       </main>
 
-      {inList && (
+      {/* 主路径用底栏；术语/历史时也显示便于切换 */}
+      {(inList || stage === 'terms' || stage === 'history') && !settingsOpen && (
         <nav className="m-tabbar" aria-label="主导航">
-          <button type="button" className="m-tab is-active" onClick={openEditor}>
+          <button
+            type="button"
+            className={`m-tab ${stage === 'editor' ? 'is-active' : ''}`}
+            onClick={openEditor}
+          >
+            <FolderKanban className="h-4 w-4" />
             <span>项目</span>
           </button>
-          <button type="button" className="m-tab" onClick={openTerms}>
+          <button
+            type="button"
+            className={`m-tab ${stage === 'terms' ? 'is-active' : ''}`}
+            onClick={openTerms}
+          >
             <BookOpen className="h-4 w-4" />
             <span>术语{termsCount > 0 ? ` ${termsCount}` : ''}</span>
           </button>
-          <button type="button" className="m-tab" onClick={openHistory}>
+          <button
+            type="button"
+            className={`m-tab ${stage === 'history' ? 'is-active' : ''}`}
+            onClick={openHistory}
+          >
             <History className="h-4 w-4" />
             <span>历史{historyCount > 0 ? ` ${historyCount}` : ''}</span>
           </button>
@@ -309,18 +314,6 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
       )}
 
       <SettingsModal isOpen={settingsOpen} />
-
-      <MobileMenu
-        isOpen={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        termsCount={termsCount}
-        historyCount={historyCount}
-        isSettingsRequired={!isConfigured}
-        onOpenWorkspace={openEditor}
-        onOpenTerms={openTerms}
-        onOpenHistory={openHistory}
-        onOpenSettings={openSettings}
-      />
 
       <ConfirmDialog
         isOpen={showClearConfirm}

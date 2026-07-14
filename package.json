@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:e2e": "node e2e/run.mjs",
+    "test:e2e:mobile": "node e2e/run-mobile.mjs",
     "test:e2e:live": "node e2e/run.mjs --live",
     "test:e2e:live-full": "node e2e/run-live.mjs",
     "test:e2e:install": "npm install -g agent-browser && agent-browser install"

@@ -129,7 +129,8 @@
 pnpm install
 pnpm dev                 # http://127.0.0.1:5173
 pnpm test                # 单元测试 (vitest)
-pnpm test:e2e            # agent-browser 全流程冒烟
+pnpm test:e2e            # agent-browser 冒烟（桌面 1440 + 移动 390）
+pnpm test:e2e:mobile     # 仅移动端冒烟
 pnpm test:e2e:live       # 含真实 LLM（需 e2e/.env.e2e）
 pnpm test:e2e:live-full  # 完整 live 素材 + LLM
 ```

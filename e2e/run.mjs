@@ -6,7 +6,8 @@
  *   pnpm test:e2e:live   # needs E2E_LLM_* in e2e/.env.e2e
  *
  * 与当前 UI 对齐：
- * - 导入：#wb-file-import / 侧栏 .wb-tasks-import / 空状态「导入文件」
+ * - 桌面 1440：落地导入壳 / 主题 / 术语 / 导入 / Esc / 编辑器 / 设置 / 无 Key 守卫
+ * - 移动 390：底栏导航 / 设置全屏 sheet / 主题 / 示例列表明细
  * - 默认不自动打开设置
  * - Esc 可取消任务选中（无弹层时）
  */
@@ -16,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import * as ab from './lib/agent.mjs';
 import { ensureServer, stopServer, getBaseUrl } from './lib/server.mjs';
 import { createReporter } from './lib/report.mjs';
+import { runMobileSmoke } from './lib/mobile-smoke.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -165,8 +167,8 @@ async function main() {
     server = await ensureServer();
     console.log(`  ${server.started ? 'started' : 'reused'} ${server.baseUrl}`);
 
-    console.log('→ browser session…');
-    ab.closeAll();
+    console.log('→ browser session…', ab.getSession?.() || process.env.AGENT_BROWSER_SESSION || '');
+    // 不在开头 close --all：Windows 上易挂；用独立 session 名即可隔离
 
     // One big batch for smoke path (reliable on Windows)
     // Keep result indices in sync with this array when editing.
@@ -348,6 +350,25 @@ async function main() {
     }
     report.pass('still_alive', String(evalResult(results, 71)));
 
+    // ── Mobile smoke（同会话缩 viewport；桌面批后勿 closeAll）──
+    {
+      const alive = await fetch(server.baseUrl, { signal: AbortSignal.timeout(3000) }).then(
+        (r) => r.ok,
+        () => false
+      );
+      if (!alive) {
+        report.fail('mobile_shell', `dev server unreachable at ${server.baseUrl}`);
+      } else {
+        runMobileSmoke({
+          baseUrl: server.baseUrl,
+          report,
+          outDir: OUT,
+          shotPrefix: 'm',
+          reopen: true,
+        });
+      }
+    }
+
     // Optional live LLM (separate small batches)
     const llmBase = process.env.E2E_LLM_BASE_URL || '';
     const llmKey = process.env.E2E_LLM_API_KEY || '';
@@ -355,6 +376,15 @@ async function main() {
 
     if (LIVE && llmBase && llmKey) {
       console.log('→ live LLM…');
+      // mobile smoke left us at 390px; restore desktop workbench
+      ab.batch(
+        [
+          ['set', 'viewport', '1440', '900'],
+          ['open', `${server.baseUrl}/?e2e-live=${Date.now()}`],
+          ['wait', '2000'],
+        ],
+        { timeout: 60000 }
+      );
       const live1 = ab.batch(
         [
           ['eval', js.openSettings],

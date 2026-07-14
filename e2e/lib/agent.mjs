@@ -7,7 +7,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-const SESSION = process.env.AGENT_BROWSER_SESSION || 'eggtranslate-e2e';
+// 每次进程默认独立 session，避免 Windows 上 close --all 挂死后 CDP 拒连
+const SESSION =
+  process.env.AGENT_BROWSER_SESSION ||
+  `eggtranslate-e2e-${process.pid}-${Date.now().toString(36)}`;
 const DEFAULT_TIMEOUT = Number(process.env.AGENT_BROWSER_DEFAULT_TIMEOUT || 25000);
 
 let cachedBin = undefined;
@@ -120,13 +123,16 @@ export function batch(commands, { timeout = 180000, bail = false } = {}) {
   const r = ab(args, { timeout, input: JSON.stringify(commands) });
   let results = [];
   try {
-    results = JSON.parse(r.stdout || '[]');
+    const parsed = JSON.parse(r.stdout || '[]');
+    // success path is an array; connection errors may be a single object
+    results = Array.isArray(parsed) ? parsed : [];
   } catch {
     // sometimes banners prepend JSON
     const m = (r.stdout || '').match(/\[[\s\S]*\]/);
     if (m) {
       try {
-        results = JSON.parse(m[0]);
+        const parsed = JSON.parse(m[0]);
+        results = Array.isArray(parsed) ? parsed : [];
       } catch {
         results = [];
       }
@@ -143,7 +149,16 @@ export function batchEvalResult(item) {
 }
 
 export function closeAll() {
-  return ab(['close', '--all'], { timeout: 20000 });
+  // Prefer closing only this session — --all can hang on Windows
+  const r = ab(['close'], { timeout: 12000 });
+  if (!r.ok) {
+    return ab(['close', '--all'], { timeout: 8000 });
+  }
+  return r;
+}
+
+export function getSession() {
+  return SESSION;
 }
 
 export function open(url) {

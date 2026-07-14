@@ -55,13 +55,18 @@ describe('MobileMenu', () => {
     expect(termItem?.textContent).toContain('3');
   });
 
-  it('shows "必须" badge and orange highlight when isSettingsRequired=true', () => {
+  it('shows "必须" badge and warn row when isSettingsRequired=true', () => {
     setProps({ isSettingsRequired: true });
-    // "必须" badge appears
     expect(screen.getByText('必须')).toBeTruthy();
-    // Settings row has orange inline color
     const settingsBtn = screen.getByText('设置').closest('button');
-    expect(settingsBtn?.getAttribute('style') || '').toContain('rgb(255, 149, 0)');
+    expect(settingsBtn?.className || '').toContain('is-warn');
+  });
+
+  it('settingsOnly hides terms/history nav rows', () => {
+    setProps({ settingsOnly: true });
+    expect(screen.queryByText('术语')).toBeNull();
+    expect(screen.queryByText('历史')).toBeNull();
+    expect(screen.getByText('设置')).toBeTruthy();
   });
 
   it('does not show "必须" badge when isSettingsRequired=false', () => {
