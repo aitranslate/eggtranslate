@@ -244,5 +244,3 @@ export const SubtitleFileItemMemo = memo(SubtitleFileItem, (prevProps, nextProps
 
   return true;
 });
-
-export default SubtitleFileItemMemo;

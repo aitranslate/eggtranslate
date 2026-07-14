@@ -110,5 +110,3 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
     </Dialog.Root>
   );
 };
-
-export default MobileMenu;

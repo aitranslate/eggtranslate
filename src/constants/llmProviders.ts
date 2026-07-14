@@ -154,25 +154,6 @@ export const LLM_PROVIDER_PRESETS: LlmProviderPreset[] = [
   },
 ];
 
-/** 根据当前 baseURL 推断选中的预设（自定义兜底） */
-export function matchProviderId(baseURL: string): LlmProviderId {
-  const normalized = (baseURL || '').trim().replace(/\/+$/, '').toLowerCase();
-  if (!normalized) return 'custom';
-
-  // 较长 URL 优先，避免短前缀误匹配
-  const ranked = [...LLM_PROVIDER_PRESETS]
-    .filter((p) => p.id !== 'custom' && p.baseURL)
-    .sort((a, b) => b.baseURL.length - a.baseURL.length);
-
-  for (const p of ranked) {
-    const preset = p.baseURL.replace(/\/+$/, '').toLowerCase();
-    if (normalized === preset || normalized.startsWith(`${preset}/`)) {
-      return p.id;
-    }
-  }
-  return 'custom';
-}
-
 export function getProviderById(id: LlmProviderId): LlmProviderPreset {
   return (
     LLM_PROVIDER_PRESETS.find((p) => p.id === id) ??

@@ -5,7 +5,7 @@
  */
 
 import toast from 'react-hot-toast';
-import { CheckCircle2, Copy, XCircle } from 'lucide-react';
+import { Copy, XCircle } from 'lucide-react';
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -64,18 +64,3 @@ export function toastError(message: string, options?: { duration?: number }) {
   );
 }
 
-/** 成功 Toast */
-export function toastSuccess(message: string, options?: { duration?: number }) {
-  return toast.custom(
-    (t) => (
-      <div
-        className={`${shellClass} ${t.visible ? 'animate-enter' : 'animate-leave'}`}
-        role="status"
-      >
-        <CheckCircle2 className="w-[18px] h-[18px] text-emerald-500 shrink-0" />
-        <p className="text-sm text-gray-800 leading-snug text-left">{message}</p>
-      </div>
-    ),
-    { duration: options?.duration ?? 3000, position: 'top-right' }
-  );
-}

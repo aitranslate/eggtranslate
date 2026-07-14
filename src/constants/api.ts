@@ -12,18 +12,6 @@ export const API_CONSTANTS = {
   /** 默认温度参数 */
   DEFAULT_TEMPERATURE: 0.3,
 
-  /** 请求超时（毫秒） */
-  REQUEST_TIMEOUT_MS: 30000,
-
-  /** 持久化延迟（毫秒） */
-  PERSIST_DELAY_MS: 200,
-
-  /** 状态更新等待延迟（毫秒） */
-  STATE_UPDATE_DELAY_MS: 100,
-
-  /** 批处理任务间隔（毫秒） */
-  BATCH_TASK_GAP_MS: 1000,
-
   /** 历史保存延迟（毫秒） */
   HISTORY_SAVE_DELAY_MS: 500,
 } as const;

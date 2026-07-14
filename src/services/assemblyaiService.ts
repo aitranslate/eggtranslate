@@ -12,7 +12,7 @@ import { logger } from "@/utils/logger";
  * AssemblyAI 转录服务
  * 封装 API 调用、KEY 轮询、错误处理
  */
-export class AssemblyAIService {
+class AssemblyAIService {
   /**
    * 获取可用的 API keys 列表
    */

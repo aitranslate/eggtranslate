@@ -267,17 +267,8 @@ export const useIsTranslationConfigured = () =>
 
 export const useIsTranslating = () => useTranslationConfigStore((state) => state.isTranslating);
 
-export const useTranslationProgress = () => useTranslationConfigStore((state) => state.progress);
-
 export const useTranslationTokensUsed = () =>
   useTranslationConfigStore((state) => state.tokensUsed);
-
-const EMPTY_MODEL_LIST: LlmModelInfo[] = [];
-
-export const useCachedModelList = (profileId: string) =>
-  useTranslationConfigStore(
-    (state) => state.cachedModelLists[profileId] ?? EMPTY_MODEL_LIST
-  );
 
 function validateTranslationResult(
   result: Record<string, { direct: string }>,
