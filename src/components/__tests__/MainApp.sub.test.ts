@@ -27,9 +27,11 @@ describe('MainApp workbench shell', () => {
     expect(src).not.toContain("stage === 'settings'");
   });
 
-  it('defaults to editor-first product surface', () => {
+  it('defaults to editor-first without auto-opening settings', () => {
     expect(src).toContain('openEditor');
-    expect(src).toMatch(/if \(!isConfigured\)/);
+    expect(src).not.toMatch(/if\s*\(\s*!isConfigured\s*\)\s*\{\s*openSettings/);
+    expect(src).toContain('useFileImport');
+    expect(src).toContain('wb-tasks-import');
   });
 
   it('does not mount per-character SplitHeading', () => {

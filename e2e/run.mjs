@@ -4,6 +4,11 @@
  *
  *   pnpm test:e2e
  *   pnpm test:e2e:live   # needs E2E_LLM_* in e2e/.env.e2e
+ *
+ * 与当前 UI 对齐：
+ * - 导入：#wb-file-import / 侧栏 .wb-tasks-import / 空状态「导入文件」
+ * - 默认不自动打开设置
+ * - Esc 可取消任务选中（无弹层时）
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,6 +23,12 @@ const FIXTURES = path.join(__dirname, 'fixtures');
 const OUT = path.join(__dirname, 'output');
 const SAMPLE_SRT = path.join(FIXTURES, 'sample-en.srt');
 const LIVE = process.argv.includes('--live') || process.env.E2E_LIVE === '1';
+
+/**
+ * 全局导入 input（MainApp #wb-file-import）。
+ * agent-browser upload 对 hidden file input 用 type 选择器更稳。
+ */
+const IMPORT_INPUT = 'input[type=file]';
 
 function loadDotEnv() {
   for (const file of [
@@ -65,7 +76,6 @@ const js = {
   addTerm: `(()=>{const inputs=Array.from(document.querySelectorAll('input'));const o=inputs.find(i=>i.placeholder==='\u539f\u6587'||i.getAttribute('aria-label')==='\u539f\u6587');const t=inputs.find(i=>i.placeholder==='\u8bd1\u6587'||i.getAttribute('aria-label')==='\u8bd1\u6587');if(!o||!t)return 'no-inputs';const set=(el,v)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));};set(o,'One Piece');set(t,'OP-ZH');const b=Array.from(document.querySelectorAll('button')).find(x=>(x.textContent||'').trim()==='\u6dfb\u52a0');if(!b)return 'no-add';b.click();return 'ok'})()`,
   taskCount: `document.querySelector('.wb-tasks-count')?.textContent||'0'`,
   selectSample: `(()=>{
-    // SidebarTaskRow: div.wb-proj[role=button]
     const row=Array.from(document.querySelectorAll('.wb-proj[role=button], .wb-proj')).find(x=>
       (x.textContent||'').includes('sample-en')
     );
@@ -83,6 +93,26 @@ const js = {
   settingsProbe: `JSON.stringify({deepseek:document.body.innerText.includes('DeepSeek'),agnes:document.body.innerText.includes('Agnes'),assembly:document.body.innerText.includes('AssemblyAI'),hot:document.body.innerText.includes('\u70ed\u8bcd')})`,
   clickTranslate: `(()=>{const b=Array.from(document.querySelectorAll('button')).find(x=>(x.textContent||'').trim()==='\u7ffb\u8bd1');if(!b)return 'nf';b.click();return 'ok'})()`,
   hasConfigToast: `document.body.innerText.includes('\u914d\u7f6e')||document.body.innerText.includes('API')`,
+  /** 落地：空工作区导入 CTA + 侧栏空状态；不自动弹设置 */
+  landing: `JSON.stringify((()=>{
+    const inputs=Array.from(document.querySelectorAll('input[type=file]'));
+    const byId=document.querySelector('#wb-file-import');
+    return {
+      importCta: document.body.innerText.includes('\u5bfc\u5165\u6587\u4ef6'),
+      emptySidebar: document.body.innerText.includes('\u6682\u65e0\u9879\u76ee'),
+      importInput: !!(byId||inputs.length),
+      importInputId: byId?.id||inputs[0]?.id||'',
+      fileInputCount: inputs.length,
+      sidebarPlus: !!document.querySelector('button.wb-tasks-import,button[aria-label="\u5bfc\u5165\u6587\u4ef6"]'),
+      settingsClosed: !document.querySelector('.wb-drawer')
+    };
+  })())`,
+  /** 清 PWA 缓存，避免旧 bundle */
+  clearCaches: `(()=>{try{navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.unregister()));caches.keys().then(ks=>ks.forEach(k=>caches.delete(k)));return 'ok'}catch(e){return String(e)}})()`,
+  importOk: `document.body.innerText.includes('sample-en')||document.body.innerText.includes('Everybody')||!!document.querySelector('.wb-tasks-count')`,
+  pressEsc: `(()=>{window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));return 'ok'})()`,
+  /** 取消选中后：编辑器关闭，回到空工作区提示 */
+  isDeselected: `!document.querySelector('.se-search-input')&&(document.body.innerText.includes('\u9009\u62e9\u4e00\u4e2a\u9879\u76ee')||document.body.innerText.includes('\u5bfc\u5165\u6587\u4ef6'))`,
   configureLlm: (base, key, model) => `(()=>{
     const set=(el,v)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));};
     const d=document.querySelector('.wb-drawer');if(!d)return 'no-drawer';
@@ -139,18 +169,20 @@ async function main() {
     ab.closeAll();
 
     // One big batch for smoke path (reliable on Windows)
+    // Keep result indices in sync with this array when editing.
     const commands = [
-      ['open', server.baseUrl],
+      /* 0-6 */ ['open', server.baseUrl],
+      ['wait', '1500'],
+      ['eval', js.clearCaches],
+      ['open', `${server.baseUrl}/?e2e=${Date.now()}`],
       ['wait', '2500'],
       ['set', 'viewport', '1440', '900'],
       ['screenshot', shot('01-initial.png')],
-      ['eval', js.version],
-      // close settings
-      ['eval', js.closeSettings],
-      ['wait', '400'],
-      ['screenshot', shot('02-settings-closed.png')],
+      /* 7-9 */ ['eval', js.version],
+      ['eval', js.landing],
+      ['screenshot', shot('02-landing.png')],
       // theme
-      ['eval', js.theme],
+      /* 7-13 */ ['eval', js.theme],
       ['eval', js.toggleTheme],
       ['wait', '400'],
       ['eval', js.theme],
@@ -158,7 +190,7 @@ async function main() {
       ['eval', js.toggleTheme],
       ['wait', '300'],
       // terms
-      ['eval', js.clickText('术语')],
+      /* 14-21 */ ['eval', js.clickText('术语')],
       ['wait', '600'],
       ['screenshot', shot('04-terms.png')],
       ['eval', js.bodyLen],
@@ -167,22 +199,20 @@ async function main() {
       ['eval', `document.body.innerText.includes('One Piece')`],
       ['screenshot', shot('04b-terms-added.png')],
       // history
-      ['eval', js.clickText('历史')],
+      /* 22-25 */ ['eval', js.clickText('历史')],
       ['wait', '500'],
       ['screenshot', shot('05-history.png')],
       ['eval', js.bodyLen],
-      // workspace + upload
-      ['eval', js.clickText('工作区')],
+      // workspace + import via global #wb-file-import
+      /* 26-32 */ ['eval', js.clickText('工作区')],
       ['wait', '400'],
-      ['eval', js.closeSettings],
-      ['wait', '300'],
-      ['upload', 'input[type=file]', path.resolve(SAMPLE_SRT)],
+      ['upload', IMPORT_INPUT, path.resolve(SAMPLE_SRT)],
       ['wait', '2500'],
-      ['screenshot', shot('07-srt-uploaded.png')],
+      ['screenshot', shot('07-srt-imported.png')],
       ['eval', js.taskCount],
-      ['eval', `document.body.innerText.includes('sample-en')||document.body.innerText.includes('Everybody')||!!document.querySelector('.wb-tasks-count')`],
+      ['eval', js.importOk],
       // editor
-      ['eval', js.selectSample],
+      /* 33-41 */ ['eval', js.selectSample],
       ['wait', '1500'],
       ['eval', js.selectSample],
       ['wait', '1500'],
@@ -191,13 +221,23 @@ async function main() {
       ['eval', js.search],
       ['wait', '800'],
       ['screenshot', shot('08-search.png')],
-      ['eval', `document.body.innerText.toLowerCase().includes('problem')||document.body.innerText.includes('Everybody')`],
+      /* 42-47 */ [
+        'eval',
+        `document.body.innerText.toLowerCase().includes('problem')||document.body.innerText.includes('Everybody')`,
+      ],
       ['eval', js.clearSearch],
       ['eval', js.filterUntranslated],
       ['wait', '400'],
       ['screenshot', shot('09-filter.png')],
       ['eval', js.filterAll],
-      // settings
+      // Esc deselect → empty workspace (with tasks still in list)
+      /* 48-51 */ ['eval', js.pressEsc],
+      ['wait', '500'],
+      ['eval', js.isDeselected],
+      ['screenshot', shot('09b-deselected.png')],
+      // re-select + settings
+      /* 52-58 */ ['eval', js.selectSample],
+      ['wait', '800'],
       ['eval', js.openSettings],
       ['wait', '700'],
       ['screenshot', shot('06-settings.png')],
@@ -205,7 +245,7 @@ async function main() {
       ['eval', js.closeSettings],
       ['wait', '300'],
       // translate guard
-      ['eval', js.selectSample],
+      /* 59-68 */ ['eval', js.selectSample],
       ['wait', '500'],
       ['eval', js.clickTranslate],
       ['wait', '1200'],
@@ -226,43 +266,51 @@ async function main() {
       console.log(`  batch ok=${ok} items=${results.length}`);
     }
 
-    // Explicit indices — keep in sync with `commands` above
-    // 0 open, 1 wait, 2 viewport, 3 shot01, 4 version
-    const version = evalResult(results, 4);
+    // Indices must match `commands` above (see comments on each block)
+    const version = evalResult(results, 7);
     if (String(version).includes('v2')) report.pass('version_badge', String(version));
     else report.fail('version_badge', String(version));
 
-    // 8 theme before, 9 toggle, 11 theme after
-    const t1 = evalResult(results, 8);
-    const t2 = evalResult(results, 11);
+    let landing = {};
+    try {
+      landing = JSON.parse(String(evalResult(results, 8) || '{}'));
+    } catch {
+      landing = {};
+    }
+    if (landing.settingsClosed && landing.importInput && landing.importCta) {
+      report.pass(
+        'landing_import_shell',
+        `plus=${landing.sidebarPlus} empty=${landing.emptySidebar} id=${landing.importInputId || 'n/a'}`
+      );
+    } else {
+      report.fail('landing_import_shell', JSON.stringify(landing));
+    }
+
+    const t1 = evalResult(results, 10);
+    const t2 = evalResult(results, 13);
     if (t1 && t2 && t1 !== t2) report.pass('theme_toggle', `${t1} -> ${t2}`);
     else report.fail('theme_toggle', `${t1} -> ${t2}`);
 
-    // 18 terms bodyLen, 19 addTerm, 21 hasTerm
-    const termsLen = Number(evalResult(results, 18) || 0);
+    const termsLen = Number(evalResult(results, 20) || 0);
     if (termsLen > 30) report.pass('nav_terms', `chars=${termsLen}`);
     else report.fail('nav_terms', `chars=${termsLen}`);
-    const addRes = evalResult(results, 19);
-    const hasTerm = evalResult(results, 21);
+    const addRes = evalResult(results, 21);
+    const hasTerm = evalResult(results, 23);
     if (isTrue(hasTerm)) report.pass('add_term', String(addRes));
     else report.fail('add_term', `add=${addRes} has=${hasTerm}`);
 
-    // 26 history bodyLen
-    const histLen = Number(evalResult(results, 26) || 0);
+    const histLen = Number(evalResult(results, 28) || 0);
     if (histLen > 20) report.pass('nav_history', `chars=${histLen}`);
     else report.fail('nav_history', `chars=${histLen}`);
 
-    // 34 taskCount, 35 uploadOk
     const taskCount = evalResult(results, 34);
-    const uploadOk = evalResult(results, 35);
-    if (isTrue(uploadOk) || Number(taskCount) > 0) report.pass('upload_srt', `tasks=${taskCount}`);
-    else report.fail('upload_srt', `tasks=${taskCount} ok=${uploadOk}`);
+    const importOk = evalResult(results, 35);
+    if (isTrue(importOk) || Number(taskCount) > 0) {
+      report.pass('import_srt', `tasks=${taskCount}`);
+    } else {
+      report.fail('import_srt', `tasks=${taskCount} ok=${importOk}`);
+    }
 
-    // After select+waits: hasSearch / searchHit / filter shift by +2 (extra select+wait)
-    // 36 select, 37 wait, 38 select, 39 wait, 40 shot, 41 hasSearch, 42 search, 43 wait, 44 shot, 45 searchHit
-    // 46 clear, 47 filter, 48 wait, 49 shot, 50 filterAll
-    // 51 openSettings, 52 wait, 53 shot, 54 probe, 55 close, 56 wait
-    // 57 select, 58 wait, 59 translate, 60 wait, 61 shot, 62 guard, 63 errors, 64 final shot, 65 version
     const hasSearch = evalResult(results, 41);
     if (isTrue(hasSearch)) report.pass('open_editor', 'editor content present');
     else report.fail('open_editor', String(hasSearch));
@@ -271,9 +319,13 @@ async function main() {
     else report.fail('editor_search', String(searchHit));
     report.pass('editor_filter', String(evalResult(results, 47)));
 
+    const deselected = evalResult(results, 53);
+    if (isTrue(deselected)) report.pass('esc_deselect_task');
+    else report.fail('esc_deselect_task', String(deselected));
+
     let probe = {};
     try {
-      probe = JSON.parse(String(evalResult(results, 54) || '{}'));
+      probe = JSON.parse(String(evalResult(results, 60) || '{}'));
     } catch {
       probe = {};
     }
@@ -284,17 +336,17 @@ async function main() {
     if (probe.hot) report.pass('settings_hotwords');
     else report.fail('settings_hotwords', JSON.stringify(probe));
 
-    const guarded = evalResult(results, 62);
+    const guarded = evalResult(results, 68);
     if (isTrue(guarded)) report.pass('translate_requires_api');
     else report.pass('translate_requires_api', `guard=${guarded}`);
 
-    const errText = JSON.stringify(results[63]?.result || results[63]?.error || '');
+    const errText = JSON.stringify(results[69]?.result || results[69]?.error || '');
     if (/TypeError|ReferenceError|Uncaught/i.test(errText)) {
       report.fail('console_errors', errText.slice(0, 200));
     } else {
       report.pass('console_errors', 'clean');
     }
-    report.pass('still_alive', String(evalResult(results, 65)));
+    report.pass('still_alive', String(evalResult(results, 71)));
 
     // Optional live LLM (separate small batches)
     const llmBase = process.env.E2E_LLM_BASE_URL || '';
@@ -313,7 +365,10 @@ async function main() {
           ['eval', js.clickTest],
           ['wait', '8000'],
           ['screenshot', shot('12-llm-test.png')],
-          ['eval', `document.body.innerText.includes('\u8fde\u63a5\u6210\u529f')||document.body.innerText.includes('\u6210\u529f')`],
+          [
+            'eval',
+            `document.body.innerText.includes('\u8fde\u63a5\u6210\u529f')||document.body.innerText.includes('\u6210\u529f')`,
+          ],
           ['eval', js.clickSave],
           ['wait', '1000'],
           ['eval', js.closeSettings],

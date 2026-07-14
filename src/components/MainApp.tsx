@@ -10,8 +10,8 @@ import {
   Moon,
   Sun,
   LayoutList,
+  Plus,
 } from 'lucide-react';
-import { BatchFileUpload } from './BatchFileUpload';
 import { SubtitleFileList } from './SubtitleFileList';
 import { SubtitleEditor } from './SubtitleEditor';
 import { SettingsModal } from './SettingsModal';
@@ -27,6 +27,7 @@ import { useTermsStore } from '@/stores/termsStore';
 import { useWorkspaceStore, type StageMode } from '@/stores/workspaceStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { useWorkbenchShortcuts } from '@/hooks/useWorkbenchShortcuts';
+import { useFileImport } from '@/hooks/useFileImport';
 import { SubtitleFileMetadata } from '@/types';
 
 const stageMotion = {
@@ -57,12 +58,23 @@ export const MainApp: React.FC = () => {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
 
-  // 默认工作区；未配置时打开设置抽屉（不替换舞台）
+  const {
+    fileInputRef,
+    isDragging,
+    openFilePicker,
+    onFileInputChange,
+    onDragOver,
+    onDragLeave,
+    onDrop,
+    accept,
+    modKeyLabel,
+  } = useFileImport();
+
+  const importShortcut = `${modKeyLabel}+O`;
+
+  // 默认进入工作区（不自动弹设置；未配置时顶栏仍有「必须」提示）
   useEffect(() => {
     openEditor();
-    if (!isConfigured) {
-      openSettings();
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -74,6 +86,27 @@ export const MainApp: React.FC = () => {
     [setSelectedFileId, openEditor]
   );
 
+  /** 取消选中 → 回到可导入的空工作区 */
+  const clearTaskSelection = useCallback(() => {
+    setSelectedFileId(null);
+    openEditor();
+  }, [setSelectedFileId, openEditor]);
+
+  /**
+   * 点任务列表空白取消选中；点任务行 / 工具条 / 控件不处理
+   */
+  const handleTasksAreaClick = useCallback(
+    (e: React.MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('.wb-proj')) return;
+      if (t.closest('.wb-proj-list-tools')) return;
+      if (t.closest('button, a, input, select, textarea, label')) return;
+      if (!selectedFileId) return;
+      clearTaskSelection();
+    },
+    [selectedFileId, clearTaskSelection]
+  );
+
   const handleNav = useCallback(
     (mode: StageMode) => {
       setStage(mode);
@@ -81,16 +114,26 @@ export const MainApp: React.FC = () => {
     [setStage]
   );
 
-  const triggerFilePicker = useCallback(() => {
-    document.querySelector<HTMLInputElement>('.wb-drop input[type="file"]')?.click();
-  }, []);
-
-  useWorkbenchShortcuts({ onOpenFiles: triggerFilePicker });
+  useWorkbenchShortcuts({ onOpenFiles: openFilePicker });
 
   const showEditor = stage === 'editor';
+  const showEmptyWorkspace = showEditor && !selectedFileId;
 
   return (
     <div className="workbench apple-style" data-theme={theme}>
+      {/* 全局隐藏 input：快捷键 / 侧栏+ / 空状态 CTA 共用 */}
+      <input
+        id="wb-file-import"
+        ref={fileInputRef}
+        type="file"
+        accept={accept}
+        multiple
+        className="sr-only"
+        tabIndex={-1}
+        aria-label="导入字幕或音视频"
+        onChange={onFileInputChange}
+      />
+
       <header className="wb-topbar">
         <div className="wb-brand">
           <img
@@ -123,7 +166,7 @@ export const MainApp: React.FC = () => {
               type="button"
               className={`wb-nav-btn ${stage === 'terms' ? 'active' : ''}`}
               onClick={() => handleNav('terms')}
-              title="术语 (Ctrl+Shift+T)"
+              title="术语"
             >
               <BookOpen className="h-3.5 w-3.5" />
               <span className="wb-nav-label">术语</span>
@@ -134,7 +177,7 @@ export const MainApp: React.FC = () => {
               type="button"
               className={`wb-nav-btn ${stage === 'history' ? 'active' : ''}`}
               onClick={() => handleNav('history')}
-              title="历史 (Ctrl+Shift+H)"
+              title="历史"
             >
               <History className="h-3.5 w-3.5" />
               <span className="wb-nav-label">历史</span>
@@ -147,7 +190,7 @@ export const MainApp: React.FC = () => {
               type="button"
               className={`wb-nav-btn ${settingsOpen ? 'active' : ''} ${!isConfigured ? 'warn' : ''}`}
               onClick={openSettings}
-              title="设置 (Ctrl+,)"
+              title="设置"
             >
               <span className="wb-nav-dot" aria-hidden />
               <Settings className="h-3.5 w-3.5" />
@@ -195,14 +238,24 @@ export const MainApp: React.FC = () => {
       </header>
 
       <aside className="wb-sidebar">
-        <div className="wb-upload">
-          <BatchFileUpload compact />
-        </div>
-
-        <div className="wb-tasks">
+        <div className="wb-tasks" onClick={handleTasksAreaClick}>
           <div className="wb-tasks-head">
-            <h2>项目</h2>
-            {fileCount > 0 && <span className="wb-tasks-count">{fileCount}</span>}
+            <div className="wb-tasks-head-main">
+              <h2>项目</h2>
+              {fileCount > 0 && <span className="wb-tasks-count">{fileCount}</span>}
+            </div>
+            <button
+              type="button"
+              className="wb-tasks-import"
+              onClick={(e) => {
+                e.stopPropagation();
+                openFilePicker();
+              }}
+              title={`导入文件（${importShortcut}）`}
+              aria-label="导入文件"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
+            </button>
           </div>
 
           {fileCount > 0 ? (
@@ -215,8 +268,7 @@ export const MainApp: React.FC = () => {
             </div>
           ) : (
             <div className="wb-task-list-empty">
-              <Upload className="h-5 w-5 mx-auto mb-2 opacity-40" />
-              拖入视频 / 字幕开始
+              暂无项目
             </div>
           )}
         </div>
@@ -247,24 +299,47 @@ export const MainApp: React.FC = () => {
             </motion.div>
           )}
 
-          {showEditor && !selectedFileId && (
+          {showEmptyWorkspace && (
             <motion.div key="empty" className="wb-stage-inner" {...stageMotion}>
-              <div className="wb-stage-empty">
+              <div
+                className={`wb-stage-empty wb-stage-drop ${isDragging ? 'is-drag' : ''}`}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+              >
                 <div className="wb-stage-empty-icon">
-                  <FileText className="h-5 w-5" />
+                  {isDragging ? (
+                    <Upload className="h-5 w-5" />
+                  ) : (
+                    <FileText className="h-5 w-5" />
+                  )}
                 </div>
-                <h3>{fileCount > 0 ? '选择一个项目' : '导入文件开始'}</h3>
+                <h3>
+                  {isDragging
+                    ? '松开以导入'
+                    : fileCount > 0
+                      ? '选择一个项目'
+                      : '导入文件开始'}
+                </h3>
                 <p>
                   {fileCount > 0
-                    ? '在左侧点选任务，这里打开字幕编辑与进度。'
-                    : '拖入 SRT 或音视频到左侧。本地处理，隐私安全。'}
+                    ? '从左侧打开任务，或导入新文件'
+                    : '支持 SRT / 音视频，可拖入此处'}
                 </p>
-                <div className="wb-stage-empty-hints">
-                  <button type="button" className="wb-kbd" onClick={triggerFilePicker}>
-                    选择文件
+                <div className="wb-stage-empty-actions">
+                  <button
+                    type="button"
+                    className="wb-stage-cta"
+                    onClick={openFilePicker}
+                    title={`${importShortcut} 导入`}
+                  >
+                    导入文件
+                    <span className="wb-stage-cta-keys" aria-hidden>
+                      {importShortcut}
+                    </span>
                   </button>
                   {!isConfigured && (
-                    <button type="button" className="wb-kbd" onClick={openSettings}>
+                    <button type="button" className="wb-stage-cta secondary" onClick={openSettings}>
                       配置 API
                     </button>
                   )}

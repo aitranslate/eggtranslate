@@ -90,14 +90,17 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
     };
   }, [isOpen, updatePos]);
 
-  // Escape 键关闭
+  // Escape 键关闭（capture，避免与工作台取消选中抢 Esc）
   useEffect(() => {
     if (!isOpen) return;
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      onClose();
     };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
+    window.addEventListener('keydown', handleEsc, true);
+    return () => window.removeEventListener('keydown', handleEsc, true);
   }, [isOpen, onClose]);
 
   const handleSelect = useCallback(

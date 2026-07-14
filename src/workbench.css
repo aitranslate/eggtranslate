@@ -205,12 +205,6 @@ html.dark .wb-nav-btn.active,
   border-right: 1px solid var(--wb-border);
 }
 
-.wb-upload {
-  flex: 0 0 auto;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--wb-border);
-}
-
 .wb-tasks {
   flex: 1;
   min-height: 0;
@@ -225,6 +219,13 @@ html.dark .wb-nav-btn.active,
   gap: 8px;
   padding: 10px 12px 6px;
   flex-shrink: 0;
+}
+
+.wb-tasks-head-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .wb-tasks-head h2 {
@@ -244,6 +245,31 @@ html.dark .wb-nav-btn.active,
   border-radius: 999px;
 }
 
+/* 侧栏常驻导入（有任务选中时仍可用） */
+.wb-tasks-import {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid var(--wb-border);
+  border-radius: 8px;
+  background: var(--wb-panel-2);
+  color: var(--wb-text-2);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.wb-tasks-import:hover {
+  background: var(--wb-brand-soft);
+  border-color: var(--wb-brand);
+  color: var(--wb-brand);
+}
+
 .wb-tasks-actions {
   display: flex;
   align-items: center;
@@ -260,12 +286,32 @@ html.dark .wb-nav-btn.active,
   min-height: 0;
 }
 
+/* 列表区域撑满，便于点下方空白取消选中 */
+.wb-task-list > * {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.wb-task-list .wb-proj-list {
+  flex: 1;
+}
+
 .wb-task-list-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   padding: 24px 14px;
   text-align: center;
   color: var(--wb-text-3);
   font-size: 13.5px;
   line-height: 1.5;
+}
+
+.wb-task-list-empty p {
+  margin: 0;
 }
 
 /* ── Project list (client-native, not web cards) ── */
@@ -1313,6 +1359,26 @@ html.dark .se-toolbar,
   color: var(--wb-text-2);
 }
 
+/* 空工作区拖放命中整块舞台 */
+.wb-stage-drop {
+  border: 1.5px dashed transparent;
+  border-radius: 16px;
+  margin: 12px;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.wb-stage-drop.is-drag {
+  border-color: var(--wb-brand);
+  background: var(--wb-brand-soft);
+}
+
+.wb-stage-drop.is-drag .wb-stage-empty-icon {
+  color: var(--wb-brand);
+  border-color: var(--wb-brand);
+}
+
 .wb-stage-empty-icon {
   width: 52px;
   height: 52px;
@@ -1336,20 +1402,77 @@ html.dark .se-toolbar,
 
 .wb-stage-empty p {
   font-size: 14px;
-  max-width: 340px;
+  max-width: 400px;
   line-height: 1.55;
   margin: 0;
   color: var(--wb-text-3);
 }
 
-.wb-stage-empty-hints {
+.wb-stage-empty-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   justify-content: center;
-  margin-top: 8px;
+  align-items: center;
+  margin-top: 10px;
 }
 
+/* 空状态主操作：导入 + 快捷键融在同一按钮里 */
+.wb-stage-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 14px 0 16px;
+  border-radius: 10px;
+  border: none;
+  background: var(--wb-brand);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.wb-stage-cta:hover {
+  background: var(--apple-blue-hover, #0077ed);
+}
+
+.wb-stage-cta:active {
+  background: var(--apple-blue-active, #0062cc);
+}
+
+.wb-stage-cta-keys {
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.wb-stage-cta.secondary {
+  background: var(--wb-panel);
+  color: var(--wb-text-2);
+  border: 1px solid var(--wb-border);
+  box-shadow: none;
+  padding: 0 14px;
+}
+
+.wb-stage-cta.secondary:hover {
+  background: var(--wb-panel-2);
+  color: var(--wb-text);
+  border-color: var(--wb-border-strong);
+}
+
+.wb-stage-cta.secondary:active {
+  background: var(--wb-panel-2);
+}
+
+/* 列表/工具条里仍可能用到的轻按钮 */
 .wb-kbd {
   display: inline-flex;
   align-items: center;
@@ -1361,6 +1484,13 @@ html.dark .se-toolbar,
   border: 1px solid var(--wb-border);
   color: var(--wb-text-2);
   font-family: inherit;
+  cursor: pointer;
+}
+
+button.wb-kbd:hover {
+  border-color: var(--wb-brand);
+  color: var(--wb-brand);
+  background: var(--wb-brand-soft);
 }
 
 /* ── Stage panels (client settings / glossary / history) ── */
@@ -2138,62 +2268,6 @@ html.dark .wb-alert {
   }
 }
 
-/* Dropzone */
-.wb-drop {
-  border: 1.5px dashed var(--wb-border-strong);
-  border-radius: 10px;
-  background: var(--wb-panel-2);
-  padding: 16px 12px;
-  text-align: center;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
-  position: relative;
-}
-
-.wb-drop:hover,
-.wb-drop.drag {
-  border-color: var(--wb-brand);
-  background: var(--wb-brand-soft);
-}
-
-.wb-drop.drag {
-  transform: scale(1.01);
-}
-
-.wb-drop-icon {
-  width: 32px;
-  height: 32px;
-  margin: 0 auto 8px;
-  border-radius: 9px;
-  background: var(--wb-panel);
-  border: 1px solid var(--wb-border);
-  display: grid;
-  place-items: center;
-  color: var(--wb-brand);
-}
-
-.wb-drop h3 {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 3px;
-  color: var(--wb-text);
-}
-
-.wb-drop p {
-  font-size: 12.5px;
-  color: var(--wb-text-3);
-  line-height: 1.4;
-  margin: 0;
-}
-
-.wb-drop input[type='file'] {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-  max-width: none;
-}
-
 /* ── Status bar ── */
 .wb-statusbar {
   grid-column: 1 / -1;
@@ -2267,15 +2341,7 @@ html.dark .wb-alert {
   background: var(--apple-warning, #ff9500);
 }
 
-.wb-kbd-hint {
-  font-size: 12px;
-}
-
 @media (max-width: 900px) {
-  .wb-kbd-hint {
-    display: none;
-  }
-
   .workbench {
     grid-template-columns: 1fr;
     grid-template-rows: var(--wb-top-h) minmax(180px, 36vh) 1fr var(--wb-status-h);
@@ -2778,20 +2844,6 @@ html.dark .workbench .wb-editor-toolbar,
 .workbench[data-theme='dark'] .wb-editor,
 .workbench[data-theme='dark'] .wb-editor-toolbar {
   background: #161922;
-}
-
-html.dark .workbench .wb-drop,
-.workbench[data-theme='dark'] .wb-drop {
-  background: #1a1d26;
-  border-color: #3d4354;
-}
-
-html.dark .workbench .wb-drop:hover,
-html.dark .workbench .wb-drop.drag,
-.workbench[data-theme='dark'] .wb-drop:hover,
-.workbench[data-theme='dark'] .wb-drop.drag {
-  border-color: #0a84ff;
-  background: rgba(10, 132, 255, 0.1);
 }
 
 html.dark .apple-button {

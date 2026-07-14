@@ -58,10 +58,6 @@ export const StatusBar: React.FC = () => {
         <span className="wb-statusbar-item wb-statusbar-muted" title="本次会话 / 任务累计 Token">
           Tokens {totalTokens.toLocaleString()}
         </span>
-        <span className="wb-statusbar-sep" aria-hidden />
-        <span className="wb-statusbar-item wb-statusbar-muted wb-kbd-hint" title="快捷键">
-          Ctrl+O 上传 · Ctrl+, 设置 · Esc 关闭
-        </span>
       </div>
     </footer>
   );

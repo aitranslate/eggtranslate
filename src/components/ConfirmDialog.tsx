@@ -51,11 +51,13 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopImmediatePropagation();
         onClose();
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // capture：先于工作台 Esc 级联，避免关确认框同时取消任务选中
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [isOpen, onClose]);
 
   const handleConfirm = () => {

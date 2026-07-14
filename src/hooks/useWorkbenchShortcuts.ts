@@ -1,22 +1,35 @@
 /**
- * 工作台快捷键：Ctrl/Cmd+O 上传、Ctrl/Cmd+, 设置、Esc 关闭抽屉/回工作区
+ * 工作台快捷键：
+ * - Ctrl/Cmd+O：导入文件（唯一业务快捷键）
+ * - Esc：关设置 / 回工作区 / 取消选中（有弹层时让位给弹层）
  */
 
 import { useEffect } from 'react';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { useFilesStore } from '@/stores/filesStore';
+
+/** 其它组件已消费 Esc 的浮层（确认框、菜单、Dialog） */
+export function hasEscPriorityOverlay(): boolean {
+  if (typeof document === 'undefined') return false;
+  if (document.querySelector('[role="alertdialog"]')) return true;
+  if (document.querySelector('[role="menu"]')) return true;
+  // Radix Dialog（如移动端菜单）
+  if (document.querySelector('[role="dialog"][data-state="open"]')) return true;
+  if (document.querySelector('[data-radix-dialog-content]')) return true;
+  return false;
+}
 
 export function useWorkbenchShortcuts(options: {
   onOpenFiles: () => void;
   enabled?: boolean;
 }) {
   const { onOpenFiles, enabled = true } = options;
-  const openSettings = useWorkspaceStore((s) => s.openSettings);
   const closeSettings = useWorkspaceStore((s) => s.closeSettings);
   const settingsOpen = useWorkspaceStore((s) => s.settingsOpen);
   const openEditor = useWorkspaceStore((s) => s.openEditor);
-  const openTerms = useWorkspaceStore((s) => s.openTerms);
-  const openHistory = useWorkspaceStore((s) => s.openHistory);
   const stage = useWorkspaceStore((s) => s.stage);
+  const selectedFileId = useFilesStore((s) => s.selectedFileId);
+  const setSelectedFileId = useFilesStore((s) => s.setSelectedFileId);
 
   useEffect(() => {
     if (!enabled) return;
@@ -30,10 +43,12 @@ export function useWorkbenchShortcuts(options: {
         tag === 'select' ||
         target?.isContentEditable;
 
-      const mod = e.metaKey || e.ctrlKey;
-
-      // Esc：优先关设置抽屉，再回工作区
+      // Esc：弹层优先 → 关设置 → 回工作区 → 取消任务选中
       if (e.key === 'Escape' && !inField) {
+        if (hasEscPriorityOverlay()) {
+          // ConfirmDialog / ExportMenu / MobileMenu 自行处理
+          return;
+        }
         if (settingsOpen) {
           e.preventDefault();
           closeSettings();
@@ -42,34 +57,23 @@ export function useWorkbenchShortcuts(options: {
         if (stage !== 'editor') {
           e.preventDefault();
           openEditor();
+          return;
+        }
+        if (selectedFileId) {
+          e.preventDefault();
+          setSelectedFileId(null);
         }
         return;
       }
 
+      const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
 
-      if (e.key.toLowerCase() === 'o' && !e.shiftKey) {
+      if (e.key.toLowerCase() === 'o' && !e.shiftKey && !e.altKey) {
+        // 输入框内不抢浏览器「打开」心智；非输入区才导入
+        if (inField) return;
         e.preventDefault();
         onOpenFiles();
-        return;
-      }
-
-      if (e.key === ',') {
-        e.preventDefault();
-        openSettings();
-        return;
-      }
-
-      if (e.key.toLowerCase() === 't' && e.shiftKey) {
-        e.preventDefault();
-        openTerms();
-        return;
-      }
-
-      if (e.key.toLowerCase() === 'h' && e.shiftKey) {
-        e.preventDefault();
-        openHistory();
-        return;
       }
     };
 
@@ -78,12 +82,11 @@ export function useWorkbenchShortcuts(options: {
   }, [
     enabled,
     onOpenFiles,
-    openSettings,
     closeSettings,
     settingsOpen,
     openEditor,
-    openTerms,
-    openHistory,
     stage,
+    selectedFileId,
+    setSelectedFileId,
   ]);
 }
