@@ -77,13 +77,13 @@ async function addMediaFile(file: File, defaultKeytermGroupId: string | null): P
     // 双保险：addTask 已 flush，这里再 await 确保 MP3 key 与任务列表一致落盘
     await flushFilesStorePersist();
 
-    // 4) 上传成功 toast（覆盖 loading toast，4s 后自动消失）
-    toast.success(`上传成功：${file.name}`, { id: toastId, duration: 4000 });
+    // 4) 上传成功 toast（覆盖 loading；时长走全局 success 配置）
+    toast.success(`上传成功：${file.name}`, { id: toastId });
     return result.metadata.id;
   } catch (error) {
     const appError = toAppError(error, '上传失败');
     logger.error(appError.message, appError);
-    toast.error(`上传失败：${file.name}（${appError.message}）`, { id: toastId, duration: 4000 });
+    toast.error(`上传失败：${file.name}（${appError.message}）`, { id: toastId });
     return null;
   }
 }

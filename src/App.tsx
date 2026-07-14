@@ -1,4 +1,4 @@
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster, ToastBar } from 'react-hot-toast';
 import { MainApp } from '@/components/MainApp';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import '@/index.css';
@@ -10,7 +10,8 @@ function App() {
       <Toaster
         position="top-right"
         toastOptions={{
-          duration: 4000,
+          // 未指定类型时的兜底
+          duration: 3000,
           style: {
             background: '#ffffff',
             color: '#1d1d1f',
@@ -21,19 +22,54 @@ function App() {
             fontWeight: '400',
           },
           success: {
+            duration: 2500,
             iconTheme: {
               primary: '#10B981',
               secondary: '#fff',
             },
           },
           error: {
+            duration: 4000,
             iconTheme: {
               primary: '#EF4444',
               secondary: '#fff',
             },
           },
         }}
-      />
+      >
+        {(t) => (
+          <ToastBar toast={t}>
+            {({ icon, message }) => {
+              const dismissible = t.type !== 'loading';
+              return (
+                <div
+                  role={dismissible ? 'button' : undefined}
+                  tabIndex={dismissible ? 0 : undefined}
+                  onClick={() => {
+                    if (dismissible) toast.dismiss(t.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (!dismissible) return;
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toast.dismiss(t.id);
+                    }
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    cursor: dismissible ? 'pointer' : 'default',
+                  }}
+                  title={dismissible ? '点击关闭' : undefined}
+                >
+                  {icon}
+                  {message}
+                </div>
+              );
+            }}
+          </ToastBar>
+        )}
+      </Toaster>
     </ErrorBoundary>
   );
 }
