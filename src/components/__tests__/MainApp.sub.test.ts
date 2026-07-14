@@ -34,6 +34,12 @@ describe('MainApp workbench shell', () => {
     expect(src).toContain('wb-tasks-import');
   });
 
+  it('branches to MobileShell on mobile breakpoint', () => {
+    expect(src).toContain('useIsMobile');
+    expect(src).toContain('MobileShell');
+    expect(src).toMatch(/if\s*\(\s*isMobile\s*\)/);
+  });
+
   it('does not mount per-character SplitHeading', () => {
     expect(src).not.toContain('SplitHeading');
     expect(src).not.toContain('from \'./motion/FadeIn\'');

@@ -18,7 +18,6 @@ import { SettingsModal } from './SettingsModal';
 import { TermsManager } from './TermsManager';
 import { HistoryModal } from './HistoryModal';
 import { StatusBar } from './StatusBar';
-import { PWAInstallBanner } from './PWAInstallBanner';
 import { MobileMenu } from './MobileMenu';
 import { useFileCount, useFilesStore } from '@/stores/filesStore';
 import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
@@ -28,6 +27,8 @@ import { useWorkspaceStore, type StageMode } from '@/stores/workspaceStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { useWorkbenchShortcuts } from '@/hooks/useWorkbenchShortcuts';
 import { useFileImport } from '@/hooks/useFileImport';
+import { useIsMobile } from '@/hooks/useIsMobile';
+import { MobileShell } from '@/components/mobile/MobileShell';
 import { SubtitleFileMetadata } from '@/types';
 
 const stageMotion = {
@@ -57,6 +58,7 @@ export const MainApp: React.FC = () => {
 
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
+  const isMobile = useIsMobile();
 
   const {
     fileInputRef,
@@ -114,25 +116,32 @@ export const MainApp: React.FC = () => {
     [setStage]
   );
 
-  useWorkbenchShortcuts({ onOpenFiles: openFilePicker });
+  useWorkbenchShortcuts({ onOpenFiles: openFilePicker, enabled: !isMobile });
 
   const showEditor = stage === 'editor';
   const showEmptyWorkspace = showEditor && !selectedFileId;
 
+  const fileInput = (
+    <input
+      id="wb-file-import"
+      ref={fileInputRef}
+      type="file"
+      accept={accept}
+      multiple
+      className="sr-only"
+      tabIndex={-1}
+      aria-label="导入字幕或音视频"
+      onChange={onFileInputChange}
+    />
+  );
+
+  if (isMobile) {
+    return <MobileShell openFilePicker={openFilePicker} fileInput={fileInput} />;
+  }
+
   return (
     <div className="workbench apple-style" data-theme={theme}>
-      {/* 全局隐藏 input：快捷键 / 侧栏+ / 空状态 CTA 共用 */}
-      <input
-        id="wb-file-import"
-        ref={fileInputRef}
-        type="file"
-        accept={accept}
-        multiple
-        className="sr-only"
-        tabIndex={-1}
-        aria-label="导入字幕或音视频"
-        onChange={onFileInputChange}
-      />
+      {fileInput}
 
       <header className="wb-topbar">
         <div className="wb-brand">
@@ -355,7 +364,6 @@ export const MainApp: React.FC = () => {
       {/* 右侧设置抽屉：浮在工作区之上 */}
       <SettingsModal isOpen={settingsOpen} />
 
-      <PWAInstallBanner />
       <MobileMenu
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
