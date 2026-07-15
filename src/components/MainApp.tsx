@@ -6,14 +6,11 @@ import {
   BookOpen,
   History,
   Menu,
-  FileText,
-  Upload,
   Moon,
   Sun,
   Volume2,
   VolumeX,
   LayoutList,
-  Sparkles,
 } from 'lucide-react';
 import { SubtitleFileList } from './SubtitleFileList';
 import { SubtitleEditor } from './SubtitleEditor';
@@ -25,13 +22,18 @@ import {
 } from './lazySurfaces';
 import { StatusBar } from './StatusBar';
 import { MobileMenu } from './MobileMenu';
+import { EmptyWorkspaceHero, OnboardingHost } from '@/components/onboarding';
 import { useFileCount, useFilesStore } from '@/stores/filesStore';
-import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
+import {
+  useIsTranslationConfigured,
+  useTranslationConfigStore,
+} from '@/stores/translationConfigStore';
 import { useHistoryStore } from '@/stores/historyStore';
 import { useTermsStore } from '@/stores/termsStore';
 import { useWorkspaceStore, type StageMode } from '@/stores/workspaceStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { useSoundStore } from '@/stores/soundStore';
+import { useOnboardingStore } from '@/stores/onboardingStore';
 import { playAppSound } from '@/utils/appSound';
 import { useWorkbenchShortcuts } from '@/hooks/useWorkbenchShortcuts';
 import { useFileImport } from '@/hooks/useFileImport';
@@ -40,6 +42,7 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { MobileShell } from '@/components/mobile/MobileShell';
 import { importSampleSubtitle } from '@/utils/importSampleSubtitle';
+import { resolveSampleFollowUpTip } from '@/utils/onboarding';
 import { SubtitleFileMetadata } from '@/types';
 
 const stageMotion = {
@@ -119,6 +122,8 @@ export const MainApp: React.FC = () => {
         setSelectedFileId(id);
         openEditor();
         toast.success('已导入示例字幕');
+        const isCfg = useTranslationConfigStore.getState().isConfigured;
+        useOnboardingStore.getState().showTipIfNew(resolveSampleFollowUpTip(isCfg));
       }
     } catch (err) {
       handleError(err, { context: { operation: '导入示例' } });
@@ -289,7 +294,7 @@ export const MainApp: React.FC = () => {
             <button
               type="button"
               className={`wb-nav-btn ${settingsOpen ? 'active' : ''} ${!isConfigured ? 'warn' : ''}`}
-              onClick={openSettings}
+              onClick={() => openSettings()}
               title="设置"
             >
               <span className="wb-nav-dot" aria-hidden />
@@ -380,67 +385,25 @@ export const MainApp: React.FC = () => {
 
           {showEmptyWorkspace && (
             <motion.div key="empty" className="wb-stage-inner" {...stageMotion}>
-              <div
-                className={`wb-stage-empty wb-stage-drop ${isDragging ? 'is-drag' : ''}`}
+              <EmptyWorkspaceHero
+                isDragging={isDragging}
+                fileCount={fileCount}
+                isConfigured={isConfigured}
+                sampleLoading={sampleLoading}
+                importShortcut={importShortcut}
+                onImport={openFilePicker}
+                onSample={() => void handleSample()}
+                onConfigure={() => openSettings('translation')}
                 onDragOver={onDragOver}
                 onDragLeave={onDragLeave}
                 onDrop={onDrop}
-              >
-                <div className="wb-stage-empty-icon">
-                  {isDragging ? (
-                    <Upload className="h-5 w-5" />
-                  ) : (
-                    <FileText className="h-5 w-5" />
-                  )}
-                </div>
-                <h3>
-                  {isDragging
-                    ? '松开以导入'
-                    : fileCount > 0
-                      ? '选择一个项目'
-                      : '导入文件开始'}
-                </h3>
-                <p>
-                  {fileCount > 0
-                    ? '从左侧打开任务，或导入新文件'
-                    : '支持 SRT / 音视频，可拖入此处'}
-                </p>
-                <div className="wb-stage-empty-actions">
-                  <button
-                    type="button"
-                    className="wb-stage-cta"
-                    onClick={openFilePicker}
-                    title={`${importShortcut} 导入`}
-                    data-testid="desktop-import-cta"
-                  >
-                    导入文件
-                    <span className="wb-stage-cta-keys" aria-hidden>
-                      {importShortcut}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="wb-stage-cta secondary"
-                    onClick={() => void handleSample()}
-                    disabled={sampleLoading}
-                    data-testid="desktop-sample-import"
-                    title="导入内置示例字幕"
-                  >
-                    <Sparkles className="h-3.5 w-3.5 inline-block mr-1 align-[-2px]" />
-                    {sampleLoading ? '导入中…' : '试用示例字幕'}
-                  </button>
-                  {!isConfigured && (
-                    <button type="button" className="wb-stage-cta secondary" onClick={openSettings}>
-                      配置 API
-                    </button>
-                  )}
-                </div>
-              </div>
+              />
             </motion.div>
           )}
         </AnimatePresence>
       </main>
 
+      <OnboardingHost />
       <StatusBar />
 
       {/* 首次打开后懒加载并保持挂载；isOpen 控制显隐，保留未保存草稿 */}

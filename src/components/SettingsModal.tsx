@@ -17,10 +17,15 @@ import {
 } from '@/utils/llmProfiles';
 import { toastError } from '@/utils/appToast';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { useOnboardingStore } from '@/stores/onboardingStore';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { testLlmConnection } from '@/services/llmTranslationService';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { SettingsHint } from '@/components/SettingsHint';
 import { shouldConfirmDiscardSettings } from '@/utils/uxHelpers';
+import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
+import { useTranscriptionStore } from '@/stores/transcriptionStore';
+import { isTranscriptionApiConfigured } from '@/utils/onboarding';
 
 interface SettingsModalProps {
   isOpen?: boolean;
@@ -37,6 +42,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const updateConfig = useTranslationConfigStore((state) => state.updateConfig);
   const closeSettings = useWorkspaceStore((s) => s.closeSettings);
   const openEditor = useWorkspaceStore((s) => s.openEditor);
+  const settingsFocus = useWorkspaceStore((s) => s.settingsFocus);
+  const clearSettingsFocus = useWorkspaceStore((s) => s.clearSettingsFocus);
+  const resetOnboarding = useOnboardingStore((s) => s.resetOnboarding);
+  const isTranslationConfigured = useIsTranslationConfigured();
+  const transcriptionApiKeys = useTranscriptionStore((s) => s.apiKeys);
+  const isTranscriptionConfigured = isTranscriptionApiConfigured(transcriptionApiKeys);
   const isMobile = useIsMobile();
 
   const [isTesting, setIsTesting] = useState(false);
@@ -81,7 +92,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setDirty(false);
   }, [isOpen, config]);
 
+  // 深链到翻译 / 转录区块
+  useEffect(() => {
+    if (!isOpen || !settingsFocus) return;
+    const id =
+      settingsFocus === 'transcription'
+        ? 'settings-section-transcription'
+        : 'settings-section-translation';
+    const t = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      clearSettingsFocus();
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [isOpen, settingsFocus, clearSettingsFocus]);
+
   const activeProfile = getActiveProfile(formData);
+
+  const handleResetOnboarding = useCallback(() => {
+    resetOnboarding();
+    toast.success('已重置上手引导，关闭设置后可在工作区查看');
+  }, [resetOnboarding]);
 
   const onTestConnection = useCallback(async () => {
     setIsTesting(true);
@@ -178,11 +208,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </header>
 
             <div className="wb-drawer-scroll wb-drawer-scroll-full">
-              <section className="wb-drawer-section">
+              <section className="wb-drawer-section" id="settings-section-translation">
                 <header className="wb-prefs-section-head">
                   <h3>翻译</h3>
                   <p>服务商、密钥与源/目标语言</p>
                 </header>
+                {!isTranslationConfigured && (
+                  <div className="wb-prefs-block ob-settings-hint-block">
+                    <SettingsHint>
+                      上手：选择服务商预设 → 填入 API Key → 点「测试连接」→「保存」。密钥只保存在本机浏览器。
+                    </SettingsHint>
+                  </div>
+                )}
                 <div className="wb-prefs-block">
                   <TranslationSettings
                     config={formData}
@@ -204,11 +241,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </section>
 
-              <section className="wb-drawer-section">
+              <section className="wb-drawer-section" id="settings-section-transcription">
                 <header className="wb-prefs-section-head">
                   <h3>转录</h3>
                   <p>AssemblyAI、字幕长度与热词</p>
                 </header>
+                {!isTranscriptionConfigured && (
+                  <div className="wb-prefs-block ob-settings-hint-block">
+                    <SettingsHint>
+                      音视频路径：填入 AssemblyAI API Key → 导入 MP4/MP3 等 → 点「转录 / 转译」。可配置多个 Key（用 | 分隔）轮询。
+                    </SettingsHint>
+                  </div>
+                )}
                 <div className="wb-prefs-block">
                   <TranscriptionSettings compact />
                 </div>
@@ -227,6 +271,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onUpdateActiveProfile={onUpdateActiveProfile}
                     sections="params"
                   />
+                </div>
+              </section>
+
+              <section className="wb-drawer-section" id="settings-section-help">
+                <header className="wb-prefs-section-head">
+                  <h3>使用帮助</h3>
+                  <p>翻译与转录两条路径；密钥仅存本机</p>
+                </header>
+                <div className="wb-prefs-block ob-help-block">
+                  <p className="ob-help-path-title">路径 A · 字幕翻译</p>
+                  <ol className="ob-help-steps">
+                    <li>试用示例或导入 SRT</li>
+                    <li>在「翻译」配置 LLM API 并保存</li>
+                    <li>开始翻译 → 导出原文 / 译文 / 双语</li>
+                  </ol>
+                  <p className="ob-help-path-title">路径 B · 音视频转录</p>
+                  <ol className="ob-help-steps">
+                    <li>在「转录」配置 AssemblyAI API Key</li>
+                    <li>导入 MP4 / MP3 等音视频</li>
+                    <li>点转录或转译（转录后可再翻译）→ 导出</li>
+                  </ol>
+                  <button
+                    type="button"
+                    className="wb-tool"
+                    onClick={handleResetOnboarding}
+                    data-testid="reset-onboarding"
+                  >
+                    重新查看上手引导
+                  </button>
                 </div>
               </section>
             </div>

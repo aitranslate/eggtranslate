@@ -9,13 +9,18 @@ import { ALL_PHASES } from '@/types';
 import { useFilesStore } from '@/stores/filesStore';
 import { useQueueStore } from '@/stores/queueStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
-import { enqueueTask, dequeueTask } from '@/services/queueService';
+import { dequeueTask } from '@/services/queueService';
+import {
+  startPrimaryForFile,
+  startTranscribeTask,
+} from '@/services/startTask';
 import { exportFile } from '@/services/SubtitleExporter';
 import { ExportButton } from '@/components/common/ExportButton';
 import { canRetranscribe } from '@/utils/fileUtils';
 import type { ExportFormat } from '@/utils/fileExport';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { useOnboardingStore } from '@/stores/onboardingStore';
 
 interface MobileDetailBarProps {
   file: SubtitleFileMetadata;
@@ -82,24 +87,18 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
       dequeueTask(file.id);
       return;
     }
-    if (isAudioVideo && !isTranscriptionDone) {
-      useFilesStore.getState().setWorkflow(file.id, 'full');
-      enqueueTask(file.id);
-    } else {
-      useFilesStore.getState().setWorkflow(file.id, 'translate');
-      enqueueTask(file.id);
-    }
-  }, [isQueued, isAudioVideo, isTranscriptionDone, file.id]);
+    startPrimaryForFile(file);
+  }, [isQueued, file]);
 
   const handleTranscribe = useCallback(() => {
-    useFilesStore.getState().setWorkflow(file.id, 'transcribe');
-    enqueueTask(file.id);
+    startTranscribeTask(file.id);
   }, [file.id]);
 
   const handleExport = useCallback(
     async (format: ExportFormat) => {
       try {
         await exportFile(file.taskId, file.name, format);
+        useOnboardingStore.getState().markExported();
         toast.success('导出成功');
       } catch (error) {
         handleError(error, { context: { operation: '导出', fileName: file.name } });

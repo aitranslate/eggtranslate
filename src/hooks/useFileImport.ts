@@ -3,16 +3,30 @@
  * 供工作区空状态拖放、Ctrl/Cmd+O、侧栏导入按钮共用
  */
 
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import {
+  createElement,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+} from 'react';
 import toast from 'react-hot-toast';
 import { addFile, selectFile } from '@/services/filesService';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import {
   formatImportProgress,
   formatImportSummary,
   unsupportedImportMessage,
 } from '@/utils/uxHelpers';
+import {
+  isMediaImportFileName,
+  isTranscriptionApiConfigured,
+} from '@/utils/onboarding';
+import { useOnboardingStore } from '@/stores/onboardingStore';
 
 export const IMPORT_ACCEPT =
   '.srt,.mp3,.wav,.m4a,.ogg,.flac,.mp4,.webm,.mkv,.avi,.mov,audio/*,video/*';
@@ -79,6 +93,8 @@ export function useFileImport() {
       let ok = 0;
       let fail = 0;
       let lastId: string | null = null;
+      /** 仅统计成功入库的媒体，避免「SRT 成功 + 媒体失败」仍弹转录 tip */
+      let okMedia = 0;
 
       const progressToastId =
         total > 1 ? toast.loading(formatImportProgress(0, total), { duration: Infinity }) : null;
@@ -91,6 +107,7 @@ export function useFileImport() {
         if (id) {
           ok += 1;
           lastId = id;
+          if (isMediaImportFileName(files[i].name)) okMedia += 1;
         } else {
           fail += 1;
         }
@@ -109,6 +126,35 @@ export function useFileImport() {
       if (lastId) {
         selectFile(lastId);
         useWorkspaceStore.getState().openEditor();
+      }
+
+      // 成功导入音视频且未配置 AssemblyAI：toast + 一次性 tip（不打断导入成功）
+      if (okMedia > 0) {
+        const apiKeys = useTranscriptionStore.getState().apiKeys;
+        if (!isTranscriptionApiConfigured(apiKeys)) {
+          useOnboardingStore.getState().showTipIfNew('after_media_import');
+          toast(
+            (t) =>
+              createElement(
+                'span',
+                { className: 'ob-toast-row' },
+                createElement('span', null, '已导入音视频。开始转录前请配置 AssemblyAI Key。'),
+                createElement(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'ob-toast-link',
+                    onClick: () => {
+                      toast.dismiss(t.id);
+                      useWorkspaceStore.getState().openSettings('transcription');
+                    },
+                  },
+                  '去配置'
+                )
+              ),
+            { duration: 6000, id: 'ob-transcription-hint' }
+          );
+        }
       }
     },
     [importOne]

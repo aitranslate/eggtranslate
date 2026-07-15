@@ -4,10 +4,17 @@ import toast from 'react-hot-toast';
 import { downloadZipFile, type ExportFormat } from '@/utils/fileExport';
 import { exportFile, exportAllPackage, exportAllFormat } from '@/services/SubtitleExporter';
 import { ExportButton } from '@/components/common/ExportButton';
-import { useFiles, useFilesStore } from '@/stores/filesStore';
+import { useFiles } from '@/stores/filesStore';
 import { useQueueStore } from '@/stores/queueStore';
 import { removeFile, clearAll } from '@/services/filesService';
-import { enqueueTask, dequeueTask, enqueueAllUncompleted } from '@/services/queueService';
+import { dequeueTask } from '@/services/queueService';
+import {
+  startAllUncompleted,
+  startFullTask,
+  startTranscribeTask,
+  startTranslateTask,
+} from '@/services/startTask';
+import { useOnboardingStore } from '@/stores/onboardingStore';
 import { SubtitleFileMetadata } from '@/types';
 import { SubtitleFileItemMemo as SubtitleFileItem } from './components/SubtitleFileItem';
 import { SidebarTaskRowMemo as SidebarTaskRow } from './components/SidebarTaskRow';
@@ -62,7 +69,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
 
   const handleStartAll = useCallback(() => {
     if (files.length === 0) return;
-    enqueueAllUncompleted();
+    startAllUncompleted();
   }, [files]);
 
   const handleClearAll = useCallback(async () => {
@@ -105,6 +112,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   const handleExportFile = useCallback(async (file: SubtitleFileMetadata, format: ExportFormat) => {
     try {
       await exportFile(file.taskId, file.name, format);
+      useOnboardingStore.getState().markExported();
       toast.success('导出成功');
     } catch (error) {
       handleError(error, {
@@ -126,6 +134,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
       if (format === 'package') {
         const blob = await exportAllPackage(taskIds);
         downloadZipFile(blob, '字幕导出_全部.zip');
+        useOnboardingStore.getState().markExported();
         toast.success(`已打包 ${exportableFiles.length} 个文件`);
       } else {
         const skipped = await exportAllFormat(taskIds, format);
@@ -133,8 +142,10 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
         if (exported === 0) {
           toast.error('没有可导出的文件（可能均未翻译）');
         } else if (skipped > 0) {
+          useOnboardingStore.getState().markExported();
           toast.success(`已导出 ${exported} 个文件，跳过 ${skipped} 个未翻译文件`);
         } else {
+          useOnboardingStore.getState().markExported();
           toast.success(`已导出 ${exported} 个文件`);
         }
       }
@@ -269,18 +280,15 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                     selected={selectedFileId === file.id}
                     onSelect={handleOpen}
                     onStartTranslation={async () => {
-                      useFilesStore.getState().setWorkflow(file.id, 'translate');
-                      enqueueTask(file.id);
+                      startTranslateTask(file.id);
                     }}
                     onExportFormat={handleExportFile}
                     onDelete={handleDeleteFile}
                     onTranscribeAndTranslate={async () => {
-                      useFilesStore.getState().setWorkflow(file.id, 'full');
-                      enqueueTask(file.id);
+                      startFullTask(file.id);
                     }}
                     onTranscribe={async () => {
-                      useFilesStore.getState().setWorkflow(file.id, 'transcribe');
-                      enqueueTask(file.id);
+                      startTranscribeTask(file.id);
                     }}
                     onDequeue={() => dequeueTask(file.id)}
                     isQueued={isQueued}
@@ -298,18 +306,15 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                   onSelect={handleOpen}
                   onEdit={handleOpen}
                   onStartTranslation={async () => {
-                    useFilesStore.getState().setWorkflow(file.id, 'translate');
-                    enqueueTask(file.id);
+                    startTranslateTask(file.id);
                   }}
                   onExportFormat={handleExportFile}
                   onDelete={handleDeleteFile}
                   onTranscribeAndTranslate={async () => {
-                    useFilesStore.getState().setWorkflow(file.id, 'full');
-                    enqueueTask(file.id);
+                    startFullTask(file.id);
                   }}
                   onTranscribe={async () => {
-                    useFilesStore.getState().setWorkflow(file.id, 'transcribe');
-                    enqueueTask(file.id);
+                    startTranscribeTask(file.id);
                   }}
                   onDequeue={() => dequeueTask(file.id)}
                   isQueued={isQueued}

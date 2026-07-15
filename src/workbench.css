@@ -3091,3 +3091,292 @@ html.dark .wb-statusbar-muted,
 .workbench[data-theme='dark'] .wb-statusbar-muted {
   color: #8b929e;
 }
+
+/* ========== Onboarding (checklist / tip / toast) ========== */
+
+/* 必须低于设置抽屉 (backdrop 60 / drawer 61)，高于 statusbar；设置打开时组件侧会隐藏 */
+.ob-checklist {
+  position: fixed;
+  right: 16px;
+  bottom: 48px;
+  z-index: 50;
+  width: min(280px, calc(100vw - 32px));
+  padding: 12px 12px 10px;
+  border-radius: var(--apple-radius-card, 16px);
+  background: var(--wb-panel, #fff);
+  border: 1px solid var(--wb-border, #e5e5ea);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08), 0 1px 0 rgba(0, 0, 0, 0.04);
+  color: var(--wb-text, #1d1d1f);
+}
+
+.ob-checklist-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ob-checklist-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ob-checklist-sub {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--wb-text-3, #a1a1a6);
+}
+
+.ob-checklist-close {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--wb-text-3);
+  cursor: pointer;
+}
+
+.ob-checklist-close:hover {
+  background: var(--wb-panel-2, #f7f7f8);
+  color: var(--wb-text-2);
+}
+
+.ob-checklist-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ob-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--wb-text-2, #86868b);
+  line-height: 1.35;
+}
+
+.ob-checklist-item.is-done {
+  color: var(--wb-text-3, #a1a1a6);
+}
+
+.ob-checklist-item.is-done span:last-child {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--wb-text-3) 60%, transparent);
+}
+
+.ob-checklist-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1.5px solid var(--wb-border-strong, #d2d2d7);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+  background: transparent;
+}
+
+.ob-checklist-item.is-done .ob-checklist-check {
+  border-color: var(--apple-success, #34c759);
+  background: var(--apple-success, #34c759);
+}
+
+.ob-checklist-action {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--wb-brand, #0071e3);
+  cursor: pointer;
+  text-align: left;
+}
+
+.ob-checklist-action:hover {
+  text-decoration: underline;
+}
+
+.ob-tip {
+  position: fixed;
+  left: 50%;
+  bottom: 56px;
+  transform: translateX(-50%);
+  /* 低于 drawer 61，高于 checklist 50；alert 2400 仍可盖住 tip */
+  z-index: 55;
+  width: min(400px, calc(100vw - 32px));
+  display: flex;
+  gap: 10px;
+  padding: 12px 12px 12px 14px;
+  border-radius: var(--apple-radius-card, 16px);
+  background: var(--wb-panel, #fff);
+  border: 1px solid var(--wb-border, #e5e5ea);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.1);
+  color: var(--wb-text);
+}
+
+.ob-tip-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--apple-blue-soft, rgba(0, 113, 227, 0.08));
+  color: var(--wb-brand, #0071e3);
+}
+
+.ob-tip-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ob-tip-title {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ob-tip-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--wb-text-2);
+}
+
+.ob-tip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ob-tip-btn {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--wb-border-strong, #d2d2d7);
+  background: var(--wb-panel-2, #f7f7f8);
+  color: var(--wb-text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ob-tip-btn.primary {
+  background: var(--wb-brand, #0071e3);
+  border-color: transparent;
+  color: #fff;
+}
+
+.ob-tip-btn:hover {
+  filter: brightness(0.98);
+}
+
+.ob-tip-close {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--wb-text-3);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ob-tip-close:hover {
+  background: var(--wb-panel-2);
+}
+
+.ob-toast-row {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.ob-toast-link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--apple-blue, #0071e3);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.ob-help-steps {
+  margin: 0 0 12px;
+  padding-left: 1.2em;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--wb-text-2);
+}
+
+.ob-help-block .wb-tool {
+  width: 100%;
+  justify-content: center;
+}
+
+.ob-settings-hint-block {
+  margin-bottom: 8px;
+}
+
+@media (max-width: 767.98px) {
+  .ob-checklist {
+    right: 12px;
+    left: 12px;
+    width: auto;
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .ob-tip {
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.ob-checklist-label {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ob-checklist-optional {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--wb-panel-2, #f7f7f8);
+  color: var(--wb-text-3, #a1a1a6);
+  border: 1px solid var(--wb-border, #e5e5ea);
+}
+
+.ob-help-path-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wb-text, #1d1d1f);
+}
+
+.ob-help-path-title + .ob-help-steps {
+  margin-bottom: 14px;
+}

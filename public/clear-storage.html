@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>清理本地数据 · 蛋蛋字幕翻译</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        margin: 0;
+        padding: 24px;
+        background: #f5f5f7;
+        color: #1d1d1f;
+        box-sizing: border-box;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #12141a;
+          color: #eceef2;
+        }
+        .card {
+          background: #1a1d26;
+          border-color: #3d4354;
+        }
+        .muted {
+          color: #a8afbb;
+        }
+        .btn-ghost {
+          background: #232733;
+          color: #eceef2;
+          border-color: #3d4354;
+        }
+      }
+      .card {
+        width: min(420px, 100%);
+        padding: 24px;
+        border-radius: 16px;
+        background: #fff;
+        border: 1px solid #e5e5ea;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.06);
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 8px;
+        letter-spacing: -0.02em;
+      }
+      .muted {
+        margin: 0 0 16px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #86868b;
+      }
+      ul {
+        margin: 0 0 20px;
+        padding-left: 1.2em;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+      button {
+        height: 40px;
+        padding: 0 14px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        border: 1px solid transparent;
+      }
+      .btn-ghost {
+        background: #f5f5f7;
+        color: #1d1d1f;
+        border-color: #d2d2d7;
+      }
+      .btn-danger {
+        background: #ff3b30;
+        color: #fff;
+      }
+      .btn-danger:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      #status {
+        display: none;
+        margin: 0;
+        font-size: 14px;
+      }
+      body.is-done .card-form {
+        display: none;
+      }
+      body.is-done #status {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="card-form">
+        <h1>清理本站本地数据？</h1>
+        <p class="muted">
+          将删除此浏览器中「蛋蛋字幕翻译」的本地数据，且不可恢复。不会影响其他网站。
+        </p>
+        <ul>
+          <li>API Key（翻译 / 转录）与偏好设置</li>
+          <li>任务列表、字幕条目、术语与历史</li>
+          <li>上手引导进度、主题与音效偏好</li>
+        </ul>
+        <div class="actions">
+          <button type="button" class="btn-ghost" id="cancel">取消，返回应用</button>
+          <button type="button" class="btn-danger" id="confirm">确认清理</button>
+        </div>
+      </div>
+      <p id="status">正在清理…</p>
+    </div>
+    <script>
+      const status = document.getElementById('status');
+      const confirmBtn = document.getElementById('confirm');
+      const cancelBtn = document.getElementById('cancel');
+
+      cancelBtn.addEventListener('click', () => {
+        location.replace('/');
+      });
+
+      async function clearAll() {
+        document.body.classList.add('is-done');
+        status.textContent = '正在清理…';
+        try {
+          localStorage.clear();
+          sessionStorage.clear();
+        } catch (e) {}
+        let names = [];
+        try {
+          if (indexedDB.databases) {
+            names = (await indexedDB.databases()).map((d) => d.name).filter(Boolean);
+          } else {
+            names = ['localforage'];
+          }
+        } catch (e) {
+          names = ['localforage'];
+        }
+        for (const name of names) {
+          await new Promise((resolve) => {
+            const req = indexedDB.deleteDatabase(name);
+            req.onsuccess = () => resolve();
+            req.onerror = () => resolve();
+            req.onblocked = () => resolve();
+          });
+        }
+        status.textContent = '已清理，即将返回应用…';
+        setTimeout(() => {
+          location.replace('/');
+        }, 500);
+      }
+
+      confirmBtn.addEventListener('click', () => {
+        confirmBtn.disabled = true;
+        cancelBtn.disabled = true;
+        void clearAll();
+      });
+    </script>
+  </body>
+</html>

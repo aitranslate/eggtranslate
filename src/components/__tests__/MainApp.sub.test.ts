@@ -9,7 +9,14 @@ describe('MainApp workbench shell', () => {
     expect(src).toContain('useFileCount');
     expect(src).toMatch(/const fileCount = useFileCount\(/);
     expect(src).not.toMatch(/const files = useFiles\(/);
-    expect(src).toContain('fileCount > 0');
+    // 空态状态机在 EmptyWorkspaceHero，MainApp 只传 fileCount
+    expect(src).toContain('EmptyWorkspaceHero');
+    expect(src).toContain('fileCount={fileCount}');
+  });
+
+  it('hosts onboarding layer without auto-opening settings', () => {
+    expect(src).toContain('OnboardingHost');
+    expect(src).toContain('resolveSampleFollowUpTip');
   });
 
   it('uses workbench layout and stage routing', () => {

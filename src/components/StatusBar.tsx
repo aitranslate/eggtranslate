@@ -70,7 +70,7 @@ export const StatusBar: React.FC = () => {
           <button
             type="button"
             className="wb-statusbar-item wb-statusbar-warn wb-statusbar-link"
-            onClick={openSettings}
+            onClick={() => openSettings('translation')}
             title="打开设置配置 API"
             data-testid="statusbar-open-settings"
           >
