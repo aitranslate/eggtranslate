@@ -5,8 +5,14 @@
 
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import toast from 'react-hot-toast';
-import { addFile } from '@/services/filesService';
+import { addFile, selectFile } from '@/services/filesService';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
+import {
+  formatImportProgress,
+  formatImportSummary,
+  unsupportedImportMessage,
+} from '@/utils/uxHelpers';
 
 export const IMPORT_ACCEPT =
   '.srt,.mp3,.wav,.m4a,.ogg,.flac,.mp4,.webm,.mkv,.avi,.mov,audio/*,video/*';
@@ -47,29 +53,62 @@ export function useFileImport() {
   const { handleError } = useErrorHandler();
 
   const importOne = useCallback(
-    async (file: File) => {
+    async (file: File): Promise<string | null> => {
       if (!isSupportedImportFile(file)) {
-        toast.error('不支持的文件格式，请选择 .srt 字幕或音视频文件');
-        return;
+        toast.error(unsupportedImportMessage());
+        return null;
       }
       try {
-        await addFile(file);
+        return await addFile(file);
       } catch (err) {
         handleError(err, {
           context: { operation: '加载文件', fileName: file.name },
         });
+        return null;
       }
     },
     [handleError]
   );
 
-  /** 串行导入，避免多文件并发转码与 index 快照冲突 */
+  /** 串行导入；多文件显示 n/N 进度；成功后选中最后导入项并打开工作区 */
   const importFiles = useCallback(
     async (list: FileList | File[] | null | undefined) => {
       if (!list || list.length === 0) return;
       const files = Array.from(list);
-      for (const f of files) {
-        await importOne(f);
+      const total = files.length;
+      let ok = 0;
+      let fail = 0;
+      let lastId: string | null = null;
+
+      const progressToastId =
+        total > 1 ? toast.loading(formatImportProgress(0, total), { duration: Infinity }) : null;
+
+      for (let i = 0; i < files.length; i++) {
+        if (progressToastId) {
+          toast.loading(formatImportProgress(i + 1, total), { id: progressToastId });
+        }
+        const id = await importOne(files[i]);
+        if (id) {
+          ok += 1;
+          lastId = id;
+        } else {
+          fail += 1;
+        }
+      }
+
+      if (progressToastId) {
+        if (ok > 0 && fail === 0) {
+          toast.success(formatImportSummary(ok, fail), { id: progressToastId });
+        } else if (ok === 0) {
+          toast.error(formatImportSummary(ok, fail), { id: progressToastId });
+        } else {
+          toast.success(formatImportSummary(ok, fail), { id: progressToastId });
+        }
+      }
+
+      if (lastId) {
+        selectFile(lastId);
+        useWorkspaceStore.getState().openEditor();
       }
     },
     [importOne]

@@ -1,9 +1,20 @@
-import { useEffect } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import toast, { Toaster, ToastBar } from 'react-hot-toast';
 import { MainApp } from '@/components/MainApp';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { bindAudioUnlock } from '@/utils/appSound';
 import '@/index.css';
+
+/** 默认 Toast 使用主题 token，暗色下不出现死白卡片 */
+const toastBaseStyle: CSSProperties = {
+  background: 'var(--wb-panel, var(--apple-bg-primary, #ffffff))',
+  color: 'var(--wb-text, var(--apple-text-primary, #1d1d1f))',
+  border: '1px solid var(--wb-border, var(--apple-border-lighter, #e8e8ed))',
+  borderRadius: '12px',
+  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
+  fontSize: '14px',
+  fontWeight: '400',
+};
 
 function App() {
   useEffect(() => {
@@ -16,29 +27,20 @@ function App() {
       <Toaster
         position="top-right"
         toastOptions={{
-          // 未指定类型时的兜底
           duration: 3000,
-          style: {
-            background: '#ffffff',
-            color: '#1d1d1f',
-            border: '1px solid #e8e8ed',
-            borderRadius: '12px',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
-            fontSize: '14px',
-            fontWeight: '400',
-          },
+          style: toastBaseStyle,
           success: {
             duration: 2500,
             iconTheme: {
-              primary: '#10B981',
-              secondary: '#fff',
+              primary: 'var(--apple-success, #10B981)',
+              secondary: 'var(--wb-panel, #fff)',
             },
           },
           error: {
             duration: 4000,
             iconTheme: {
-              primary: '#EF4444',
-              secondary: '#fff',
+              primary: 'var(--apple-danger, #EF4444)',
+              secondary: 'var(--wb-panel, #fff)',
             },
           },
         }}

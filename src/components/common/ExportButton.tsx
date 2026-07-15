@@ -6,12 +6,14 @@
  * - variant="button"  批量文字按钮（图标 + "全部导出"，apple-button-secondary 样式）
  *
  * 交互：点击按钮 → 弹出导出格式菜单（Portal 渲染到 body）→ 选择格式后触发 onSelect(format)
+ * 记住上次选择的导出格式（localStorage）
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Download } from 'lucide-react';
 import type { ExportFormat } from '@/utils/fileExport';
 import { ExportMenu } from './ExportMenu';
+import { readLastExportFormat, writeLastExportFormat } from '@/utils/uxHelpers';
 
 interface ExportButtonProps {
   /** 'icon' = 单文件图标按钮；'button' = 批量文字按钮 */
@@ -26,8 +28,6 @@ interface ExportButtonProps {
   title?: string;
 }
 
-const DEFAULT_FORMAT: ExportFormat = 'trans';
-
 export const ExportButton: React.FC<ExportButtonProps> = ({
   variant = 'button',
   disabled = false,
@@ -36,7 +36,7 @@ export const ExportButton: React.FC<ExportButtonProps> = ({
   title = '导出',
 }) => {
   const [open, setOpen] = useState(false);
-  const [currentFormat, setCurrentFormat] = useState<ExportFormat>(DEFAULT_FORMAT);
+  const [currentFormat, setCurrentFormat] = useState<ExportFormat>(() => readLastExportFormat());
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   // 无译文时若当前选中是依赖译文的格式，自动切回 src（仅更新高亮，不触发导出）
@@ -49,6 +49,7 @@ export const ExportButton: React.FC<ExportButtonProps> = ({
   const handleSelect = useCallback(
     (format: ExportFormat) => {
       setCurrentFormat(format);
+      writeLastExportFormat(format);
       onSelect(format);
     },
     [onSelect]

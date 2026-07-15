@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useMemo, memo } from 'react';
+import toast from 'react-hot-toast';
 import {
   FileText,
   Music,
@@ -13,6 +14,7 @@ import {
   Mic,
   Trash2,
   Loader2,
+  Copy,
 } from 'lucide-react';
 import type { SubtitleFileMetadata } from '@/types';
 import { ALL_PHASES } from '@/types';
@@ -28,6 +30,8 @@ import {
 import { canRetranscribe } from '@/utils/fileUtils';
 import type { ExportFormat } from '@/utils/fileExport';
 import { ExportButton } from '@/components/common/ExportButton';
+import { copyToClipboard } from '@/utils/appToast';
+import { getFailedPhaseError } from '@/utils/uxHelpers';
 import { formatFileSize, formatDuration } from '../utils/fileHelpers';
 
 interface SidebarTaskRowProps {
@@ -94,9 +98,20 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
   }, [file.translatedCount, file.entryCount, streamOverlay]);
 
   const isFailed = badge.color === 'red';
+  const failedInfo = useMemo(() => getFailedPhaseError(file.phases), [file.phases]);
   const isDone = badge.color === 'green';
   const isRunning = badge.color === 'blue' || isActive;
   const isWaiting = badge.color === 'yellow' || isQueued;
+
+  const handleCopyError = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!failedInfo?.message) return;
+      const ok = await copyToClipboard(failedInfo.message);
+      if (ok) toast.success('已复制错误信息', { duration: 1200 });
+    },
+    [failedInfo]
+  );
 
   const statusTone = isFailed
     ? 'fail'
@@ -131,11 +146,13 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
     ? '取消排队'
     : isBusy
       ? '处理中'
-      : allPhasesDone
-        ? '已完成'
-        : isAudioVideo && !isTranscriptionDone
-          ? '转译'
-          : '翻译';
+      : isFailed
+        ? '重试'
+        : allPhasesDone
+          ? '已完成'
+          : isAudioVideo && !isTranscriptionDone
+            ? '转译'
+            : '翻译';
 
   const metaLine = useMemo(() => {
     const parts: string[] = [];
@@ -240,12 +257,35 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
         </div>
       )}
 
+      {/* 失败原因常驻可见（不依赖 hover） */}
+      {isFailed && failedInfo && (
+        <div
+          className="wb-proj-error"
+          data-testid="task-error-banner"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="wb-proj-error-text" title={failedInfo.message}>
+            {failedInfo.message}
+          </span>
+          <button
+            type="button"
+            className="wb-proj-error-copy"
+            onClick={(e) => void handleCopyError(e)}
+            title="复制错误信息"
+            aria-label="复制错误信息"
+          >
+            <Copy className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
       {/* 选中展开：客户端工具条，非 Web 大按钮区 */}
       <div className="wb-proj-panel" onClick={(e) => e.stopPropagation()}>
         <div className="wb-proj-panel-inner">
           <div className="wb-proj-phases">
             {displayPhases.map((phase) => {
               const st = file.phases[phase]?.status;
+              const err = file.phases[phase]?.errorMessage;
               const label = phase === 'transcribing' ? '识别' : '翻译';
               return (
                 <span
@@ -257,7 +297,9 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
                       : st === 'completed'
                         ? `${label}完成`
                         : st === 'failed'
-                          ? `${label}失败`
+                          ? err?.trim()
+                            ? `${label}失败：${err}`
+                            : `${label}失败`
                           : label
                   }
                 >

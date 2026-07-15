@@ -19,6 +19,8 @@ import { toastError } from '@/utils/appToast';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { testLlmConnection } from '@/services/llmTranslationService';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { shouldConfirmDiscardSettings } from '@/utils/uxHelpers';
 
 interface SettingsModalProps {
   isOpen?: boolean;
@@ -37,10 +39,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const openEditor = useWorkspaceStore((s) => s.openEditor);
   const isMobile = useIsMobile();
 
-  const handleClose = useCallback(() => {
+  const [isTesting, setIsTesting] = useState(false);
+  const { handleError } = useErrorHandler();
+  const [formData, setFormData] = useState<TranslationConfig>(() => ensureProfiles(config));
+  const [dirty, setDirty] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  const doClose = useCallback(() => {
+    setShowDiscardConfirm(false);
+    setDirty(false);
     onClose?.();
     closeSettings();
   }, [onClose, closeSettings]);
+
+  /** 有未保存翻译草稿时先确认，再丢弃关闭 */
+  const handleClose = useCallback(() => {
+    if (shouldConfirmDiscardSettings(dirty)) {
+      setShowDiscardConfirm(true);
+      return;
+    }
+    doClose();
+  }, [dirty, doClose]);
 
   // 打开时锁 body 滚动，避免底层页跟着滑
   useEffect(() => {
@@ -51,11 +70,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       document.body.style.overflow = prev;
     };
   }, [isOpen]);
-
-  const [isTesting, setIsTesting] = useState(false);
-  const { handleError } = useErrorHandler();
-  const [formData, setFormData] = useState<TranslationConfig>(() => ensureProfiles(config));
-  const [dirty, setDirty] = useState(false);
 
   // 打开时：若有未保存草稿则保留；否则从 store 同步
   const dirtyRef = React.useRef(dirty);
@@ -94,12 +108,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       await updateConfig(ensureProfiles(formData));
       setDirty(false);
       toast.success('设置已保存');
-      handleClose();
+      // 直接关闭，勿走 handleClose（闭包里 dirty 可能仍为 true 会误弹确认）
+      doClose();
       openEditor();
     } catch (error) {
       handleError(error, { context: { operation: '保存翻译设置' } });
     }
-  }, [formData, updateConfig, handleError, handleClose, openEditor]);
+  }, [formData, updateConfig, handleError, doClose, openEditor]);
 
   const onInputChange = useCallback(
     (field: keyof TranslationConfig, value: TranslationConfig[keyof TranslationConfig]) => {
@@ -236,6 +251,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </button>
             </footer>
           </motion.aside>
+
+          <ConfirmDialog
+            isOpen={showDiscardConfirm}
+            onClose={() => setShowDiscardConfirm(false)}
+            onConfirm={doClose}
+            title="放弃未保存的更改？"
+            message="翻译 API / 语言等修改尚未保存，关闭后将丢失。"
+            confirmText="放弃更改"
+            cancelText="继续编辑"
+            tone="danger"
+          />
         </>
       )}
     </AnimatePresence>

@@ -2,11 +2,14 @@
  * 移动端项目行：轻量列表，操作放详情页底栏
  */
 
-import { memo, useMemo } from 'react';
-import { ChevronRight, FileText, Music, Video, Loader2 } from 'lucide-react';
+import { memo, useCallback, useMemo } from 'react';
+import toast from 'react-hot-toast';
+import { ChevronRight, Copy, FileText, Music, Video, Loader2 } from 'lucide-react';
 import type { SubtitleFileMetadata } from '@/types';
 import { ALL_PHASES } from '@/types';
 import { getCardBadge } from '@/utils/badgeHelper';
+import { getFailedPhaseError } from '@/utils/uxHelpers';
+import { copyToClipboard } from '@/utils/appToast';
 import { formatFileSize, formatDuration } from '@/components/SubtitleFileList/utils/fileHelpers';
 
 interface MobileTaskCardProps {
@@ -43,6 +46,7 @@ export const MobileTaskCard = memo(function MobileTaskCard({
       : 0;
 
   const isFailed = badge.color === 'red';
+  const failedInfo = useMemo(() => getFailedPhaseError(file.phases), [file.phases]);
   const isDone = badge.color === 'green';
   const isRunning = badge.color === 'blue' || isActive;
   const isWaiting = badge.color === 'yellow' || isQueued;
@@ -72,11 +76,29 @@ export const MobileTaskCard = memo(function MobileTaskCard({
     return parts.join(' · ');
   }, [file, pct]);
 
+  const handleCopyError = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (!failedInfo?.message) return;
+      const ok = await copyToClipboard(failedInfo.message);
+      if (ok) toast.success('已复制错误信息', { duration: 1200 });
+    },
+    [failedInfo]
+  );
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       className={`m-task tone-${tone}`}
       onClick={() => onOpen(file)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen(file);
+        }
+      }}
     >
       <div className={`m-task-ico type-${file.fileType || 'srt'}`} aria-hidden>
         {isRunning ? (
@@ -92,6 +114,26 @@ export const MobileTaskCard = memo(function MobileTaskCard({
           <span className={`m-task-state tone-${tone}`}>{badge.text}</span>
           {meta ? <span className="m-task-meta">· {meta}</span> : null}
         </div>
+        {isFailed && failedInfo && (
+          <div
+            className="m-task-error"
+            data-testid="task-error-banner"
+            title={failedInfo.message}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="m-task-error-text">{failedInfo.message}</span>
+            <button
+              type="button"
+              className="m-task-error-copy"
+              data-testid="task-error-copy"
+              onClick={(e) => void handleCopyError(e)}
+              title="复制错误信息"
+              aria-label="复制错误信息"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+          </div>
+        )}
         {(isRunning || isQueued || (pct > 0 && pct < 100) || isFailed) && (
           <div className={`m-task-rail ${isFailed ? 'fail' : ''}`}>
             <i
@@ -103,6 +145,6 @@ export const MobileTaskCard = memo(function MobileTaskCard({
         )}
       </div>
       <ChevronRight className="m-task-chevron" aria-hidden />
-    </button>
+    </div>
   );
 });

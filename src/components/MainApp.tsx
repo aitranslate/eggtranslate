@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import toast from 'react-hot-toast';
 import {
   Settings,
   BookOpen,
@@ -12,6 +13,7 @@ import {
   Volume2,
   VolumeX,
   LayoutList,
+  Sparkles,
 } from 'lucide-react';
 import { SubtitleFileList } from './SubtitleFileList';
 import { SubtitleEditor } from './SubtitleEditor';
@@ -33,8 +35,11 @@ import { useSoundStore } from '@/stores/soundStore';
 import { playAppSound } from '@/utils/appSound';
 import { useWorkbenchShortcuts } from '@/hooks/useWorkbenchShortcuts';
 import { useFileImport } from '@/hooks/useFileImport';
+import { useActiveJobBeforeUnload } from '@/hooks/useActiveJobGuard';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { MobileShell } from '@/components/mobile/MobileShell';
+import { importSampleSubtitle } from '@/utils/importSampleSubtitle';
 import { SubtitleFileMetadata } from '@/types';
 
 const stageMotion = {
@@ -45,9 +50,10 @@ const stageMotion = {
 };
 
 export const MainApp: React.FC = () => {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   /** 首次打开后保持设置组件挂载，避免关抽屉丢掉未保存草稿 */
-  const [settingsMounted, setSettingsMounted] = React.useState(false);
+  const [settingsMounted, setSettingsMounted] = useState(false);
+  const [sampleLoading, setSampleLoading] = useState(false);
 
   const fileCount = useFileCount();
   const selectedFileId = useFilesStore((s) => s.selectedFileId);
@@ -69,6 +75,7 @@ export const MainApp: React.FC = () => {
   const soundEnabled = useSoundStore((s) => s.soundEnabled);
   const setSoundEnabled = useSoundStore((s) => s.setSoundEnabled);
   const isMobile = useIsMobile();
+  const { handleError } = useErrorHandler();
 
   /** 开关音效；打开时播一声确认，方便立刻验证听得到 */
   const handleToggleSound = useCallback(() => {
@@ -91,6 +98,9 @@ export const MainApp: React.FC = () => {
 
   const importShortcut = `${modKeyLabel}+O`;
 
+  // 任务进行中拦截刷新/关页
+  useActiveJobBeforeUnload(true);
+
   // 默认进入工作区（不自动弹设置；未配置时顶栏仍有「必须」提示）
   useEffect(() => {
     openEditor();
@@ -100,6 +110,22 @@ export const MainApp: React.FC = () => {
   useEffect(() => {
     if (settingsOpen) setSettingsMounted(true);
   }, [settingsOpen]);
+
+  const handleSample = useCallback(async () => {
+    setSampleLoading(true);
+    try {
+      const id = await importSampleSubtitle();
+      if (id) {
+        setSelectedFileId(id);
+        openEditor();
+        toast.success('已导入示例字幕');
+      }
+    } catch (err) {
+      handleError(err, { context: { operation: '导入示例' } });
+    } finally {
+      setSampleLoading(false);
+    }
+  }, [handleError, setSelectedFileId, openEditor]);
 
   const handleSelectTask = useCallback(
     (file: SubtitleFileMetadata) => {
@@ -158,11 +184,22 @@ export const MainApp: React.FC = () => {
   );
 
   if (isMobile) {
-    return <MobileShell openFilePicker={openFilePicker} fileInput={fileInput} />;
+    return (
+      <>
+        {/* beforeunload 已在上方 hook 注册（mobile 与 desktop 共用 MainApp 挂载） */}
+        <MobileShell openFilePicker={openFilePicker} fileInput={fileInput} />
+      </>
+    );
   }
 
   return (
-    <div className="workbench apple-style" data-theme={theme}>
+    <div
+      className={`workbench apple-style${isDragging ? ' is-file-drag' : ''}`}
+      data-theme={theme}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       {fileInput}
 
       <header className="wb-topbar">
@@ -374,11 +411,23 @@ export const MainApp: React.FC = () => {
                     className="wb-stage-cta"
                     onClick={openFilePicker}
                     title={`${importShortcut} 导入`}
+                    data-testid="desktop-import-cta"
                   >
                     导入文件
                     <span className="wb-stage-cta-keys" aria-hidden>
                       {importShortcut}
                     </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="wb-stage-cta secondary"
+                    onClick={() => void handleSample()}
+                    disabled={sampleLoading}
+                    data-testid="desktop-sample-import"
+                    title="导入内置示例字幕"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 inline-block mr-1 align-[-2px]" />
+                    {sampleLoading ? '导入中…' : '试用示例字幕'}
                   </button>
                   {!isConfigured && (
                     <button type="button" className="wb-stage-cta secondary" onClick={openSettings}>

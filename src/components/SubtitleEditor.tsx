@@ -14,11 +14,16 @@ import {
   useStreamingOverlayStore,
 } from '@/stores/streamingOverlayStore';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { useTranslationConfig } from '@/stores/translationConfigStore';
+import {
+  useTranslationConfig,
+  useTranslationConfigStore,
+} from '@/stores/translationConfigStore';
 import { LANGUAGE_OPTIONS } from '@/constants/languages';
 import { normalizeSrtTime } from '@/utils/timeUtils';
 import { getBilingualDisplayLines } from '@/utils/srtParser';
 import { generateStableFileId } from '@/utils/taskIdGenerator';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { formatMatchCount, swapLanguages } from '@/utils/uxHelpers';
 
 const EMPTY_ENTRIES: SubtitleEntry[] = [];
 /** 五列平铺；原文/译文可显示 SRT 内建换行（约 2 行） */
@@ -398,6 +403,8 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const file = useFile(fileId);
   const updateEntry = useFilesStore((state) => state.updateEntry);
   const config = useTranslationConfig();
+  const updateConfig = useTranslationConfigStore((s) => s.updateConfig);
+  const openSettings = useWorkspaceStore((s) => s.openSettings);
 
   const taskId = file?.taskId;
   const fileEntries = useFilesStore(
@@ -641,6 +648,22 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     return `${src} → ${dst}`;
   }, [config.sourceLanguage, config.targetLanguage]);
 
+  const hasSearchOrFilter = Boolean(searchTerm) || filterType !== 'all';
+  const matchCountLabel = formatMatchCount(filteredEntries.length, hasSearchOrFilter);
+
+  const handleOpenLanguageSettings = useCallback(() => {
+    openSettings();
+  }, [openSettings]);
+
+  const handleSwapLanguages = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const next = swapLanguages(config.sourceLanguage, config.targetLanguage);
+      void updateConfig(next);
+    },
+    [config.sourceLanguage, config.targetLanguage, updateConfig]
+  );
+
   if (variant === 'modal' && !isOpen) {
     return null;
   }
@@ -659,8 +682,26 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
             <div className="font-semibold text-[15px] truncate" title={file?.name || '未知文件'}>
               {file?.name || '未知文件'}
             </div>
-            <div className="text-[13px] text-[var(--wb-text-3)] flex flex-wrap gap-x-2 gap-y-0.5">
-              <span>{langStrip}</span>
+            <div className="text-[13px] text-[var(--wb-text-3)] flex flex-wrap gap-x-2 gap-y-0.5 items-center">
+              <button
+                type="button"
+                className="se-lang-strip"
+                onClick={handleOpenLanguageSettings}
+                title="打开设置修改语言"
+                data-testid="editor-lang-strip"
+              >
+                {langStrip}
+              </button>
+              <button
+                type="button"
+                className="se-lang-swap"
+                onClick={handleSwapLanguages}
+                title="交换源语言与目标语言"
+                aria-label="交换语言"
+                data-testid="editor-lang-swap"
+              >
+                ⇄
+              </button>
               <span>·</span>
               <span>{translationStats.total} 条</span>
               <span>·</span>
@@ -715,6 +756,11 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
               <option value="translated">已翻译</option>
               <option value="untranslated">未翻译</option>
             </select>
+            {matchCountLabel && (
+              <span className="se-match-count" data-testid="editor-match-count">
+                {matchCountLabel}
+              </span>
+            )}
           </div>
         </div>
 

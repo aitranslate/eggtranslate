@@ -532,6 +532,63 @@ html.dark .wb-proj-tool.primary:disabled,
   min-width: 0;
 }
 
+/* 失败原因常驻行（侧栏） */
+.wb-proj-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 4px 10px 2px 42px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--apple-danger-soft, #fff5f5);
+  border: 1px solid color-mix(in srgb, var(--apple-danger, #ff3b30) 22%, transparent);
+  max-width: 100%;
+}
+
+.wb-proj-error-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--apple-danger, #ff3b30);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+
+.wb-proj-error-copy {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--apple-danger, #ff3b30);
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.wb-proj-error-copy:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--apple-danger) 12%, transparent);
+}
+
+.workbench.is-file-drag .wb-stage::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 8px;
+  border: 2px dashed var(--apple-blue);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--apple-blue) 6%, transparent);
+  z-index: 5;
+}
+
 .wb-proj-dot {
   width: 5px;
   height: 5px;
@@ -894,6 +951,50 @@ html.dark .wb-proj-tool.primary:disabled,
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.se-match-count {
+  font-size: 12px;
+  color: var(--wb-text-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.se-lang-strip {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--apple-blue);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.se-lang-strip:hover {
+  text-decoration: underline;
+}
+
+.se-lang-swap {
+  border: none;
+  background: var(--wb-panel-2);
+  color: var(--wb-text-2);
+  width: 22px;
+  height: 20px;
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.se-lang-swap:hover {
+  color: var(--apple-blue);
+  background: var(--apple-blue-soft);
 }
 
 .se-search-input {
@@ -2090,11 +2191,14 @@ html.dark .wb-drawer {
   color: var(--wb-brand);
 }
 
-/* ── Client alert / confirm ── */
+/* ── Client alert / confirm ──
+ * Must sit above settings drawer (.wb-drawer 2301 !important in mobile.css)
+ * so dirty-close / delete confirms remain usable while settings is open.
+ */
 .wb-alert-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 2400 !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2246,6 +2350,21 @@ html.dark .wb-alert {
 .wb-statusbar-warn {
   color: var(--apple-warning, #ff9500);
   font-weight: 500;
+}
+
+.wb-statusbar-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.wb-statusbar-link:hover {
+  filter: brightness(1.08);
 }
 
 .wb-statusbar-sep {

@@ -3,8 +3,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { isSupportedImportFile, importModKeyLabel, useFileImport } from '../useFileImport';
 
+const selectFileMock = vi.fn();
+const openEditorMock = vi.fn();
+
 vi.mock('@/services/filesService', () => ({
   addFile: vi.fn(async (file: File) => `id-${file.name}`),
+  selectFile: (...args: unknown[]) => selectFileMock(...args),
+}));
+
+vi.mock('@/stores/workspaceStore', () => ({
+  useWorkspaceStore: {
+    getState: () => ({ openEditor: openEditorMock }),
+  },
 }));
 
 vi.mock('@/hooks/useErrorHandler', () => ({
@@ -15,7 +25,7 @@ vi.mock('react-hot-toast', () => ({
   default: {
     error: vi.fn(),
     success: vi.fn(),
-    loading: vi.fn(),
+    loading: vi.fn((..._a: unknown[]) => 'progress-toast'),
   },
 }));
 
@@ -46,6 +56,10 @@ describe('useFileImport.importFiles', () => {
   beforeEach(() => {
     vi.mocked(addFile).mockClear();
     vi.mocked(toast.error).mockClear();
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(toast.loading).mockClear();
+    selectFileMock.mockClear();
+    openEditorMock.mockClear();
   });
 
   it('skips unsupported files and toasts', async () => {
@@ -55,6 +69,7 @@ describe('useFileImport.importFiles', () => {
     });
     expect(addFile).not.toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalled();
+    expect(selectFileMock).not.toHaveBeenCalled();
   });
 
   it('imports supported files sequentially via addFile', async () => {
@@ -76,5 +91,9 @@ describe('useFileImport.importFiles', () => {
 
     expect(addFile).toHaveBeenCalledTimes(2);
     expect(order).toEqual(['start:a.srt', 'end:a.srt', 'start:b.srt', 'end:b.srt']);
+    // 多文件：进度 toast + 选中最后成功项并打开工作区
+    expect(toast.loading).toHaveBeenCalled();
+    expect(selectFileMock).toHaveBeenCalledWith('id-b.srt');
+    expect(openEditorMock).toHaveBeenCalled();
   });
 });
