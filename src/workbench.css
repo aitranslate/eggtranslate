@@ -1053,6 +1053,15 @@ html.dark .se-list::-webkit-scrollbar-thumb:hover {
   color: inherit;
 }
 
+/* 批次漏译 / 无独立译文：与 completed 空字符串区分 */
+.se-row.is-missing {
+  box-shadow: inset 3px 0 0 var(--apple-warning, #ff9500);
+}
+.se-row-dst.is-missing,
+.se-row-dst.is-missing .se-placeholder {
+  color: var(--apple-warning, #ff9500);
+}
+
 .se-row-editing {
   background: var(--apple-blue-soft);
   box-shadow: inset 3px 0 0 var(--wb-brand);

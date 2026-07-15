@@ -1,5 +1,8 @@
-// 翻译状态类型（streaming = 当前批次流式输出中）
-export type TranslationStatus = 'pending' | 'streaming' | 'completed';
+// 翻译状态类型
+// - streaming: 当前批次流式输出中
+// - completed: 有独立译文的成功行
+// - missing: 批次定稿时 LLM 未给出独立译文（合并/漏条），与 completed 区分，可重试
+export type TranslationStatus = 'pending' | 'streaming' | 'completed' | 'missing';
 
 // 文件类型（从 transcription.ts 导入并导出）
 import type { FileType } from './transcription';

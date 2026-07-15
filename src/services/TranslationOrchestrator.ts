@@ -34,8 +34,10 @@ export interface TranslationCallbacks {
     contextAfter?: string,
     terms?: string,
     /** 流式 partial：key 为 "1"|"2"|...，与 texts 下标对应 */
-    onPartial?: (translations: Record<string, { direct: string }>) => void
-  ) => Promise<{ translations: Record<string, { direct: string }>; tokensUsed: number }>;
+    onPartial?: (translations: Record<string, { direct: string }>) => void,
+    /** 格式重试 attempt 从 1 起；>1 时应清本批 overlay */
+    onAttemptStart?: (attempt: number) => void
+  ) => Promise<{ translations: Record<string, { direct: string }>; tokensUsed: number; partial?: boolean }>;
   /**
    * Apply an entire batch of entry patches in one store mutation.
    * Prefer this over per-line updateEntry on the translation hot path.
@@ -55,6 +57,8 @@ export interface TranslationCallbacks {
   applyStreamingPartials?: (updates: Array<{ id: number; text: string }>) => void;
   /** 批次定稿或失败后清掉对应条目的流式 overlay */
   clearStreamingIds?: (ids: number[]) => void;
+  /** 从 store 读当前条目（补扫 missing/pending 用） */
+  getCurrentEntries?: () => SubtitleEntry[];
   updateProgress: (
     current: number,
     total: number,
@@ -76,7 +80,7 @@ export interface TranslationOptions {
 }
 
 /**
- * 计算实际翻译进度
+ * 计算实际翻译进度（仅 completed 算成功；missing 可重试）
  */
 export function calculateActualProgress(entries: SubtitleEntry[]): {
   completed: number;
@@ -86,6 +90,54 @@ export function calculateActualProgress(entries: SubtitleEntry[]): {
     entry => entry.translationStatus === 'completed'
   ).length;
   return { completed, total: entries.length };
+}
+
+export type BatchEntryUpdate = {
+  id: number;
+  text: string;
+  translatedText: string;
+  status: TranslationStatus;
+};
+
+/**
+ * 将 LLM 返回映射为条目更新。
+ * - 有非空 direct → completed
+ * - 键缺失 / 空 direct → missing（不再伪装成 completed + 空译文）
+ */
+export function finalizeBatchTranslations(
+  untranslatedEntries: Array<Pick<SubtitleEntry, 'id' | 'text'>>,
+  translations: Record<string, { direct: string }>
+): BatchEntryUpdate[] {
+  const updates: BatchEntryUpdate[] = [];
+  const returnedEntryIds = new Set<number>();
+
+  for (const [key, value] of Object.entries(translations)) {
+    const resultIndex = parseInt(key, 10) - 1;
+    const entry = untranslatedEntries[resultIndex];
+    if (!entry || typeof value !== 'object' || value == null) continue;
+    const direct = typeof value.direct === 'string' ? value.direct : '';
+    if (!direct.trim()) continue;
+    returnedEntryIds.add(entry.id);
+    updates.push({
+      id: entry.id,
+      text: entry.text,
+      translatedText: direct,
+      status: 'completed',
+    });
+  }
+
+  for (const entry of untranslatedEntries) {
+    if (!returnedEntryIds.has(entry.id)) {
+      updates.push({
+        id: entry.id,
+        text: entry.text,
+        translatedText: '',
+        status: 'missing',
+      });
+    }
+  }
+
+  return updates;
 }
 
 /**
@@ -185,40 +237,19 @@ export async function processBatch(
       batch.contextBeforeTexts,
       batch.contextAfterTexts,
       termsText,  // 使用格式化后的术语
-      onPartial
+      onPartial,
+      // 重试时清掉上轮半截流式，避免「UI 31 条 / 定稿失败」叠在一起
+      (attempt) => {
+        if (attempt > 1) callbacks.clearStreamingIds?.(batchEntryIds);
+      }
     );
 
-    const batchUpdates: { id: number; text: string; translatedText: string; status: TranslationStatus }[] = [];
-
-    // 记录 LLM 返回的条目 ID
-    const returnedEntryIds = new Set<number>();
-
-    for (const [key, value] of Object.entries(translationResult.translations)) {
-      const resultIndex = parseInt(key) - 1;
-      const untranslatedEntry = batch.untranslatedEntries[resultIndex];
-
-      if (untranslatedEntry && typeof value === 'object' && value.direct) {
-        returnedEntryIds.add(untranslatedEntry.id);
-        batchUpdates.push({
-          id: untranslatedEntry.id,
-          text: untranslatedEntry.text,
-          translatedText: value.direct,
-          status: 'completed'
-        });
-      }
-    }
-
-    // 对于批次中 LLM 未返回的条目（合并翻译策略），也标记为 completed
-    for (const entry of batch.untranslatedEntries) {
-      if (!returnedEntryIds.has(entry.id)) {
-        batchUpdates.push({
-          id: entry.id,
-          text: entry.text,
-          translatedText: '',  // LLM 采用合并策略，本条无独立翻译
-          status: 'completed'
-        });
-      }
-    }
+    const batchUpdates = finalizeBatchTranslations(
+      batch.untranslatedEntries,
+      translationResult.translations
+    );
+    const filledCount = batchUpdates.filter((u) => u.status === 'completed').length;
+    const missingCount = batchUpdates.filter((u) => u.status === 'missing').length;
 
     // 先清 overlay 再落正式数据，避免一帧内 overlay 盖住 completed
     callbacks.clearStreamingIds?.(batchEntryIds);
@@ -227,10 +258,12 @@ export async function processBatch(
       // One store mutation for the whole batch (not one per line)
       await callbacks.batchUpdateEntries(batchUpdates);
 
-      // 传递本次翻译使用的 tokens
-      await updateProgressCallback(batchUpdates.length, translationResult.tokensUsed);
+      // 进度只计有独立译文的行；missing 不计入 completed
+      await updateProgressCallback(filledCount, translationResult.tokensUsed);
 
-      logger.info(`批次 ${batch.batchIndex + 1} 翻译成功，更新了 ${batchUpdates.length} 个条目，消耗 ${translationResult.tokensUsed} tokens`);
+      logger.info(
+        `批次 ${batch.batchIndex + 1} 定稿：completed=${filledCount} missing=${missingCount}，消耗 ${translationResult.tokensUsed} tokens`
+      );
     }
 
     return { batchIndex: batch.batchIndex, success: true };
@@ -313,14 +346,46 @@ export async function executeTranslation(
     }
   }
 
-  // 完成翻译
-  const finalProgress = calculateActualProgress(entries);
+  // 补扫：主循环后仍 pending/missing 的行再跑一轮（流式缺 key 落 missing 后可再凑）
+  if (callbacks.getCurrentEntries && !controller.signal.aborted) {
+    const latest = callbacks.getCurrentEntries();
+    const incomplete = latest.filter((e) => e.translationStatus !== 'completed');
+    if (incomplete.length > 0) {
+      logger.info(`主循环后补扫 ${incomplete.length} 条未完成译文`);
+      const recoveryBatches = createTranslationBatches(latest, config, callbacks);
+      for (let i = 0; i < recoveryBatches.length; i += config.threadCount) {
+        if (controller.signal.aborted) break;
+        const group = recoveryBatches.slice(i, i + config.threadCount);
+        try {
+          await Promise.all(
+            group.map((batch) =>
+              processBatch(
+                batch,
+                controller,
+                callbacks,
+                callbacks.formatTermsForPrompt,
+                updateProgressCallback
+              )
+            )
+          );
+        } catch (error) {
+          // 补扫失败不整单推翻：已有译文保留，缺条维持 missing
+          logger.error('补扫批次失败（保留已译结果）:', error);
+          break;
+        }
+      }
+    }
+  }
+
+  // 完成翻译：进度以 store 最新条目为准（勿用启动时的 entries 快照）
+  const finalEntries = callbacks.getCurrentEntries?.() ?? entries;
+  const finalProgress = calculateActualProgress(finalEntries);
   const statusText =
-    finalProgress.completed === entries.length ? '翻译完成' : '部分翻译';
+    finalProgress.completed === finalEntries.length ? '翻译完成' : '部分翻译';
 
   await callbacks.updateProgress(
     finalProgress.completed,
-    entries.length,
+    finalEntries.length,
     'completed',
     statusText,
     taskId

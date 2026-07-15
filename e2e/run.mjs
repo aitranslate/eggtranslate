@@ -115,22 +115,49 @@ const js = {
   pressEsc: `(()=>{window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));return 'ok'})()`,
   /** 取消选中后：编辑器关闭，回到空工作区提示 */
   isDeselected: `!document.querySelector('.se-search-input')&&(document.body.innerText.includes('\u9009\u62e9\u4e00\u4e2a\u9879\u76ee')||document.body.innerText.includes('\u5bfc\u5165\u6587\u4ef6'))`,
-  configureLlm: (base, key, model) => `(()=>{
-    const set=(el,v)=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));};
+  /** 点「自定义」服务商 */
+  pickCustomProvider: `(()=>{
     const d=document.querySelector('.wb-drawer');if(!d)return 'no-drawer';
     const custom=Array.from(d.querySelectorAll('button')).find(x=>(x.textContent||'').includes('\u81ea\u5b9a\u4e49'));
-    if(custom) custom.click();
+    if(!custom)return 'no-custom';
+    custom.click();
+    return 'ok';
+  })()`,
+  /** 展开「接口地址与模型」折叠区 */
+  expandEndpoint: `(()=>{
+    const d=document.querySelector('.wb-drawer');if(!d)return 'no-drawer';
+    const ep=Array.from(d.querySelectorAll('button')).find(b=>(b.textContent||'').includes('\u63a5\u53e3\u5730\u5740'));
+    if(!ep)return 'no-ep';
+    if(ep.getAttribute('aria-expanded')!=='true') ep.click();
+    return ep.getAttribute('aria-expanded')||'clicked';
+  })()`,
+  configureLlm: (base, key, model) => `(()=>{
+    const set=(el,v)=>{
+      const proto=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
+      proto.set.call(el,v);
+      el.dispatchEvent(new Event('input',{bubbles:true}));
+      el.dispatchEvent(new Event('change',{bubbles:true}));
+    };
+    const d=document.querySelector('.wb-drawer');if(!d)return 'no-drawer';
     const keyInput=d.querySelector('input[placeholder*="API Key"],input[type=password]');
     if(!keyInput)return 'no-key';
     set(keyInput,${JSON.stringify(key)});
+    // 展开折叠后再找 Base URL / 模型（懒挂载）
     const ep=Array.from(d.querySelectorAll('button')).find(b=>(b.textContent||'').includes('\u63a5\u53e3\u5730\u5740'));
     if(ep&&ep.getAttribute('aria-expanded')!=='true') ep.click();
     const inputs=Array.from(d.querySelectorAll('input'));
     const baseEl=inputs.find(i=>(i.placeholder||'').includes('api.example')||(i.placeholder||'').includes('https://'));
-    const modelEl=inputs.find(i=>(i.placeholder||'').includes('\u6a21\u578b')||(i.placeholder||'').includes('\u624b\u586b'));
-    if(baseEl) set(baseEl,${JSON.stringify(base)});
-    if(modelEl) set(modelEl,${JSON.stringify(model)});
-    return JSON.stringify({keyLen:keyInput.value.length,base:baseEl&&baseEl.value,model:modelEl&&modelEl.value});
+    const modelEl=inputs.find(i=>(i.placeholder||'').includes('\u6a21\u578b')||(i.placeholder||'').includes('\u624b\u586b')||(i.placeholder||'').includes('\u641c\u7d22'));
+    if(!baseEl)return 'no-base-input';
+    if(!modelEl)return 'no-model-input';
+    set(baseEl,${JSON.stringify(base)});
+    set(modelEl,${JSON.stringify(model)});
+    return JSON.stringify({
+      keyLen:keyInput.value.length,
+      base:baseEl.value,
+      model:modelEl.value,
+      ep:ep?ep.getAttribute('aria-expanded'):null
+    });
   })()`,
   clickSave: `(()=>{const b=Array.from(document.querySelectorAll('.wb-drawer button')).find(x=>(x.textContent||'').includes('\u4fdd\u5b58'));if(!b)return 'nf';b.click();return 'ok'})()`,
   clickTest: `(()=>{const b=Array.from(document.querySelectorAll('.wb-drawer button')).find(x=>(x.textContent||'').includes('\u6d4b\u8bd5\u8fde\u63a5'));if(!b)return 'nf';if(b.disabled)return 'disabled';b.click();return 'ok'})()`,
@@ -241,7 +268,7 @@ async function main() {
       /* 52-58 */ ['eval', js.selectSample],
       ['wait', '800'],
       ['eval', js.openSettings],
-      ['wait', '700'],
+      ['wait', '1800'],
       ['screenshot', shot('06-settings.png')],
       ['eval', js.settingsProbe],
       ['eval', js.closeSettings],
@@ -377,28 +404,56 @@ async function main() {
     if (LIVE && llmBase && llmKey) {
       console.log('→ live LLM…');
       // mobile smoke left us at 390px; restore desktop workbench
+      // 先确认 dev server 仍存活（长跑 smoke 后偶发断连）
+      {
+        const alive = await fetch(server.baseUrl, { signal: AbortSignal.timeout(3000) })
+          .then((r) => r.ok)
+          .catch(() => false);
+        if (!alive) {
+          console.log('  dev server down before live; re-ensure…');
+          if (server.child) {
+            try {
+              stopServer(server.child);
+            } catch {
+              /* ignore */
+            }
+          }
+          server = await ensureServer();
+          console.log(server.started ? '  restarted' : '  reused', server.baseUrl);
+        }
+      }
       ab.batch(
         [
           ['set', 'viewport', '1440', '900'],
           ['open', `${server.baseUrl}/?e2e-live=${Date.now()}`],
-          ['wait', '2000'],
+          ['wait', '2500'],
         ],
         { timeout: 60000 }
       );
+      // 设置抽屉懒加载 + 接口区折叠：分步点开再填表
       const live1 = ab.batch(
         [
           ['eval', js.openSettings],
-          ['wait', '600'],
-          ['eval', js.configureLlm(llmBase, llmKey, llmModel)],
-          ['wait', '400'],
-          ['screenshot', shot('11-llm-configured.png')],
-          ['eval', js.clickTest],
-          ['wait', '8000'],
-          ['screenshot', shot('12-llm-test.png')],
+          ['wait', '2000'],
           [
             'eval',
-            `document.body.innerText.includes('\u8fde\u63a5\u6210\u529f')||document.body.innerText.includes('\u6210\u529f')`,
+            `document.querySelector('.wb-drawer')?'drawer-ok':'no-drawer'`,
           ],
+          ['eval', js.pickCustomProvider],
+          ['wait', '600'],
+          ['eval', js.expandEndpoint],
+          ['wait', '700'],
+          ['eval', js.configureLlm(llmBase, llmKey, llmModel)],
+          ['wait', '500'],
+          ['screenshot', shot('11-llm-configured.png')],
+          ['eval', js.clickTest],
+          // toast 成功约 2.5s，必须在消失前采样
+          ['wait', '3500'],
+          [
+            'eval',
+            `document.body.innerText.includes('\u8fde\u63a5\u6210\u529f')||document.body.innerText.includes('\u8fde\u63a5\u6d4b\u8bd5\u6210\u529f')||document.body.innerText.includes('API \u914d\u7f6e\u6b63\u5e38')||document.body.innerText.includes('\u914d\u7f6e\u6b63\u5e38')`,
+          ],
+          ['screenshot', shot('12-llm-test.png')],
           ['eval', js.clickSave],
           ['wait', '1000'],
           ['eval', js.closeSettings],
@@ -407,9 +462,32 @@ async function main() {
         { timeout: 120000 }
       );
       const liveResults = live1.results || [];
-      const cfg = ab.batchEvalResult(liveResults[2]);
-      report.pass('llm_form_fill', String(cfg).slice(0, 100));
-      const testOk = ab.batchEvalResult(liveResults[7]);
+      // 0 open, 1 wait, 2 drawer, 3 custom, 4 wait, 5 expand, 6 wait, 7 configure, ...
+      const drawerProbe = ab.batchEvalResult(liveResults[2]);
+      const cfg = ab.batchEvalResult(liveResults[7]);
+      const cfgStr = String(cfg);
+      let cfgObj = {};
+      try {
+        cfgObj = JSON.parse(cfgStr);
+      } catch {
+        /* raw string */
+      }
+      if (
+        String(drawerProbe) !== 'drawer-ok' ||
+        cfgStr.includes('no-drawer') ||
+        cfgStr.startsWith('no-') ||
+        !cfgObj.base ||
+        !cfgObj.model
+      ) {
+        report.fail(
+          'llm_form_fill',
+          `drawer=${drawerProbe} cfg=${cfgStr.slice(0, 120)}`
+        );
+      } else {
+        report.pass('llm_form_fill', cfgStr.slice(0, 100));
+      }
+      // 9 shot, 10 clickTest, 11 wait 3.5s, 12 success text, 13 shot
+      const testOk = ab.batchEvalResult(liveResults[12]);
       if (isTrue(testOk)) report.pass('llm_test_connection');
       else report.fail('llm_test_connection', String(testOk));
 

@@ -78,7 +78,11 @@ interface FilesState {
   updatePhase: (
     fileId: string,
     phase: keyof Omit<FilePhases, "workflow">,
-    update: Partial<PhaseProgress>
+    /**
+     * tokensDelta：在单次 set 内原子累加 tokens（并发 batch 安全）。
+     * 与 tokens 同时传时以 tokensDelta 为准。
+     */
+    update: Partial<PhaseProgress> & { tokensDelta?: number }
   ) => void;
   setWorkflow: (fileId: string, workflow: WorkflowType) => void;
   setSelectedKeytermGroupId: (fileId: string, groupId: string | null) => void;
@@ -290,18 +294,35 @@ export const useFilesStore = create<FilesState>()(
       updatePhase: (fileId, phase, update) => {
         const file = get().getFile(fileId);
         if (!file) return;
-        if (update.status === "completed") {
-          update = { ...update, errorMessage: undefined };
+        const { tokensDelta, ...rest } = update;
+        let patch: Partial<PhaseProgress> = { ...rest };
+        if (patch.status === "completed") {
+          patch = { ...patch, errorMessage: undefined };
         }
         set((state) => ({
-          tasks: state.tasks.map((t) =>
-            t.taskId === file.taskId
-              ? { ...t, phases: { ...t.phases, [phase]: { ...t.phases[phase], ...update } } }
-              : t
-          ),
+          tasks: state.tasks.map((t) => {
+            if (t.taskId !== file.taskId) return t;
+            const prev = t.phases[phase];
+            const next: PhaseProgress = { ...prev, ...patch };
+            // 并发 batch：tokens 在单次 set 内累加，避免 read-modify-write 丢数
+            if (typeof tokensDelta === "number" && tokensDelta !== 0) {
+              next.tokens = Math.max(0, (prev.tokens || 0) + tokensDelta);
+            }
+            // 进度只前进不回退（并发回调乱序时）
+            if (
+              typeof patch.progress === "number" &&
+              typeof prev.progress === "number" &&
+              patch.progress < prev.progress &&
+              patch.status !== "failed" &&
+              patch.status !== "completed"
+            ) {
+              next.progress = prev.progress;
+            }
+            return { ...t, phases: { ...t.phases, [phase]: next } };
+          }),
         }));
         // terminal phase transitions: flush coalesced persist promptly
-        if (update.status === "completed" || update.status === "failed") {
+        if (patch.status === "completed" || patch.status === "failed") {
           void flushFilesStorePersist();
         }
       },

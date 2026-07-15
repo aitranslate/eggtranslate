@@ -270,6 +270,34 @@ describe('filesStore persist coalescing', () => {
   });
 });
 
+describe('updatePhase tokensDelta / progress', () => {
+  beforeEach(() => {
+    useFilesStore.setState({ tasks: [], selectedFileId: null });
+  });
+
+  it('tokensDelta accumulates atomically across sequential updates', () => {
+    const fileId = generateStableFileId('t1');
+    useFilesStore.setState({ tasks: [makeTask()] });
+
+    useFilesStore.getState().updatePhase(fileId, 'translating', {
+      progress: 25,
+      tokensDelta: 10,
+    });
+    useFilesStore.getState().updatePhase(fileId, 'translating', {
+      progress: 50,
+      tokensDelta: 7,
+    });
+    useFilesStore.getState().updatePhase(fileId, 'translating', {
+      progress: 40, // concurrent-style stale progress — must not go backwards
+      tokensDelta: 3,
+    });
+
+    const phase = useFilesStore.getState().tasks[0].phases.translating;
+    expect(phase.tokens).toBe(20);
+    expect(phase.progress).toBe(50);
+  });
+});
+
 describe('useFileCount selector', () => {
   beforeEach(() => {
     useFilesStore.setState({ tasks: [], selectedFileId: null });

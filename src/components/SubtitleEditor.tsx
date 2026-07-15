@@ -79,6 +79,7 @@ export const SubtitleDisplayRow = memo<DisplayRowProps>(({
   readOnly = false,
 }) => {
   const isStreaming = entry.translationStatus === 'streaming';
+  const isMissing = entry.translationStatus === 'missing';
   const tryEdit = (field: FocusField) => {
     if (readOnly) return;
     onStartEdit(entry, field);
@@ -89,6 +90,7 @@ export const SubtitleDisplayRow = memo<DisplayRowProps>(({
       data-testid={`subtitle-row-${entry.id}`}
       data-editing="false"
       data-readonly={readOnly ? 'true' : 'false'}
+      data-status={entry.translationStatus}
       style={{
         position: 'absolute',
         top: 0,
@@ -97,8 +99,14 @@ export const SubtitleDisplayRow = memo<DisplayRowProps>(({
         height: ROW_HEIGHT,
         transform: `translateY(${start}px)`,
       }}
-      className={`se-row${readOnly ? ' is-readonly' : ''}`}
-      title={readOnly ? '任务处理中，完成后可编辑' : undefined}
+      className={`se-row${readOnly ? ' is-readonly' : ''}${isMissing ? ' is-missing' : ''}`}
+      title={
+        readOnly
+          ? '任务处理中，完成后可编辑'
+          : isMissing
+            ? '本条无独立译文（模型漏条或合并），可点击补译'
+            : undefined
+      }
       onClick={() => tryEdit('translation')}
     >
       <div className="se-row-idx">#{index + 1}</div>
@@ -137,8 +145,15 @@ export const SubtitleDisplayRow = memo<DisplayRowProps>(({
         <MultiLineText text={entry.text} emptyLabel="（空原文）" />
       </div>
       <div
-        className={`se-row-dst ${entry.translatedText || isStreaming ? '' : 'empty'}${isStreaming ? ' is-streaming' : ''}`}
-        title={entry.translatedText || (readOnly ? '任务处理中，完成后可编辑' : undefined)}
+        className={`se-row-dst ${entry.translatedText || isStreaming ? '' : 'empty'}${isStreaming ? ' is-streaming' : ''}${isMissing ? ' is-missing' : ''}`}
+        title={
+          entry.translatedText ||
+          (readOnly
+            ? '任务处理中，完成后可编辑'
+            : isMissing
+              ? '无独立译文，点击编辑或重新翻译'
+              : undefined)
+        }
         onClick={(e) => {
           e.stopPropagation();
           tryEdit('translation');
@@ -152,7 +167,13 @@ export const SubtitleDisplayRow = memo<DisplayRowProps>(({
         ) : (
           <MultiLineText
             text={entry.translatedText || ''}
-            emptyLabel={readOnly ? '处理中…' : '点击编辑译文'}
+            emptyLabel={
+              isMissing
+                ? '漏译 · 可重试或点击补全'
+                : readOnly
+                  ? '处理中…'
+                  : '点击编辑译文'
+            }
           />
         )}
       </div>

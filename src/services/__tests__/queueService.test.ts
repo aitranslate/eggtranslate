@@ -1,7 +1,13 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useFilesStore } from '@/stores/filesStore';
 import { useQueueStore } from '@/stores/queueStore';
-import { enqueueTask, dequeueTask, enqueueAllUncompleted, processNext } from '../queueService';
+import {
+  enqueueTask,
+  dequeueTask,
+  enqueueAllUncompleted,
+  processNext,
+  resetQueueServiceDeps,
+} from '../queueService';
 import type { SingleTask, FilePhases } from '@/types';
 
 vi.mock('localforage', () => ({
@@ -68,9 +74,14 @@ const fid = (taskId: string) => `file_${taskId}`;
 
 describe('queueService', () => {
   beforeEach(() => {
+    resetQueueServiceDeps();
     useFilesStore.setState({ tasks: [] });
     useQueueStore.setState({ taskQueue: [], activeTaskId: null });
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    resetQueueServiceDeps();
   });
 
   it('enqueueTask adds fileId to queue and plays confirm sound', async () => {

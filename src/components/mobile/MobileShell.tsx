@@ -2,7 +2,7 @@
  * 移动端专用壳：列表 ↔ 详情，设置全屏抽屉
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   BookOpen,
@@ -20,9 +20,12 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { SubtitleEditor } from '@/components/SubtitleEditor';
-import { SettingsModal } from '@/components/SettingsModal';
-import { TermsManager } from '@/components/TermsManager';
-import { HistoryModal } from '@/components/HistoryModal';
+import {
+  LazyHistoryModal,
+  LazySettingsModal,
+  LazySurface,
+  LazyTermsManager,
+} from '@/components/lazySurfaces';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { MobileTaskCard } from '@/components/mobile/MobileTaskCard';
 import { MobileDetailBar } from '@/components/mobile/MobileDetailBar';
@@ -49,6 +52,7 @@ export interface MobileShellProps {
 export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileInput }) => {
   const [sampleLoading, setSampleLoading] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [settingsMounted, setSettingsMounted] = useState(false);
 
   const files = useFiles();
   const selectedFileId = useFilesStore((s) => s.selectedFileId);
@@ -78,6 +82,10 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
     setSoundEnabled(next);
     if (next) playAppSound('confirm');
   }, [setSoundEnabled]);
+
+  useEffect(() => {
+    if (settingsOpen) setSettingsMounted(true);
+  }, [settingsOpen]);
 
   const queueMeta = useMemo(() => {
     const map = new Map<string, number>();
@@ -222,13 +230,17 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
       <main className="m-main">
         {stage === 'terms' && (
           <div className="m-panel">
-            <TermsManager variant="panel" />
+            <LazySurface>
+              <LazyTermsManager variant="panel" />
+            </LazySurface>
           </div>
         )}
 
         {stage === 'history' && (
           <div className="m-panel">
-            <HistoryModal variant="panel" />
+            <LazySurface>
+              <LazyHistoryModal variant="panel" />
+            </LazySurface>
           </div>
         )}
 
@@ -335,7 +347,11 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
         </nav>
       )}
 
-      <SettingsModal isOpen={settingsOpen} />
+      {settingsMounted && (
+        <LazySurface fallback={null}>
+          <LazySettingsModal isOpen={settingsOpen} />
+        </LazySurface>
+      )}
 
       <ConfirmDialog
         isOpen={showClearConfirm}

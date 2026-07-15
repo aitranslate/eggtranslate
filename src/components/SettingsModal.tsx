@@ -18,6 +18,7 @@ import {
 import { toastError } from '@/utils/appToast';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { testLlmConnection } from '@/services/llmTranslationService';
 
 interface SettingsModalProps {
   isOpen?: boolean;
@@ -56,8 +57,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [formData, setFormData] = useState<TranslationConfig>(() => ensureProfiles(config));
   const [dirty, setDirty] = useState(false);
 
+  // 打开时：若有未保存草稿则保留；否则从 store 同步
+  const dirtyRef = React.useRef(dirty);
+  dirtyRef.current = dirty;
   useEffect(() => {
     if (!isOpen) return;
+    if (dirtyRef.current) return;
     setFormData(ensureProfiles(config));
     setDirty(false);
   }, [isOpen, config]);
@@ -65,39 +70,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const activeProfile = getActiveProfile(formData);
 
   const onTestConnection = useCallback(async () => {
-    const currentApiKey = activeProfile.apiKey?.trim();
-    if (!currentApiKey) {
-      toastError('请先输入 API 密钥');
-      return;
-    }
     setIsTesting(true);
     try {
-      const apiKey = currentApiKey
-        .split('|')
-        .map((key) => key.trim())
-        .filter((key) => key.length > 0)[0];
-
-      const response = await fetch(`${activeProfile.baseURL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: activeProfile.model,
-          messages: [{ role: 'user', content: 'Hello' }],
-          max_tokens: 10,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          (errorData as { error?: { message?: string } })?.error?.message ||
-            `HTTP ${response.status}`
-        );
+      const result = await testLlmConnection(activeProfile);
+      if (result.ok === false) {
+        toastError(result.message);
+        return;
       }
-      await response.json();
       toast.success('连接成功，API 配置正常');
     } catch (error) {
       handleError(error, {

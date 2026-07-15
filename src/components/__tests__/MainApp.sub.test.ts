@@ -23,7 +23,10 @@ describe('MainApp workbench shell', () => {
 
   it('settings is a drawer overlay, not a stage that replaces workspace', () => {
     expect(src).toContain('settingsOpen');
-    expect(src).toContain('<SettingsModal isOpen={settingsOpen}');
+    // 首次打开后保持挂载；isOpen 控制显隐，不占用 stage
+    expect(src).toContain('settingsMounted');
+    expect(src).toContain('LazySettingsModal');
+    expect(src).toMatch(/isOpen=\{settingsOpen\}/);
     expect(src).not.toContain("stage === 'settings'");
   });
 

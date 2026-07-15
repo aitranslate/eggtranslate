@@ -1,10 +1,9 @@
 /**
  * 翻译 Service
- * 编排翻译流程
+ * 编排单文件翻译流程：会话态 → Orchestrator → phase / 历史
  *
- * 从原 subtitleStore.startTranslation 提取（463 行 → service 层）
- * - 通过 useFilesStore.getState() 访问状态
- * - 不再持有业务编排逻辑在 store 内
+ * - 默认通过 store getState 接线（App 运行时）
+ * - 可通过 deps 注入依赖（单测 / 将来非 React 宿主）
  *
  * 注：断句（DP 断句）统一在转录阶段完成：音视频走 segmentWords，
  * 直接上传 SRT 不再二次断句。本服务只负责翻译，不含 AI 断句对齐。
@@ -15,19 +14,101 @@ import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { useTermsStore } from '@/stores/termsStore';
 import { useStreamingOverlayStore } from '@/stores/streamingOverlayStore';
 import { executeTranslation } from './TranslationOrchestrator';
+import { translateBatch as llmTranslateBatch } from './llmTranslationService';
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import {
   getRelevantTerms as getRelevantTermsUtil,
   formatTermsForPrompt as formatTermsForPromptUtil
 } from '@/utils/termsHelpers';
-import type { SubtitleEntry, Term, FilePhases } from '@/types';
+import type {
+  SubtitleEntry,
+  Term,
+  FilePhases,
+  SubtitleFileMetadata,
+  TranslationConfig,
+  TranslationStatus,
+} from '@/types';
 import toast from 'react-hot-toast';
 
+/** 可注入依赖：单测时 mock，默认走全局 store */
+export type TranslationServiceDeps = {
+  getFile: (fileId: string) => SubtitleFileMetadata | undefined;
+  getTaskEntries: (taskId: string) => SubtitleEntry[];
+  getConfig: () => TranslationConfig;
+  isConfigured: () => boolean;
+  beginSession: (taskId: string) => Promise<AbortController>;
+  endSession: () => void;
+  updateUiProgress: (
+    current: number,
+    total: number,
+    phase: 'direct' | 'completed',
+    status: string,
+    taskId?: string
+  ) => Promise<void>;
+  updatePhase: (
+    fileId: string,
+    phase: 'translating',
+    update: Partial<FilePhases['translating']> & { tokensDelta?: number }
+  ) => void;
+  batchUpdateEntries: (
+    fileId: string,
+    updates: Array<{
+      id: number;
+      text: string;
+      translatedText: string;
+      status?: TranslationStatus;
+    }>
+  ) => void;
+  applyStreamingPartials: (fileId: string, updates: Array<{ id: number; text: string }>) => void;
+  clearStreamingIds: (fileId: string, ids: number[]) => void;
+  clearStreamingFile: (fileId: string) => void;
+  getTokensUsed: (fileId: string) => number;
+  getAllTerms: () => Term[];
+  flushPersist: () => Promise<void>;
+  translateBatch: typeof llmTranslateBatch;
+  notifySuccess: (message: string) => void;
+  notifyError: (message: string) => void;
+};
+
+function createDefaultDeps(): TranslationServiceDeps {
+  return {
+    getFile: (fileId) => useFilesStore.getState().getFile(fileId),
+    getTaskEntries: (taskId) => {
+      const task = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
+      return task?.subtitle_entries || [];
+    },
+    getConfig: () => useTranslationConfigStore.getState().config,
+    isConfigured: () => useTranslationConfigStore.getState().isConfigured,
+    beginSession: (taskId) => useTranslationConfigStore.getState().startTranslation(taskId),
+    endSession: () => useTranslationConfigStore.getState().stopTranslation(),
+    updateUiProgress: (current, total, phase, status, taskId) =>
+      useTranslationConfigStore.getState().updateProgress(current, total, phase, status, taskId),
+    updatePhase: (fileId, phase, update) =>
+      useFilesStore.getState().updatePhase(fileId, phase, update),
+    batchUpdateEntries: (fileId, updates) =>
+      useFilesStore.getState().batchUpdateEntries(fileId, updates),
+    applyStreamingPartials: (fileId, updates) =>
+      useStreamingOverlayStore.getState().applyPartials(fileId, updates),
+    clearStreamingIds: (fileId, ids) =>
+      useStreamingOverlayStore.getState().clearIds(fileId, ids),
+    clearStreamingFile: (fileId) => useStreamingOverlayStore.getState().clearFile(fileId),
+    getTokensUsed: (fileId) => useFilesStore.getState().getFile(fileId)?.tokensUsed || 0,
+    getAllTerms: () => useTermsStore.getState().terms,
+    flushPersist: () => flushFilesStorePersist(),
+    translateBatch: llmTranslateBatch,
+    notifySuccess: (message) => toast.success(message),
+    notifyError: (message) => toast.error(message),
+  };
+}
+
 export async function startTranslation(
-  fileId: string
+  fileId: string,
+  depsOverride?: Partial<TranslationServiceDeps>
 ): Promise<{ tokens: number; entries: SubtitleEntry[]; phases: FilePhases } | null> {
-  const file = useFilesStore.getState().getFile(fileId);
+  const deps = { ...createDefaultDeps(), ...depsOverride };
+
+  const file = deps.getFile(fileId);
   if (!file) return null;
 
   // 如果翻译已完成，跳过
@@ -36,28 +117,29 @@ export async function startTranslation(
     return null;
   }
 
-  const translationConfigStore = useTranslationConfigStore.getState();
-  const config = translationConfigStore.config;
-  if (!translationConfigStore.isConfigured) {
-    toast.error('请先配置翻译 API');
+  const config = deps.getConfig();
+  if (!deps.isConfigured()) {
+    deps.notifyError('请先配置翻译 API');
     return null;
   }
 
   try {
-    const controller = await translationConfigStore.startTranslation(file.taskId);
+    const controller = await deps.beginSession(file.taskId);
 
-    // 从 tasks 获取 entries（内存读取）
-    const task = useFilesStore.getState().tasks.find(t => t.taskId === file.taskId);
-    const entries = task?.subtitle_entries || [];
+    const entries = deps.getTaskEntries(file.taskId);
 
     // 恢复翻译进度（断点续跑时保持已有进度）
     const restoredProgress = file.phases.translating.progress > 0 ? file.phases.translating.progress : 0;
     const restoredTokens = file.phases.translating.tokens || 0;
 
     // 只有未完成才设置 active 状态，但保留已有进度和 tokens
-    const translatingStatus = useFilesStore.getState().getFile(fileId)?.phases.translating.status;
+    const translatingStatus = deps.getFile(fileId)?.phases.translating.status;
     if (translatingStatus !== 'completed') {
-      useFilesStore.getState().updatePhase(fileId, 'translating', { status: 'active', progress: restoredProgress, tokens: restoredTokens });
+      deps.updatePhase(fileId, 'translating', {
+        status: 'active',
+        progress: restoredProgress,
+        tokens: restoredTokens,
+      });
     }
 
     await executeTranslation(
@@ -68,80 +150,105 @@ export async function startTranslation(
           batchSize: config.batchSize,
           contextBefore: config.contextBefore,
           contextAfter: config.contextAfter,
-          threadCount: config.threadCount
+          threadCount: config.threadCount,
         },
         controller,
-        taskId: file.taskId
+        taskId: file.taskId,
       },
       {
-        translateBatch: translationConfigStore.translateBatch,
+        translateBatch: (
+          texts,
+          signal,
+          contextBefore,
+          contextAfter,
+          terms,
+          onPartial,
+          onAttemptStart
+        ) =>
+          deps.translateBatch(config, texts, {
+            signal,
+            contextBefore,
+            contextAfter,
+            terms,
+            onPartial,
+            onAttemptStart,
+          }),
         batchUpdateEntries: (updates) => {
-          useFilesStore.getState().batchUpdateEntries(fileId, updates);
+          deps.batchUpdateEntries(fileId, updates);
         },
         // 流式只打内存 overlay，不碰 filesStore / persist
         applyStreamingPartials: (updates) => {
-          useStreamingOverlayStore.getState().applyPartials(fileId, updates);
+          deps.applyStreamingPartials(fileId, updates);
         },
         clearStreamingIds: (ids) => {
-          useStreamingOverlayStore.getState().clearIds(fileId, ids);
+          deps.clearStreamingIds(fileId, ids);
         },
-        updateProgress: async (current: number, total: number, phase: 'direct' | 'completed', status: string, taskId: string, newTokens?: number) => {
-          await translationConfigStore.updateProgress(current, total, phase, status, taskId);
+        getCurrentEntries: () => deps.getTaskEntries(file.taskId),
+        updateProgress: async (
+          current: number,
+          total: number,
+          phase: 'direct' | 'completed',
+          status: string,
+          taskId: string,
+          newTokens?: number
+        ) => {
+          await deps.updateUiProgress(current, total, phase, status, taskId);
 
-          // 进度与 token 解耦：即使流式未返回 usage，phase 进度也要推进
+          // 进度与 token 解耦；tokensDelta 在 store 内原子累加（并发 batch 安全）
           const progress = total > 0 ? Math.round((current / total) * 100) : 0;
           if (newTokens !== undefined && newTokens > 0) {
-            const prevTokens = useFilesStore.getState().getFile(fileId)?.tokensUsed || 0;
-            useFilesStore.getState().updatePhase(fileId, 'translating', {
+            deps.updatePhase(fileId, 'translating', {
               progress,
-              tokens: prevTokens + newTokens,
+              tokensDelta: newTokens,
             });
           } else {
-            useFilesStore.getState().updatePhase(fileId, 'translating', { progress });
+            deps.updatePhase(fileId, 'translating', { progress });
           }
         },
         getRelevantTerms: (batchText: string, before: string, after: string): Term[] => {
-          const allTerms = useTermsStore.getState().terms;
-          return getRelevantTermsUtil(allTerms, batchText, before, after);
+          return getRelevantTermsUtil(deps.getAllTerms(), batchText, before, after);
         },
-        formatTermsForPrompt: (terms: Term[]): string => formatTermsForPromptUtil(terms)
+        formatTermsForPrompt: (terms: Term[]): string => formatTermsForPromptUtil(terms),
       }
     );
 
     if (controller.signal.aborted) {
       logger.info('翻译已中止（文件已删除）');
-      useStreamingOverlayStore.getState().clearFile(fileId);
+      deps.clearStreamingFile(fileId);
       return null;
     }
 
     // 完成翻译 — 更新 tasks（内存操作）；updatePhase(completed) 会 flush persist
-    useStreamingOverlayStore.getState().clearFile(fileId);
-    const finalTokens = useFilesStore.getState().getFile(fileId)?.tokensUsed || 0;
-    useFilesStore.getState().updatePhase(fileId, 'translating', { status: 'completed', progress: 100, tokens: finalTokens });
-    await flushFilesStorePersist();
+    deps.clearStreamingFile(fileId);
+    const finalTokens = deps.getTokensUsed(fileId);
+    deps.updatePhase(fileId, 'translating', {
+      status: 'completed',
+      progress: 100,
+      tokens: finalTokens,
+    });
+    await deps.flushPersist();
 
-    const finalTask = useFilesStore.getState().tasks.find(t => t.taskId === file.taskId);
-    const lastEntries = finalTask?.subtitle_entries || entries;
-    const finalPhases = useFilesStore.getState().getFile(fileId)?.phases;
-    toast.success(`${file.name} 翻译完成`);
+    const lastEntries = deps.getTaskEntries(file.taskId);
+    const finalPhases = deps.getFile(fileId)?.phases;
+    deps.notifySuccess(`${file.name} 翻译完成`);
     logger.info(`任务完成，总消耗 ${finalTokens} tokens`);
     return { tokens: finalTokens, entries: lastEntries, phases: finalPhases! };
   } catch (error) {
-    useStreamingOverlayStore.getState().clearFile(fileId);
+    deps.clearStreamingFile(fileId);
     const appError = toAppError(error, '翻译失败');
     logger.error(appError.message, appError);
-    toast.error(`翻译失败: ${appError.message}`);
+    deps.notifyError(`翻译失败: ${appError.message}`);
 
-    const phases = useFilesStore.getState().getFile(fileId)?.phases;
+    const phases = deps.getFile(fileId)?.phases;
     if (phases?.translating.status === 'active') {
-      useFilesStore.getState().updatePhase(fileId, 'translating', {
+      deps.updatePhase(fileId, 'translating', {
         status: 'failed',
         errorMessage: error instanceof Error ? error.message : String(error),
       });
-      await flushFilesStorePersist();
+      await deps.flushPersist();
     }
   } finally {
-    useTranslationConfigStore.getState().stopTranslation();
+    deps.endSession();
   }
   return null;
 }

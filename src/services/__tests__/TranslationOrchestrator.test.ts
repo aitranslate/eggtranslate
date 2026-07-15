@@ -5,6 +5,7 @@ import {
   calculateActualProgress,
   saveTranslationHistory,
   processBatch,
+  finalizeBatchTranslations,
   type BatchInfo,
   type TranslationCallbacks,
 } from '../TranslationOrchestrator';
@@ -504,6 +505,76 @@ describe('processBatch batch apply', () => {
       { id: 2, text: 'text-2', translatedText: '世界', status: 'completed' },
     ]);
     expect(progressCb).toHaveBeenCalledWith(2, 4);
+  });
+
+  it('marks LLM-missing keys as missing (not silent completed empty)', async () => {
+    const entries = [makeEntry(1), makeEntry(2), makeEntry(3)];
+    const batchUpdateEntries = vi.fn();
+
+    const callbacks: TranslationCallbacks = {
+      // only returns key "1" — lines 2 and 3 have no independent target
+      translateBatch: vi.fn().mockResolvedValue({
+        translations: {
+          '1': { direct: '仅第一行' },
+        },
+        tokensUsed: 5,
+      }),
+      batchUpdateEntries,
+      updateProgress: vi.fn().mockResolvedValue(undefined),
+      getRelevantTerms: vi.fn(() => [] as Term[]),
+      formatTermsForPrompt: vi.fn(() => ''),
+    };
+
+    const batch: BatchInfo = {
+      batchIndex: 0,
+      untranslatedEntries: entries,
+      textsToTranslate: entries.map((e) => e.text),
+      contextBeforeTexts: '',
+      contextAfterTexts: '',
+      relevantTerms: [],
+    };
+
+    const progressCb = vi.fn().mockResolvedValue(undefined);
+    const result = await processBatch(
+      batch,
+      new AbortController(),
+      callbacks,
+      callbacks.formatTermsForPrompt,
+      progressCb
+    );
+
+    expect(result.success).toBe(true);
+    expect(batchUpdateEntries).toHaveBeenCalledTimes(1);
+    const updates = batchUpdateEntries.mock.calls[0][0] as Array<{
+      id: number;
+      translatedText: string;
+      status: TranslationStatus;
+    }>;
+    expect(updates).toEqual([
+      { id: 1, text: 'text-1', translatedText: '仅第一行', status: 'completed' },
+      { id: 2, text: 'text-2', translatedText: '', status: 'missing' },
+      { id: 3, text: 'text-3', translatedText: '', status: 'missing' },
+    ]);
+    // progress only counts real filled lines
+    expect(progressCb).toHaveBeenCalledWith(1, 5);
+    // must not look like normal completed-with-text success for missing rows
+    expect(updates.filter((u) => u.status === 'missing')).toHaveLength(2);
+    expect(updates.every((u) => u.status === 'completed')).toBe(false);
+  });
+});
+
+describe('finalizeBatchTranslations', () => {
+  it('classifies empty direct as missing', () => {
+    const entries = [makeEntry(1), makeEntry(2)];
+    const updates = finalizeBatchTranslations(entries, {
+      '1': { direct: '  ' },
+      '2': { direct: '好' },
+    });
+    expect(updates.find((u) => u.id === 1)?.status).toBe('missing');
+    expect(updates.find((u) => u.id === 2)).toMatchObject({
+      status: 'completed',
+      translatedText: '好',
+    });
   });
 });
 

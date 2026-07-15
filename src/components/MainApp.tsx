@@ -15,9 +15,12 @@ import {
 } from 'lucide-react';
 import { SubtitleFileList } from './SubtitleFileList';
 import { SubtitleEditor } from './SubtitleEditor';
-import { SettingsModal } from './SettingsModal';
-import { TermsManager } from './TermsManager';
-import { HistoryModal } from './HistoryModal';
+import {
+  LazyHistoryModal,
+  LazySettingsModal,
+  LazySurface,
+  LazyTermsManager,
+} from './lazySurfaces';
 import { StatusBar } from './StatusBar';
 import { MobileMenu } from './MobileMenu';
 import { useFileCount, useFilesStore } from '@/stores/filesStore';
@@ -43,6 +46,8 @@ const stageMotion = {
 
 export const MainApp: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  /** 首次打开后保持设置组件挂载，避免关抽屉丢掉未保存草稿 */
+  const [settingsMounted, setSettingsMounted] = React.useState(false);
 
   const fileCount = useFileCount();
   const selectedFileId = useFilesStore((s) => s.selectedFileId);
@@ -91,6 +96,10 @@ export const MainApp: React.FC = () => {
     openEditor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (settingsOpen) setSettingsMounted(true);
+  }, [settingsOpen]);
 
   const handleSelectTask = useCallback(
     (file: SubtitleFileMetadata) => {
@@ -308,13 +317,17 @@ export const MainApp: React.FC = () => {
         <AnimatePresence mode="wait">
           {stage === 'terms' && (
             <motion.div key="terms" className="wb-stage-inner" {...stageMotion}>
-              <TermsManager variant="panel" />
+              <LazySurface>
+                <LazyTermsManager variant="panel" />
+              </LazySurface>
             </motion.div>
           )}
 
           {stage === 'history' && (
             <motion.div key="history" className="wb-stage-inner" {...stageMotion}>
-              <HistoryModal variant="panel" />
+              <LazySurface>
+                <LazyHistoryModal variant="panel" />
+              </LazySurface>
             </motion.div>
           )}
 
@@ -381,8 +394,12 @@ export const MainApp: React.FC = () => {
 
       <StatusBar />
 
-      {/* 右侧设置抽屉：浮在工作区之上 */}
-      <SettingsModal isOpen={settingsOpen} />
+      {/* 首次打开后懒加载并保持挂载；isOpen 控制显隐，保留未保存草稿 */}
+      {settingsMounted && (
+        <LazySurface fallback={null}>
+          <LazySettingsModal isOpen={settingsOpen} />
+        </LazySurface>
+      )}
 
       <MobileMenu
         isOpen={isMobileMenuOpen}

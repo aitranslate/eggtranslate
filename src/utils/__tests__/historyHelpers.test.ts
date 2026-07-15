@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { findHistoryEntry, calculateHistoryStats } from '../historyHelpers';
+import {
+  findHistoryEntry,
+  calculateHistoryStats,
+  capHistoryEntries,
+  HISTORY_MAX_ENTRIES,
+} from '../historyHelpers';
 import type { FilePhases, TranslationHistoryEntry } from '@/types';
 
 const makeEntry = (overrides: Partial<TranslationHistoryEntry> = {}): TranslationHistoryEntry => ({
@@ -64,5 +69,32 @@ describe('calculateHistoryStats', () => {
       makeEntry({ taskId: `t-${i}`, totalTokens: 1000 })
     );
     expect(calculateHistoryStats(entries)).toEqual({ total: 100, totalTokens: 100000 });
+  });
+});
+
+describe('capHistoryEntries', () => {
+  it('exports a positive documented cap', () => {
+    expect(HISTORY_MAX_ENTRIES).toBeGreaterThan(0);
+  });
+
+  it('keeps list unchanged when under cap', () => {
+    const entries = [makeEntry({ taskId: 'a' }), makeEntry({ taskId: 'b' })];
+    expect(capHistoryEntries(entries, 10)).toEqual(entries);
+  });
+
+  it('drops oldest when newest-first list exceeds cap', () => {
+    // store 约定：新在前 [newest, ..., oldest]
+    const entries = Array.from({ length: HISTORY_MAX_ENTRIES + 5 }, (_, i) =>
+      makeEntry({ taskId: `t-${i}`, timestamp: 10_000 - i })
+    );
+    const capped = capHistoryEntries(entries, HISTORY_MAX_ENTRIES);
+    expect(capped).toHaveLength(HISTORY_MAX_ENTRIES);
+    expect(capped[0].taskId).toBe('t-0'); // newest retained
+    expect(capped[capped.length - 1].taskId).toBe(`t-${HISTORY_MAX_ENTRIES - 1}`);
+    expect(capped.some((e) => e.taskId === `t-${HISTORY_MAX_ENTRIES + 4}`)).toBe(false);
+  });
+
+  it('returns empty for non-positive max', () => {
+    expect(capHistoryEntries([makeEntry()], 0)).toEqual([]);
   });
 });

@@ -1,5 +1,6 @@
 import { rateLimiter } from './rateLimiter';
 import { API_CONSTANTS } from '@/constants/api';
+import { logger } from '@/utils/logger';
 
 // 导入类型并重新导出，保持向后兼容
 import type { LLMConfig } from '@/types';
@@ -180,10 +181,15 @@ export async function callLLMStream(
       throw new DOMException('请求被取消', 'AbortError');
     }
 
+    // 本轮尝试专用 AbortController：idle 超时可掐断 fetch，又不误杀整任务 signal
+    const attemptAc = new AbortController();
+    const onParentAbort = () => attemptAc.abort();
+    signal?.addEventListener('abort', onParentAbort);
+
     try {
       await rateLimiter.waitForAvailability();
 
-      if (signal?.aborted) {
+      if (signal?.aborted || attemptAc.signal.aborted) {
         throw new DOMException('请求被取消', 'AbortError');
       }
 
@@ -200,7 +206,7 @@ export async function callLLMStream(
           // OpenAI 兼容：末帧附带 usage，避免流式 token 统计恒为 0
           stream_options: { include_usage: true },
         }),
-        signal,
+        signal: attemptAc.signal,
       });
 
       if (!response.ok) {
@@ -213,13 +219,18 @@ export async function callLLMStream(
         const fallback = await callLLM(config, messages, {
           maxRetries: 1,
           temperature,
-          signal,
+          signal: attemptAc.signal,
         });
         onDelta?.(fallback.content, fallback.content);
         return fallback;
       }
 
-      const result = await consumeChatCompletionStream(response.body, onDelta, signal);
+      const result = await consumeChatCompletionStream(
+        response.body,
+        onDelta,
+        attemptAc.signal,
+        () => attemptAc.abort()
+      );
 
       if (!result.content) {
         throw emptyContentError(result.finishReason);
@@ -229,8 +240,10 @@ export async function callLLMStream(
     } catch (error) {
       lastError = error;
 
+      // 任务级取消才向上抛 AbortError；attempt 级 abort 走重试
       if (error instanceof Error && error.name === 'AbortError') {
-        throw error;
+        if (signal?.aborted) throw error;
+        // idle / attempt abort：若没有 content 则按普通错误重试
       }
 
       if (attempt === maxRetries) {
@@ -239,6 +252,8 @@ export async function callLLMStream(
 
       const delay = 1000 * Math.pow(2, attempt - 1);
       await new Promise(resolve => setTimeout(resolve, delay));
+    } finally {
+      signal?.removeEventListener('abort', onParentAbort);
     }
   }
 
@@ -258,7 +273,9 @@ interface StreamConsumeResult {
 async function consumeChatCompletionStream(
   body: ReadableStream<Uint8Array>,
   onDelta: ((delta: string, accumulated: string) => void) | undefined,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  /** idle 时调用：应 abort 本轮 fetch AbortController */
+  onIdleTimeout?: () => void
 ): Promise<StreamConsumeResult> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -266,14 +283,54 @@ async function consumeChatCompletionStream(
   let content = '';
   let tokensUsed = 0;
   let finishReason = '';
+  const idleMs = API_CONSTANTS.STREAM_IDLE_TIMEOUT_MS;
+
+  /** 带空闲超时的 read：卡住时 abort fetch + 抢救已有 content */
+  const readChunk = async (): Promise<ReadableStreamReadResult<Uint8Array>> => {
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        reader.read(),
+        new Promise<never>((_, reject) => {
+          idleTimer = setTimeout(() => {
+            const msg = `流式响应空闲超时（${Math.round(idleMs / 1000)}s 无新数据），将重试或回退`;
+            onIdleTimeout?.();
+            reject(new Error(msg));
+          }, idleMs);
+        }),
+      ]);
+    } finally {
+      if (idleTimer !== undefined) clearTimeout(idleTimer);
+    }
+  };
 
   try {
     while (true) {
       if (signal?.aborted) {
+        // 空闲 abort 后可能仍有 partial content
+        if (content.trim() && finishReason !== 'abort') {
+          return { content, tokensUsed, finishReason: finishReason || 'idle_timeout' };
+        }
         throw new DOMException('请求被取消', 'AbortError');
       }
 
-      const { done, value } = await reader.read();
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await readChunk();
+      } catch (idleErr) {
+        try {
+          await reader.cancel(String(idleErr));
+        } catch {
+          /* ignore */
+        }
+        logger.error(String(idleErr));
+        // 已有部分 content 时仍返回，交给 translateBatch 抢救
+        if (content.trim()) {
+          return { content, tokensUsed, finishReason: finishReason || 'idle_timeout' };
+        }
+        throw idleErr;
+      }
+      const { done, value } = chunk;
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
