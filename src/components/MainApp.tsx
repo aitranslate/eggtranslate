@@ -9,6 +9,8 @@ import {
   Upload,
   Moon,
   Sun,
+  Volume2,
+  VolumeX,
   LayoutList,
 } from 'lucide-react';
 import { SubtitleFileList } from './SubtitleFileList';
@@ -24,6 +26,8 @@ import { useHistoryStore } from '@/stores/historyStore';
 import { useTermsStore } from '@/stores/termsStore';
 import { useWorkspaceStore, type StageMode } from '@/stores/workspaceStore';
 import { useThemeStore } from '@/stores/themeStore';
+import { useSoundStore } from '@/stores/soundStore';
+import { playAppSound } from '@/utils/appSound';
 import { useWorkbenchShortcuts } from '@/hooks/useWorkbenchShortcuts';
 import { useFileImport } from '@/hooks/useFileImport';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -57,7 +61,16 @@ export const MainApp: React.FC = () => {
 
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
+  const soundEnabled = useSoundStore((s) => s.soundEnabled);
+  const setSoundEnabled = useSoundStore((s) => s.setSoundEnabled);
   const isMobile = useIsMobile();
+
+  /** 开关音效；打开时播一声确认，方便立刻验证听得到 */
+  const handleToggleSound = useCallback(() => {
+    const next = !useSoundStore.getState().soundEnabled;
+    setSoundEnabled(next);
+    if (next) playAppSound('confirm');
+  }, [setSoundEnabled]);
 
   const {
     fileInputRef,
@@ -195,17 +208,8 @@ export const MainApp: React.FC = () => {
               )}
             </button>
 
-            <button
-              type="button"
-              className={`wb-nav-btn ${settingsOpen ? 'active' : ''} ${!isConfigured ? 'warn' : ''}`}
-              onClick={openSettings}
-              title="设置"
-            >
-              <span className="wb-nav-dot" aria-hidden />
-              <Settings className="h-3.5 w-3.5" />
-              <span className="wb-nav-label">设置</span>
-              {!isConfigured && <span className="wb-nav-badge">必须</span>}
-            </button>
+            {/* 导航与系统偏好分隔：主题/音效 → 设置置最右 */}
+            <span className="wb-top-sep" aria-hidden />
 
             <button
               type="button"
@@ -220,6 +224,33 @@ export const MainApp: React.FC = () => {
                 <Moon className="h-3.5 w-3.5" />
               )}
             </button>
+
+            <button
+              type="button"
+              className="wb-nav-btn"
+              onClick={handleToggleSound}
+              title={soundEnabled ? '关闭音效' : '开启音效'}
+              aria-label={soundEnabled ? '关闭音效' : '开启音效'}
+              aria-pressed={soundEnabled}
+            >
+              {soundEnabled ? (
+                <Volume2 className="h-3.5 w-3.5" />
+              ) : (
+                <VolumeX className="h-3.5 w-3.5" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              className={`wb-nav-btn ${settingsOpen ? 'active' : ''} ${!isConfigured ? 'warn' : ''}`}
+              onClick={openSettings}
+              title="设置"
+            >
+              <span className="wb-nav-dot" aria-hidden />
+              <Settings className="h-3.5 w-3.5" />
+              <span className="wb-nav-label">设置</span>
+              {!isConfigured && <span className="wb-nav-badge">必须</span>}
+            </button>
           </div>
 
           <button
@@ -232,6 +263,19 @@ export const MainApp: React.FC = () => {
               <Sun className="h-3.5 w-3.5" />
             ) : (
               <Moon className="h-3.5 w-3.5" />
+            )}
+          </button>
+          <button
+            type="button"
+            className="md:hidden wb-nav-btn"
+            onClick={handleToggleSound}
+            aria-label={soundEnabled ? '关闭音效' : '开启音效'}
+            aria-pressed={soundEnabled}
+          >
+            {soundEnabled ? (
+              <Volume2 className="h-3.5 w-3.5" />
+            ) : (
+              <VolumeX className="h-3.5 w-3.5" />
             )}
           </button>
           <button

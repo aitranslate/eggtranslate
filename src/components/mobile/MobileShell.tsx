@@ -15,6 +15,8 @@ import {
   Sun,
   Trash2,
   Upload,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { SubtitleEditor } from '@/components/SubtitleEditor';
@@ -31,6 +33,8 @@ import { useHistoryStore } from '@/stores/historyStore';
 import { useTermsStore } from '@/stores/termsStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useThemeStore } from '@/stores/themeStore';
+import { useSoundStore } from '@/stores/soundStore';
+import { playAppSound } from '@/utils/appSound';
 import { clearAll } from '@/services/filesService';
 import { enqueueAllUncompleted } from '@/services/queueService';
 import { importSampleSubtitle } from '@/utils/importSampleSubtitle';
@@ -65,7 +69,15 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
 
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
+  const soundEnabled = useSoundStore((s) => s.soundEnabled);
+  const setSoundEnabled = useSoundStore((s) => s.setSoundEnabled);
   const { handleError } = useErrorHandler();
+
+  const handleToggleSound = useCallback(() => {
+    const next = !useSoundStore.getState().soundEnabled;
+    setSoundEnabled(next);
+    if (next) playAppSound('confirm');
+  }, [setSoundEnabled]);
 
   const queueMeta = useMemo(() => {
     const map = new Map<string, number>();
@@ -177,6 +189,16 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
             aria-label="切换主题"
           >
             {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </button>
+          <button
+            type="button"
+            className="m-icon-btn"
+            onClick={handleToggleSound}
+            aria-label={soundEnabled ? '关闭音效' : '开启音效'}
+            aria-pressed={soundEnabled}
+            title={soundEnabled ? '关闭音效' : '开启音效'}
+          >
+            {soundEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
           </button>
           <button
             type="button"

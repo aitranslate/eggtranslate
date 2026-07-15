@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { ConfirmDialog } from './ConfirmDialog';
 import { downloadTextFile } from '@/utils/fileExport';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { playAppSound } from '@/utils/appSound';
 import { Button } from '@/components/ui';
 import type { Term } from '@/types';
 
@@ -102,6 +103,7 @@ export const TermsManager: React.FC<TermsManagerProps> = ({
   const onRemoveTerm = useCallback(async (index: number) => {
     try {
       await deleteTerm(index);
+      playAppSound('delete');
       toast.success('术语已删除');
     } catch (error) {
       handleError(error, {
@@ -283,6 +285,7 @@ export const TermsManager: React.FC<TermsManagerProps> = ({
   const handleConfirmClear = useCallback(async () => {
     try {
       await clearTerms();
+      playAppSound('delete');
       toast.success('已清空所有术语');
     } catch (error) {
       handleError(error, {

@@ -1,9 +1,15 @@
+import { useEffect } from 'react';
 import toast, { Toaster, ToastBar } from 'react-hot-toast';
 import { MainApp } from '@/components/MainApp';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { bindAudioUnlock } from '@/utils/appSound';
 import '@/index.css';
 
 function App() {
+  useEffect(() => {
+    bindAudioUnlock();
+  }, []);
+
   return (
     <ErrorBoundary>
       <MainApp />

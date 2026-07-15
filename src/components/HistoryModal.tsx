@@ -17,6 +17,7 @@ import { ExportButton } from '@/components/common/ExportButton';
 import { TranslationHistoryEntry } from '@/types';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { playAppSound } from '@/utils/appSound';
 import { CountUp } from './motion/CountUp';
 
 interface HistoryModalProps {
@@ -60,6 +61,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
     if (!deletingTaskId) return;
     try {
       await deleteHistory(deletingTaskId);
+      playAppSound('delete');
       toast.success('历史记录已删除');
     } catch (error) {
       handleError(error, { context: { operation: '删除历史记录' } });
@@ -77,6 +79,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   const handleConfirmClear = useCallback(async () => {
     try {
       await clearHistory();
+      playAppSound('delete');
       toast.success('已清空所有历史记录');
     } catch (error) {
       handleError(error, { context: { operation: '清空历史记录' } });

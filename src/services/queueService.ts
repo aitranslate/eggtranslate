@@ -11,6 +11,7 @@ import { startTranslation } from './translationService';
 import { saveTranslationHistory } from './TranslationOrchestrator';
 import type { SubtitleFileMetadata } from '@/types';
 import { logger } from '@/utils/logger';
+import { playAppSound } from '@/utils/appSound';
 
 function isTaskCompleted(file: SubtitleFileMetadata): boolean {
   const isSrt = file.fileType === 'srt' || !file.fileType;
@@ -18,6 +19,32 @@ function isTaskCompleted(file: SubtitleFileMetadata): boolean {
     file.phases.translating.status === 'completed' &&
     (isSrt || file.phases.transcribing.status === 'completed')
   );
+}
+
+/**
+ * 根据 runTask 结束后的 phase 状态播放结果音（完成 / 失败各一种）。
+ * 配置缺失等「未真正开跑」的情况不发声。
+ */
+function notifyTaskOutcome(fileId: string): void {
+  const file = useFilesStore.getState().getFile(fileId);
+  if (!file) return;
+
+  const { workflow, transcribing, translating } = file.phases;
+
+  if (transcribing.status === 'failed' || translating.status === 'failed') {
+    playAppSound('error');
+    return;
+  }
+
+  if (workflow === 'transcribe') {
+    if (transcribing.status === 'completed') playAppSound('success');
+    return;
+  }
+
+  // translate / full：以翻译完成作为任务终点
+  if (translating.status === 'completed') {
+    playAppSound('success');
+  }
 }
 
 let isProcessNextScheduled = false;
@@ -30,6 +57,8 @@ export function enqueueTask(fileId: string): void {
   if (isTaskCompleted(file)) return;
 
   useQueueStore.getState().setTaskQueue([...queue.taskQueue, fileId]);
+  // 开始 / 全部开始：真正入队时轻确认（批量入队由 confirm 去抖压成一声）
+  playAppSound('confirm');
   if (useQueueStore.getState().activeTaskId === null && !isProcessNextScheduled) {
     isProcessNextScheduled = true;
     // Defer to microtask so synchronous callers can observe the enqueued item
@@ -75,8 +104,10 @@ export async function processNext(): Promise<void> {
   try {
     const file = useFilesStore.getState().getFile(fileId);
     if (file) await runTask(file);
+    notifyTaskOutcome(fileId);
   } catch (error) {
     logger.error('processNext task failed:', error);
+    playAppSound('error');
   } finally {
     await finishTask(fileId);
   }

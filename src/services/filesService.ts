@@ -14,6 +14,7 @@ import { loadFromFile, removeMp3Data } from './SubtitleFileManager';
 import { convertToMP3 } from '@/utils/convertToMP3';
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
+import { playAppSound } from '@/utils/appSound';
 import localforage from 'localforage';
 import toast from 'react-hot-toast';
 
@@ -108,6 +109,7 @@ export async function removeFile(fileId: string, _file?: File): Promise<void> {
   try {
     state.removeTask(file.taskId);
     await removeMp3Data(file.taskId);
+    playAppSound('delete');
     toast.success('文件已删除');
   } catch (error) {
     const appError = toAppError(error, '删除文件失败');
@@ -132,6 +134,7 @@ export async function clearAll(): Promise<void> {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('taskCleared'));
     }
+    if (tasks.length > 0) playAppSound('delete');
   } catch (error) {
     const appError = toAppError(error, '清空数据失败');
     logger.error(appError.message, appError);

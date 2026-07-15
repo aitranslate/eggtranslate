@@ -7,8 +7,10 @@ import App from './App.tsx'
 import { logger } from '@/utils/logger'
 import { rehydrateAppStores } from '@/stores/bootstrap'
 import { initThemeFromStorage } from '@/stores/themeStore'
+import { initSoundFromStorage } from '@/stores/soundStore'
 
 initThemeFromStorage()
+initSoundFromStorage()
 
 function renderApp() {
   createRoot(document.getElementById('root')!).render(

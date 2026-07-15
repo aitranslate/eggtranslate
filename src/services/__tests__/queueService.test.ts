@@ -39,6 +39,10 @@ vi.mock('@/stores/historyStore', () => ({
   },
 }));
 
+vi.mock('@/utils/appSound', () => ({
+  playAppSound: vi.fn(),
+}));
+
 const makeFile = (taskId: string, translated: boolean = false): SingleTask => ({
   taskId,
   subtitle_filename: `${taskId}.srt`,
@@ -69,10 +73,12 @@ describe('queueService', () => {
     vi.clearAllMocks();
   });
 
-  it('enqueueTask adds fileId to queue', () => {
+  it('enqueueTask adds fileId to queue and plays confirm sound', async () => {
+    const { playAppSound } = await import('@/utils/appSound');
     useFilesStore.setState({ tasks: [makeFile('t1')] });
     enqueueTask(fid('t1'));
     expect(useQueueStore.getState().taskQueue).toEqual([fid('t1')]);
+    expect(playAppSound).toHaveBeenCalledWith('confirm');
   });
 
   it('enqueueTask skips already queued file', () => {
@@ -148,5 +154,70 @@ describe('queueService', () => {
     await processNext();
 
     expect(useQueueStore.getState().activeTaskId).toBeNull();
+  });
+
+  it('processNext plays success sound when translation completes', async () => {
+    const { playAppSound } = await import('@/utils/appSound');
+    const { startTranslation } = await import('../translationService');
+    vi.mocked(startTranslation).mockImplementation(async (fileId) => {
+      useFilesStore.setState((s) => ({
+        tasks: s.tasks.map((t) =>
+          fid(t.taskId) === fileId
+            ? {
+                ...t,
+                phases: {
+                  ...t.phases,
+                  translating: { status: 'completed', progress: 100, tokens: 0 },
+                },
+              }
+            : t
+        ),
+      }));
+      return {
+        tokens: 0,
+        entries: [],
+        phases: {
+          workflow: 'translate',
+          converting: { status: 'completed', progress: 100, tokens: 0 },
+          transcribing: { status: 'completed', progress: 100, tokens: 0 },
+          translating: { status: 'completed', progress: 100, tokens: 0 },
+        } as FilePhases,
+      };
+    });
+
+    useFilesStore.setState({ tasks: [makeFile('t1')] });
+    useQueueStore.setState({ taskQueue: [fid('t1')], activeTaskId: null });
+
+    await processNext();
+
+    expect(playAppSound).toHaveBeenCalledWith('success');
+  });
+
+  it('processNext plays error sound when translation failed', async () => {
+    const { playAppSound } = await import('@/utils/appSound');
+    const { startTranslation } = await import('../translationService');
+    vi.mocked(startTranslation).mockImplementation(async (fileId) => {
+      useFilesStore.setState((s) => ({
+        tasks: s.tasks.map((t) =>
+          fid(t.taskId) === fileId
+            ? {
+                ...t,
+                phases: {
+                  ...t.phases,
+                  translating: { status: 'failed', progress: 0, tokens: 0 },
+                },
+              }
+            : t
+        ),
+      }));
+      return null;
+    });
+
+    useFilesStore.setState({ tasks: [makeFile('t1')] });
+    useQueueStore.setState({ taskQueue: [fid('t1')], activeTaskId: null });
+
+    await processNext();
+
+    expect(playAppSound).toHaveBeenCalledWith('error');
   });
 });
