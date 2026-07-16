@@ -59,6 +59,15 @@ export interface TranslationConfig {
   batchSize: number;
   threadCount: number;
   rpm?: number;
+  /**
+   * Agent 翻译管线（术语 → 分窗译 → 可选 QA）。
+   * false/缺省：现有批译流式路径，行为不变。
+   */
+  agentTranslationEnabled?: boolean;
+  /** Agent 分窗大小（段数），默认 30 */
+  agentWindowSize?: number;
+  /** Agent 窗并发，默认 3 */
+  agentMaxConcurrency?: number;
 }
 
 // 翻译进度类型
@@ -75,6 +84,23 @@ export interface Term {
   original: string;
   translation: string;
   notes?: string;  // 新增：可选的说明字段
+}
+
+/** 最近一次翻译走的路径（与设置开关解耦，只记事实） */
+export type TranslationPath = 'agent' | 'batch';
+
+/**
+ * Agent 终态快照：落在任务上并随 filesStore 持久化。
+ * 设置里关 Agent 只影响下次路径，不擦除历史。
+ */
+export interface AgentRunSnapshot {
+  glossaryCount: number;
+  styleGuidePreview?: string;
+  lastActionLine: string;
+  completedAt: number;
+  error?: string | null;
+  totalEntries?: number;
+  totalWindows?: number;
 }
 
 // 单个翻译任务状态类型 (用于批处理任务列表)
@@ -95,6 +121,11 @@ export interface SingleTask {
 
   /** 该文件要使用的热词分组 ID；null 表示不使用热词 */
   selectedKeytermGroupId: string | null;
+
+  /** 最近一次翻译路径；设置开关不改写历史 */
+  translationPath?: TranslationPath;
+  /** Agent 上次运行终态（完成/失败摘要），可恢复大脑面板 */
+  agentSnapshot?: AgentRunSnapshot | null;
 
   /** 派生状态缓存：避免每次 updateEntry 触发整数组 O(n) filter */
   entryCount: number;

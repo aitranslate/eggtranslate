@@ -251,6 +251,60 @@ function ParamsFields({
           />
         </div>
       </div>
+
+      {/* Agent 翻译：增量能力；关闭时完全走现有批译 */}
+      <div
+        className={`${compact ? 'mt-2' : 'mt-3'} rounded-lg border border-[var(--wb-border)] bg-[var(--wb-panel-2)] p-3`}
+      >
+        <label className="flex items-start gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 rounded border-[var(--wb-border)]"
+            checked={Boolean(config.agentTranslationEnabled)}
+            onChange={(e) => onConfigChange('agentTranslationEnabled', e.target.checked)}
+            data-testid="agent-translation-toggle"
+          />
+          <span className="min-w-0">
+            <span className="block text-xs font-semibold text-[var(--wb-text)]">
+              Agent 翻译
+            </span>
+            <span className="block text-[11px] text-[var(--wb-text-3)] mt-0.5 leading-snug">
+              开启后：术语 Agent（tool loop）→ 分窗翻译 Subagent → QA 审校/重跑 →
+              断点续跑；译文仍走现有流式上屏。关闭则完全使用原来的批译路径。
+            </span>
+          </span>
+        </label>
+        {config.agentTranslationEnabled && (
+          <div className={`grid grid-cols-2 ${compact ? 'gap-2 mt-2' : 'gap-3 mt-3'}`}>
+            <div>
+              <label className={labelCls}>Agent 窗大小</label>
+              <input
+                type="number"
+                min="5"
+                max="80"
+                value={config.agentWindowSize ?? 30}
+                onChange={(e) =>
+                  onConfigChange('agentWindowSize', parseInt(e.target.value) || 30)
+                }
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Agent 窗并发</label>
+              <input
+                type="number"
+                min="1"
+                max="8"
+                value={config.agentMaxConcurrency ?? 3}
+                onChange={(e) =>
+                  onConfigChange('agentMaxConcurrency', parseInt(e.target.value) || 3)
+                }
+                className={inputClass}
+              />
+            </div>
+          </div>
+        )}
+      </div>
     </>
   );
 }

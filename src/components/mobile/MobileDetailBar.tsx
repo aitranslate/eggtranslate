@@ -20,7 +20,6 @@ import { canRetranscribe } from '@/utils/fileUtils';
 import type { ExportFormat } from '@/utils/fileExport';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-import { useOnboardingStore } from '@/stores/onboardingStore';
 
 interface MobileDetailBarProps {
   file: SubtitleFileMetadata;
@@ -72,15 +71,19 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
     return true;
   }, [isQueued, isBusy, allPhasesDone, isAudioVideo, isTranscriptionDone, pct]);
 
+  const idlePrimary = allPhasesDone
+    ? '已完成'
+    : isAudioVideo && !isTranscriptionDone
+      ? '转译'
+      : '翻译';
+  // 忙时不重复「处理中」：阶段进度/列表状态已表达；按钮灰显保留动作名
   const primaryLabel = isQueued
     ? '取消排队'
     : isBusy
-      ? '处理中'
-      : allPhasesDone
-        ? '已完成'
-        : isAudioVideo && !isTranscriptionDone
-          ? '转译'
-          : '翻译';
+      ? idlePrimary === '已完成'
+        ? '翻译'
+        : idlePrimary
+      : idlePrimary;
 
   const handlePrimary = useCallback(() => {
     if (isQueued) {
@@ -98,7 +101,6 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
     async (format: ExportFormat) => {
       try {
         await exportFile(file.taskId, file.name, format);
-        useOnboardingStore.getState().markExported();
         toast.success('导出成功');
       } catch (error) {
         handleError(error, { context: { operation: '导出', fileName: file.name } });

@@ -14,9 +14,10 @@ describe('MainApp workbench shell', () => {
     expect(src).toContain('fileCount={fileCount}');
   });
 
-  it('hosts onboarding layer without auto-opening settings', () => {
-    expect(src).toContain('OnboardingHost');
-    expect(src).toContain('resolveSampleFollowUpTip');
+  it('does not mount onboarding layer', () => {
+    expect(src).not.toContain('OnboardingHost');
+    expect(src).not.toContain('onboardingStore');
+    expect(src).toContain('EmptyWorkspaceHero');
   });
 
   it('uses workbench layout and stage routing', () => {
@@ -49,7 +50,6 @@ describe('MainApp workbench shell', () => {
     const slice = src.slice(wbOpen, status);
     expect(slice).not.toMatch(/<LazySettingsModal/);
     expect(slice).not.toMatch(/<MobileMenu/);
-    expect(slice).not.toMatch(/<OnboardingHost/);
   });
 
   it('defaults to editor-first without auto-opening settings', () => {

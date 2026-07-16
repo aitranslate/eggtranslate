@@ -1,4 +1,4 @@
-import type { FilePhases } from './index';
+import type { AgentRunSnapshot, FilePhases, TranslationPath } from './index';
 
 // 热词分组
 export interface KeytermGroup {
@@ -55,6 +55,11 @@ export interface SubtitleFileMetadata {
 
   /** 该文件要使用的热词分组 ID；null 表示不使用热词 */
   selectedKeytermGroupId: string | null;
+
+  /** 最近一次翻译路径（agent / batch），与设置开关解耦 */
+  translationPath?: TranslationPath;
+  /** Agent 终态快照（持久化在任务上） */
+  agentSnapshot?: AgentRunSnapshot | null;
 
   // 音视频原始文件引用（不持久化，仅内存）
   fileRef?: File;

@@ -42,10 +42,6 @@ import { clearAll } from '@/services/filesService';
 import { startAllUncompleted } from '@/services/startTask';
 import { importSampleSubtitle } from '@/utils/importSampleSubtitle';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-import { OnboardingHost } from '@/components/onboarding';
-import { useOnboardingStore } from '@/stores/onboardingStore';
-import { useTranslationConfigStore } from '@/stores/translationConfigStore';
-import { resolveEmptyWorkspaceCopy, resolveSampleFollowUpTip } from '@/utils/onboarding';
 import type { SubtitleFileMetadata } from '@/types';
 
 export interface MobileShellProps {
@@ -121,8 +117,6 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
         setSelectedFileId(id);
         openEditor();
         toast.success('已导入示例字幕');
-        const isCfg = useTranslationConfigStore.getState().isConfigured;
-        useOnboardingStore.getState().showTipIfNew(resolveSampleFollowUpTip(isCfg));
       }
     } catch (err) {
       handleError(err, { context: { operation: '导入示例' } });
@@ -257,66 +251,54 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
 
         {inList && (
           <div className="m-list">
-            {(() => {
-              const copy = resolveEmptyWorkspaceCopy({
-                isDragging: false,
-                fileCount: files.length,
-                isConfigured,
-              });
-              const samplePrimary = copy.primary === 'sample';
-              return (
-                <div className="m-hero">
-                  {samplePrimary ? (
-                    <>
-                      <button
-                        type="button"
-                        className="m-hero-primary"
-                        onClick={() => void handleSample()}
-                        disabled={sampleLoading}
-                      >
-                        <Sparkles className="h-5 w-5" />
-                        {sampleLoading ? '导入中…' : '试用示例字幕'}
-                      </button>
-                      <button type="button" className="m-hero-secondary" onClick={openFilePicker}>
-                        <Upload className="h-4 w-4" />
-                        导入文件
-                      </button>
-                      {copy.showConfigure && (
-                        <button
-                          type="button"
-                          className="m-hero-secondary"
-                          onClick={() => openSettings('translation')}
-                        >
-                          <Settings className="h-4 w-4" />
-                          配置 API
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <button type="button" className="m-hero-primary" onClick={openFilePicker}>
-                        <Upload className="h-5 w-5" />
-                        导入文件
-                      </button>
-                      <button
-                        type="button"
-                        className="m-hero-secondary"
-                        onClick={() => void handleSample()}
-                        disabled={sampleLoading}
-                      >
-                        <Sparkles className="h-4 w-4" />
-                        {sampleLoading ? '导入中…' : '试用示例字幕'}
-                      </button>
-                    </>
-                  )}
-                  <p className="m-hero-hint">
-                    {files.length === 0
-                      ? copy.description
-                      : '点选项目打开详情（无需拖拽）'}
-                  </p>
-                </div>
-              );
-            })()}
+            <div className="m-hero">
+              {!isConfigured ? (
+                <>
+                  <button
+                    type="button"
+                    className="m-hero-primary"
+                    onClick={() => void handleSample()}
+                    disabled={sampleLoading}
+                  >
+                    <Sparkles className="h-5 w-5" />
+                    {sampleLoading ? '导入中…' : '试用示例字幕'}
+                  </button>
+                  <button type="button" className="m-hero-secondary" onClick={openFilePicker}>
+                    <Upload className="h-4 w-4" />
+                    导入文件
+                  </button>
+                  <button
+                    type="button"
+                    className="m-hero-secondary"
+                    onClick={() => openSettings('translation')}
+                  >
+                    <Settings className="h-4 w-4" />
+                    配置 API
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="m-hero-primary" onClick={openFilePicker}>
+                    <Upload className="h-5 w-5" />
+                    导入文件
+                  </button>
+                  <button
+                    type="button"
+                    className="m-hero-secondary"
+                    onClick={() => void handleSample()}
+                    disabled={sampleLoading}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    {sampleLoading ? '导入中…' : '试用示例字幕'}
+                  </button>
+                </>
+              )}
+              <p className="m-hero-hint">
+                {files.length === 0
+                  ? '导入 SRT 或音视频开始'
+                  : '点选项目打开详情'}
+              </p>
+            </div>
 
             {files.length > 0 && (
               <div className="m-list-tools">
@@ -421,7 +403,6 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
       tone="danger"
     />
 
-    <OnboardingHost />
     </>
   );
 };

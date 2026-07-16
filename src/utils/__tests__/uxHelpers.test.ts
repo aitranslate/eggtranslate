@@ -5,6 +5,7 @@ import {
   formatMatchCount,
   getFailedPhaseError,
   hasActivePhase,
+  shouldShowTaskErrorDetail,
   isExportFormat,
   readLastExportFormat,
   shouldConfirmDiscardSettings,
@@ -116,6 +117,13 @@ describe('uxHelpers', () => {
         translating: { status: 'failed', progress: 0, tokens: 0 },
       });
       expect(getFailedPhaseError(noMsg)?.message).toBe('任务失败');
+    });
+
+    it('shouldShowTaskErrorDetail hides generic 任务失败 noise', () => {
+      expect(shouldShowTaskErrorDetail({ message: '任务失败' })).toBe(false);
+      expect(shouldShowTaskErrorDetail({ message: '失败' })).toBe(false);
+      expect(shouldShowTaskErrorDetail({ message: '401 Unauthorized' })).toBe(true);
+      expect(shouldShowTaskErrorDetail(null)).toBe(false);
     });
   });
 

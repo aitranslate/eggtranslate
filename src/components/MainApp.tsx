@@ -22,18 +22,14 @@ import {
 } from './lazySurfaces';
 import { StatusBar } from './StatusBar';
 import { MobileMenu } from './MobileMenu';
-import { EmptyWorkspaceHero, OnboardingHost } from '@/components/onboarding';
+import { EmptyWorkspaceHero } from '@/components/EmptyWorkspaceHero';
 import { useFileCount, useFilesStore } from '@/stores/filesStore';
-import {
-  useIsTranslationConfigured,
-  useTranslationConfigStore,
-} from '@/stores/translationConfigStore';
+import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
 import { useHistoryStore } from '@/stores/historyStore';
 import { useTermsStore } from '@/stores/termsStore';
 import { useWorkspaceStore, type StageMode } from '@/stores/workspaceStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { useSoundStore } from '@/stores/soundStore';
-import { useOnboardingStore } from '@/stores/onboardingStore';
 import { playAppSound } from '@/utils/appSound';
 import { useWorkbenchShortcuts } from '@/hooks/useWorkbenchShortcuts';
 import { useFileImport } from '@/hooks/useFileImport';
@@ -42,7 +38,6 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { MobileShell } from '@/components/mobile/MobileShell';
 import { importSampleSubtitle } from '@/utils/importSampleSubtitle';
-import { resolveSampleFollowUpTip } from '@/utils/onboarding';
 import { SubtitleFileMetadata } from '@/types';
 
 const stageMotion = {
@@ -122,8 +117,6 @@ export const MainApp: React.FC = () => {
         setSelectedFileId(id);
         openEditor();
         toast.success('已导入示例字幕');
-        const isCfg = useTranslationConfigStore.getState().isConfigured;
-        useOnboardingStore.getState().showTipIfNew(resolveSampleFollowUpTip(isCfg));
       }
     } catch (err) {
       handleError(err, { context: { operation: '导入示例' } });
@@ -413,9 +406,6 @@ export const MainApp: React.FC = () => {
     </div>
 
     {/* 浮层：在布局壳外，不参与 workbench grid */}
-    <OnboardingHost />
-
-    {/* 首次打开后懒加载并保持挂载；isOpen 控制显隐，保留未保存草稿 */}
     {settingsMounted && (
       <LazySurface fallback={null}>
         <LazySettingsModal isOpen={settingsOpen} />

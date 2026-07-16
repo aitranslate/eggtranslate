@@ -17,7 +17,6 @@ import {
 } from '@/utils/llmProfiles';
 import { toastError } from '@/utils/appToast';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
-import { useOnboardingStore } from '@/stores/onboardingStore';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { testLlmConnection } from '@/services/llmTranslationService';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -25,7 +24,7 @@ import { SettingsHint } from '@/components/SettingsHint';
 import { shouldConfirmDiscardSettings } from '@/utils/uxHelpers';
 import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
-import { isTranscriptionApiConfigured } from '@/utils/onboarding';
+import { isTranscriptionApiConfigured } from '@/utils/taskGuards';
 
 interface SettingsModalProps {
   isOpen?: boolean;
@@ -44,7 +43,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const openEditor = useWorkspaceStore((s) => s.openEditor);
   const settingsFocus = useWorkspaceStore((s) => s.settingsFocus);
   const clearSettingsFocus = useWorkspaceStore((s) => s.clearSettingsFocus);
-  const resetOnboarding = useOnboardingStore((s) => s.resetOnboarding);
   const isTranslationConfigured = useIsTranslationConfigured();
   const transcriptionApiKeys = useTranscriptionStore((s) => s.apiKeys);
   const isTranscriptionConfigured = isTranscriptionApiConfigured(transcriptionApiKeys);
@@ -107,11 +105,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [isOpen, settingsFocus, clearSettingsFocus]);
 
   const activeProfile = getActiveProfile(formData);
-
-  const handleResetOnboarding = useCallback(() => {
-    resetOnboarding();
-    toast.success('已重置上手引导，关闭设置后可在工作区查看');
-  }, [resetOnboarding]);
 
   const onTestConnection = useCallback(async () => {
     setIsTesting(true);
@@ -271,35 +264,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onUpdateActiveProfile={onUpdateActiveProfile}
                     sections="params"
                   />
-                </div>
-              </section>
-
-              <section className="wb-drawer-section" id="settings-section-help">
-                <header className="wb-prefs-section-head">
-                  <h3>使用帮助</h3>
-                  <p>翻译与转录两条路径；密钥仅存本机</p>
-                </header>
-                <div className="wb-prefs-block ob-help-block">
-                  <p className="ob-help-path-title">路径 A · 字幕翻译</p>
-                  <ol className="ob-help-steps">
-                    <li>试用示例或导入 SRT</li>
-                    <li>在「翻译」配置 LLM API 并保存</li>
-                    <li>开始翻译 → 导出原文 / 译文 / 双语</li>
-                  </ol>
-                  <p className="ob-help-path-title">路径 B · 音视频转录</p>
-                  <ol className="ob-help-steps">
-                    <li>在「转录」配置 AssemblyAI API Key</li>
-                    <li>导入 MP4 / MP3 等音视频</li>
-                    <li>点转录或转译（转录后可再翻译）→ 导出</li>
-                  </ol>
-                  <button
-                    type="button"
-                    className="wb-tool"
-                    onClick={handleResetOnboarding}
-                    data-testid="reset-onboarding"
-                  >
-                    重新查看上手引导
-                  </button>
                 </div>
               </section>
             </div>

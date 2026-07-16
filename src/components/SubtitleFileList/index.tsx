@@ -14,7 +14,6 @@ import {
   startTranscribeTask,
   startTranslateTask,
 } from '@/services/startTask';
-import { useOnboardingStore } from '@/stores/onboardingStore';
 import { SubtitleFileMetadata } from '@/types';
 import { SubtitleFileItemMemo as SubtitleFileItem } from './components/SubtitleFileItem';
 import { SidebarTaskRowMemo as SidebarTaskRow } from './components/SidebarTaskRow';
@@ -112,7 +111,6 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   const handleExportFile = useCallback(async (file: SubtitleFileMetadata, format: ExportFormat) => {
     try {
       await exportFile(file.taskId, file.name, format);
-      useOnboardingStore.getState().markExported();
       toast.success('导出成功');
     } catch (error) {
       handleError(error, {
@@ -134,7 +132,6 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
       if (format === 'package') {
         const blob = await exportAllPackage(taskIds);
         downloadZipFile(blob, '字幕导出_全部.zip');
-        useOnboardingStore.getState().markExported();
         toast.success(`已打包 ${exportableFiles.length} 个文件`);
       } else {
         const skipped = await exportAllFormat(taskIds, format);
@@ -142,10 +139,8 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
         if (exported === 0) {
           toast.error('没有可导出的文件（可能均未翻译）');
         } else if (skipped > 0) {
-          useOnboardingStore.getState().markExported();
           toast.success(`已导出 ${exported} 个文件，跳过 ${skipped} 个未翻译文件`);
         } else {
-          useOnboardingStore.getState().markExported();
           toast.success(`已导出 ${exported} 个文件`);
         }
       }

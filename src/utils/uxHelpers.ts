@@ -84,6 +84,20 @@ export function getFailedPhaseError(
   return null;
 }
 
+/**
+ * 是否值得在任务卡展示错误详情行。
+ * 笼统的「任务失败」已由状态文案（翻译失败等）表达，再出红框只会噪音。
+ */
+export function shouldShowTaskErrorDetail(
+  info: { message: string } | null | undefined
+): boolean {
+  if (!info?.message) return false;
+  const m = info.message.trim();
+  if (!m) return false;
+  if (m === '任务失败' || m === '失败') return false;
+  return true;
+}
+
 // ---------- 导出格式记忆 ----------
 
 export const LAST_EXPORT_FORMAT_KEY = 'eggtranslate:lastExportFormat';

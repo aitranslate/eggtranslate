@@ -58,6 +58,9 @@ const DEFAULT_CONFIG: TranslationConfig = {
   threadCount: 4,
   contextBefore: 5,
   contextAfter: 3,
+  agentTranslationEnabled: false,
+  agentWindowSize: 30,
+  agentMaxConcurrency: 3,
 };
 
 const DEFAULT_PROGRESS: TranslationProgress = {
@@ -173,6 +176,15 @@ export const useIsTranslationConfigured = () =>
   useTranslationConfigStore((state) => state.isConfigured);
 
 export const useIsTranslating = () => useTranslationConfigStore((state) => state.isTranslating);
+
+/** DEV：agent-browser 开关 Agent 路径 */
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  (
+    window as unknown as {
+      __eggTranslationConfigStore?: typeof useTranslationConfigStore;
+    }
+  ).__eggTranslationConfigStore = useTranslationConfigStore;
+}
 
 export const useTranslationTokensUsed = () =>
   useTranslationConfigStore((state) => state.tokensUsed);

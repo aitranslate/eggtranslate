@@ -5,6 +5,14 @@ vi.mock('../queueService', () => ({
   enqueueAllUncompleted: vi.fn(),
 }));
 
+vi.mock('react-hot-toast', () => ({
+  default: Object.assign(vi.fn(), {
+    error: vi.fn(),
+    success: vi.fn(),
+  }),
+}));
+
+import toast from 'react-hot-toast';
 import { enqueueTask, enqueueAllUncompleted } from '../queueService';
 import {
   startAllUncompleted,
@@ -15,8 +23,8 @@ import {
 } from '../startTask';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
-import { useOnboardingStore } from '@/stores/onboardingStore';
 import { useFilesStore } from '@/stores/filesStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 import type { SubtitleFileMetadata } from '@/types';
 
 function meta(partial: Partial<SubtitleFileMetadata> & { id: string }): SubtitleFileMetadata {
@@ -43,23 +51,18 @@ describe('startTask guards', () => {
   beforeEach(() => {
     vi.mocked(enqueueTask).mockClear();
     vi.mocked(enqueueAllUncompleted).mockClear();
-    useOnboardingStore.setState({
-      setupGuardKind: null,
-      dismissed: false,
-      completedTips: [],
-      hasExported: false,
-      forceShowChecklist: false,
-      activeTip: null,
-    });
+    vi.mocked(toast.error).mockClear();
     useTranslationConfigStore.setState({ isConfigured: false });
     useTranscriptionStore.setState({ apiKeys: '' });
     useFilesStore.setState({ tasks: [], selectedFileId: null });
+    useWorkspaceStore.setState({ settingsOpen: false, settingsFocus: null });
   });
 
-  it('startTranslateTask opens translation guard when unconfigured', () => {
+  it('startTranslateTask toasts and opens settings when unconfigured', () => {
     const ok = startTranslateTask('file_1');
     expect(ok).toBe(false);
-    expect(useOnboardingStore.getState().setupGuardKind).toBe('translation');
+    expect(toast.error).toHaveBeenCalled();
+    expect(useWorkspaceStore.getState().settingsOpen).toBe(true);
     expect(enqueueTask).not.toHaveBeenCalled();
   });
 
@@ -67,14 +70,14 @@ describe('startTask guards', () => {
     useTranslationConfigStore.setState({ isConfigured: true });
     const ok = startTranslateTask('file_1');
     expect(ok).toBe(true);
-    expect(useOnboardingStore.getState().setupGuardKind).toBeNull();
     expect(enqueueTask).toHaveBeenCalledWith('file_1');
   });
 
-  it('startTranscribeTask opens transcription guard when no AssemblyAI key', () => {
+  it('startTranscribeTask guards when no AssemblyAI key', () => {
     const ok = startTranscribeTask('file_av');
     expect(ok).toBe(false);
-    expect(useOnboardingStore.getState().setupGuardKind).toBe('transcription');
+    expect(toast.error).toHaveBeenCalled();
+    expect(useWorkspaceStore.getState().settingsFocus).toBe('transcription');
     expect(enqueueTask).not.toHaveBeenCalled();
   });
 
@@ -85,19 +88,18 @@ describe('startTask guards', () => {
     expect(enqueueTask).toHaveBeenCalledWith('file_av');
   });
 
-  it('startFullTask prioritizes transcription guard over translation', () => {
+  it('startFullTask prioritizes transcription then translation', () => {
     useTranslationConfigStore.setState({ isConfigured: false });
     useTranscriptionStore.setState({ apiKeys: '' });
     expect(startFullTask('file_av')).toBe(false);
-    expect(useOnboardingStore.getState().setupGuardKind).toBe('transcription');
+    expect(useWorkspaceStore.getState().settingsFocus).toBe('transcription');
 
     useTranscriptionStore.setState({ apiKeys: 'sk' });
-    useOnboardingStore.getState().closeSetupGuard();
+    useWorkspaceStore.setState({ settingsOpen: false, settingsFocus: null });
     expect(startFullTask('file_av')).toBe(false);
-    expect(useOnboardingStore.getState().setupGuardKind).toBe('translation');
+    expect(useWorkspaceStore.getState().settingsFocus).toBe('translation');
 
     useTranslationConfigStore.setState({ isConfigured: true });
-    useOnboardingStore.getState().closeSetupGuard();
     expect(startFullTask('file_av')).toBe(true);
     expect(enqueueTask).toHaveBeenCalled();
   });
@@ -125,16 +127,12 @@ describe('startTask guards', () => {
       ],
     } as never);
 
-    // getAllFiles maps tasks — ensure it works
-    const files = useFilesStore.getState().getAllFiles();
-    expect(files.some((f) => f.fileType === 'video')).toBe(true);
-
     expect(startAllUncompleted()).toBe(false);
-    expect(useOnboardingStore.getState().setupGuardKind).toBe('transcription');
+    expect(toast.error).toHaveBeenCalled();
     expect(enqueueAllUncompleted).not.toHaveBeenCalled();
   });
 
-  it('startAllUncompleted guards translation for SRT-only queue when unconfigured', () => {
+  it('startAllUncompleted guards translation for SRT when unconfigured', () => {
     useFilesStore.setState({
       tasks: [
         {
@@ -160,7 +158,7 @@ describe('startTask guards', () => {
     useTranslationConfigStore.setState({ isConfigured: false });
 
     expect(startAllUncompleted()).toBe(false);
-    expect(useOnboardingStore.getState().setupGuardKind).toBe('translation');
+    expect(toast.error).toHaveBeenCalled();
     expect(enqueueAllUncompleted).not.toHaveBeenCalled();
   });
 

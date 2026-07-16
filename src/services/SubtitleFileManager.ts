@@ -182,6 +182,8 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
     tokensUsed: (task.phases?.translating?.tokens || 0),
     entriesVersion: 0,
     selectedKeytermGroupId: task.selectedKeytermGroupId ?? null,
+    translationPath: task.translationPath,
+    agentSnapshot: task.agentSnapshot ?? null,
     fileRef: task.fileRef
   };
 }

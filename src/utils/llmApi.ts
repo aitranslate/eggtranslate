@@ -6,15 +6,37 @@ import { logger } from '@/utils/logger';
 import type { LLMConfig } from '@/types';
 export type { LLMConfig };
 
-interface LLMMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
+export type LLMMessage = {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string | null;
+  tool_call_id?: string;
+  name?: string;
+  tool_calls?: LLMToolCall[];
+};
+
+export type LLMToolCall = {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+};
+
+/** OpenAI-compatible tool schema (type + function) */
+export type LLMToolSchema = {
+  type: 'function';
+  function: {
+    name: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  };
+};
 
 interface CallLLMOptions {
   maxRetries?: number;
   temperature?: number;
   signal?: AbortSignal;
+  /** Agent tool loop：传入后允许 content 为空并返回 tool_calls */
+  tools?: LLMToolSchema[];
+  tool_choice?: 'auto' | 'none' | 'required';
 }
 
 interface CallLLMStreamOptions extends CallLLMOptions {
@@ -25,6 +47,9 @@ interface CallLLMStreamOptions extends CallLLMOptions {
 interface CallLLMResult {
   content: string;
   tokensUsed: number;
+  toolCalls?: LLMToolCall[];
+  /** 完整 assistant message（含 tool_calls），供多轮 agent 回填 */
+  message?: LLMMessage;
 }
 
 // 模块级的 API Key 轮询索引（避免依赖 React 的 useRef）
@@ -78,14 +103,42 @@ function emptyContentError(finishReason: string): Error {
  * 3. 频率限制（通过 RPM 配置）
  * 4. Token 统计（自动返回消耗的 tokens）
  */
+function normalizeToolCalls(raw: unknown): LLMToolCall[] {
+  if (!Array.isArray(raw)) return [];
+  const out: LLMToolCall[] = [];
+  for (const tc of raw) {
+    if (!tc || typeof tc !== 'object') continue;
+    const o = tc as Record<string, unknown>;
+    const fn = o.function as Record<string, unknown> | undefined;
+    const name = typeof fn?.name === 'string' ? fn.name : '';
+    if (!name) continue;
+    out.push({
+      id: typeof o.id === 'string' ? o.id : `call_${out.length}`,
+      type: 'function',
+      function: {
+        name,
+        arguments:
+          typeof fn?.arguments === 'string'
+            ? fn.arguments
+            : JSON.stringify(fn?.arguments ?? {}),
+      },
+    });
+  }
+  return out;
+}
+
 export async function callLLM(
   config: LLMConfig,
   messages: LLMMessage[],
   options: CallLLMOptions = {}
 ): Promise<CallLLMResult> {
-  const { maxRetries = API_CONSTANTS.MAX_RETRIES,
-          temperature = API_CONSTANTS.DEFAULT_TEMPERATURE,
-          signal } = options;
+  const {
+    maxRetries = API_CONSTANTS.MAX_RETRIES,
+    temperature = API_CONSTANTS.DEFAULT_TEMPERATURE,
+    signal,
+    tools,
+    tool_choice,
+  } = options;
 
   if (config.rpm !== undefined) {
     rateLimiter.setRPM(config.rpm);
@@ -107,14 +160,20 @@ export async function callLLM(
 
       const apiKey = config.apiKey?.trim() ? getNextApiKey(config.apiKey) : '';
 
+      const body: Record<string, unknown> = {
+        model: config.model,
+        messages: messages,
+        temperature,
+      };
+      if (tools?.length) {
+        body.tools = tools;
+        body.tool_choice = tool_choice ?? 'auto';
+      }
+
       const response = await fetch(`${config.baseURL}/chat/completions`, {
         method: 'POST',
         headers: buildHeaders(apiKey),
-        body: JSON.stringify({
-          model: config.model,
-          messages: messages,
-          temperature
-        }),
+        body: JSON.stringify(body),
         signal
       });
 
@@ -125,15 +184,29 @@ export async function callLLM(
 
       const data = await response.json();
       const choice = data.choices?.[0];
-      const content: string = choice?.message?.content ?? '';
+      const rawMsg = choice?.message ?? {};
+      const content: string = rawMsg.content ?? '';
       const finishReason: string = choice?.finish_reason ?? '';
       const tokensUsed = data.usage?.total_tokens || 0;
+      const toolCalls = normalizeToolCalls(rawMsg.tool_calls);
 
-      if (!content) {
+      // 有 tool_calls 时允许 content 为空（Agent 正常路径）
+      if (!content && toolCalls.length === 0) {
         throw emptyContentError(finishReason);
       }
 
-      return { content, tokensUsed };
+      const message: LLMMessage = {
+        role: 'assistant',
+        content: content || null,
+        ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
+      };
+
+      return {
+        content: content || '',
+        tokensUsed,
+        toolCalls: toolCalls.length ? toolCalls : undefined,
+        message,
+      };
     } catch (error) {
       lastError = error;
 

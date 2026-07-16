@@ -88,16 +88,14 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
         ? true
         : !canTranscribeAndTranslate && !canTranslate;
 
-  // 主按钮文案
+  // 主按钮文案：忙时不写「处理中」（阶段 stepper 已转圈）
   const primaryLabel = isQueued
     ? '取消排队'
-    : isBusy
-      ? '处理中...'
-      : allPhasesDone
+    : allPhasesDone
+      ? '一键转译'
+      : isAudioVideo && !isTranscriptionDone
         ? '一键转译'
-        : isAudioVideo && !isTranscriptionDone
-          ? '一键转译'
-          : '开始翻译';
+        : '开始翻译';
 
   const padY = 'pt-3 md:pt-4';
   const btnPad = 'px-4 py-2 text-sm';
@@ -203,18 +201,6 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
               <>
                 <Square className="w-3.5 h-3.5" fill="currentColor" />
                 取消排队
-              </>
-            ) : isBusy ? (
-              <>
-                <div
-                  className="rounded-full animate-spin"
-                  style={{
-                    width: 14, height: 14,
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    borderTopColor: 'white',
-                  }}
-                />
-                处理中...
               </>
             ) : (
               <>

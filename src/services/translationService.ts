@@ -4,6 +4,7 @@
  *
  * - 默认通过 store getState 接线（App 运行时）
  * - 可通过 deps 注入依赖（单测 / 将来非 React 宿主）
+ * - agentTranslationEnabled：分叉到 Agent 管线（术语+分窗）；关则完全旧路径
  *
  * 注：断句（DP 断句）统一在转录阶段完成：音视频走 segmentWords，
  * 直接上传 SRT 不再二次断句。本服务只负责翻译，不含 AI 断句对齐。
@@ -15,7 +16,10 @@ import { useTermsStore } from '@/stores/termsStore';
 import { useStreamingOverlayStore } from '@/stores/streamingOverlayStore';
 import { executeTranslation } from './TranslationOrchestrator';
 import { translateBatch as llmTranslateBatch } from './llmTranslationService';
-import { toAppError } from '@/utils/errors';
+import { runAgentTranslation } from './agent';
+import type { AgentEvent } from './agent';
+import { useAgentRunStore } from '@/stores/agentRunStore';
+import { isAbortError, toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import {
   getRelevantTerms as getRelevantTermsUtil,
@@ -123,8 +127,11 @@ export async function startTranslation(
     return null;
   }
 
+  let controller: AbortController | null = null;
+  const usedAgent = Boolean(config.agentTranslationEnabled);
+
   try {
-    const controller = await deps.beginSession(file.taskId);
+    controller = await deps.beginSession(file.taskId);
 
     const entries = deps.getTaskEntries(file.taskId);
 
@@ -142,79 +149,99 @@ export async function startTranslation(
       });
     }
 
-    await executeTranslation(
-      {
+    // ── 唯一分叉：Agent 开 → 新管线；关 → 现有批译 ──
+    // 设置开关只决定「这次」走哪条路；历史路径/快照写在任务上，关开关不擦除。
+    if (usedAgent) {
+      useFilesStore.getState().setTranslationPathMeta(fileId, {
+        translationPath: 'agent',
+      });
+      await runAgentTranslationPath({
+        fileId,
+        file,
         entries,
-        filename: file.name,
-        config: {
-          batchSize: config.batchSize,
-          contextBefore: config.contextBefore,
-          contextAfter: config.contextAfter,
-          threadCount: config.threadCount,
-        },
+        config,
         controller,
-        taskId: file.taskId,
-      },
-      {
-        translateBatch: (
-          texts,
-          signal,
-          contextBefore,
-          contextAfter,
-          terms,
-          onPartial,
-          onAttemptStart
-        ) =>
-          deps.translateBatch(config, texts, {
+        deps,
+      });
+    } else {
+      useFilesStore.getState().setTranslationPathMeta(fileId, {
+        translationPath: 'batch',
+      });
+      await executeTranslation(
+        {
+          entries,
+          filename: file.name,
+          config: {
+            batchSize: config.batchSize,
+            contextBefore: config.contextBefore,
+            contextAfter: config.contextAfter,
+            threadCount: config.threadCount,
+          },
+          controller,
+          taskId: file.taskId,
+        },
+        {
+          translateBatch: (
+            texts,
             signal,
             contextBefore,
             contextAfter,
             terms,
             onPartial,
-            onAttemptStart,
-          }),
-        batchUpdateEntries: (updates) => {
-          deps.batchUpdateEntries(fileId, updates);
-        },
-        // 流式只打内存 overlay，不碰 filesStore / persist
-        applyStreamingPartials: (updates) => {
-          deps.applyStreamingPartials(fileId, updates);
-        },
-        clearStreamingIds: (ids) => {
-          deps.clearStreamingIds(fileId, ids);
-        },
-        getCurrentEntries: () => deps.getTaskEntries(file.taskId),
-        updateProgress: async (
-          current: number,
-          total: number,
-          phase: 'direct' | 'completed',
-          status: string,
-          taskId: string,
-          newTokens?: number
-        ) => {
-          await deps.updateUiProgress(current, total, phase, status, taskId);
+            onAttemptStart
+          ) =>
+            deps.translateBatch(config, texts, {
+              signal,
+              contextBefore,
+              contextAfter,
+              terms,
+              onPartial,
+              onAttemptStart,
+            }),
+          batchUpdateEntries: (updates) => {
+            deps.batchUpdateEntries(fileId, updates);
+          },
+          // 流式只打内存 overlay，不碰 filesStore / persist
+          applyStreamingPartials: (updates) => {
+            deps.applyStreamingPartials(fileId, updates);
+          },
+          clearStreamingIds: (ids) => {
+            deps.clearStreamingIds(fileId, ids);
+          },
+          getCurrentEntries: () => deps.getTaskEntries(file.taskId),
+          updateProgress: async (
+            current: number,
+            total: number,
+            phase: 'direct' | 'completed',
+            status: string,
+            taskId: string,
+            newTokens?: number
+          ) => {
+            await deps.updateUiProgress(current, total, phase, status, taskId);
 
-          // 进度与 token 解耦；tokensDelta 在 store 内原子累加（并发 batch 安全）
-          const progress = total > 0 ? Math.round((current / total) * 100) : 0;
-          if (newTokens !== undefined && newTokens > 0) {
-            deps.updatePhase(fileId, 'translating', {
-              progress,
-              tokensDelta: newTokens,
-            });
-          } else {
-            deps.updatePhase(fileId, 'translating', { progress });
-          }
-        },
-        getRelevantTerms: (batchText: string, before: string, after: string): Term[] => {
-          return getRelevantTermsUtil(deps.getAllTerms(), batchText, before, after);
-        },
-        formatTermsForPrompt: (terms: Term[]): string => formatTermsForPromptUtil(terms),
-      }
-    );
+            // 进度与 token 解耦；tokensDelta 在 store 内原子累加（并发 batch 安全）
+            const progress = total > 0 ? Math.round((current / total) * 100) : 0;
+            if (newTokens !== undefined && newTokens > 0) {
+              deps.updatePhase(fileId, 'translating', {
+                progress,
+                tokensDelta: newTokens,
+              });
+            } else {
+              deps.updatePhase(fileId, 'translating', { progress });
+            }
+          },
+          getRelevantTerms: (batchText: string, before: string, after: string): Term[] => {
+            return getRelevantTermsUtil(deps.getAllTerms(), batchText, before, after);
+          },
+          formatTermsForPrompt: (terms: Term[]): string => formatTermsForPromptUtil(terms),
+        }
+      );
+    }
 
     if (controller.signal.aborted) {
-      logger.info('翻译已中止（文件已删除）');
+      logger.info('翻译已中止');
       deps.clearStreamingFile(fileId);
+      deactivateAgentRunIfNeeded(fileId);
       return null;
     }
 
@@ -235,20 +262,221 @@ export async function startTranslation(
     return { tokens: finalTokens, entries: lastEntries, phases: finalPhases! };
   } catch (error) {
     deps.clearStreamingFile(fileId);
+
+    // 取消：与批译一致，不标 failed、不 toast 失败
+    if (isAbortError(error) || controller?.signal.aborted) {
+      logger.info('翻译已取消');
+      deactivateAgentRunIfNeeded(fileId);
+      return null;
+    }
+
     const appError = toAppError(error, '翻译失败');
     logger.error(appError.message, appError);
     deps.notifyError(`翻译失败: ${appError.message}`);
 
+    // Agent 管线已 emit pipeline_error + 快照；批译 / 漏网错误在此收尾 phase
     const phases = deps.getFile(fileId)?.phases;
     if (phases?.translating.status === 'active') {
       deps.updatePhase(fileId, 'translating', {
         status: 'failed',
         errorMessage: error instanceof Error ? error.message : String(error),
       });
+      // 若 Agent 路径未写入快照（异常未走事件），补一份
+      if (usedAgent) {
+        ensureAgentFailureSnapshot(
+          fileId,
+          file.taskId,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
       await deps.flushPersist();
     }
   } finally {
     deps.endSession();
   }
   return null;
+}
+
+/** 取消时收起 live Agent UI，不写成失败快照 */
+function deactivateAgentRunIfNeeded(fileId: string) {
+  const st = useAgentRunStore.getState().byFileId[fileId];
+  if (!st?.active) return;
+  useAgentRunStore.setState((s) => {
+    const cur = s.byFileId[fileId];
+    if (!cur?.active) return s;
+    return {
+      byFileId: {
+        ...s.byFileId,
+        [fileId]: {
+          ...cur,
+          active: false,
+          compactBadge: '',
+          compactSummary: '',
+          actionLine: cur.actionLine || '已取消',
+          updatedAt: Date.now(),
+        },
+      },
+    };
+  });
+}
+
+/** 失败快照兜底：pipeline 已 emit 时 store 已有 error 终态，再落盘一次幂等 */
+function ensureAgentFailureSnapshot(fileId: string, taskId: string, error: string) {
+  const st = useAgentRunStore.getState().byFileId[fileId];
+  // 已由 pipeline_error 写入且 inactive
+  if (st && !st.active && st.error) {
+    useFilesStore.getState().setTranslationPathMeta(fileId, {
+      translationPath: 'agent',
+      agentSnapshot: {
+        glossaryCount: st.glossaryCount ?? 0,
+        styleGuidePreview: st.styleGuidePreview || undefined,
+        lastActionLine: st.actionLine || `失败：${st.error}`,
+        completedAt: Date.now(),
+        error: st.error,
+        totalEntries: st.totalEntries,
+        totalWindows: st.totalWindows,
+      },
+    });
+    return;
+  }
+  // store 仍 active 或无 error：合成终态事件
+  useAgentRunStore.getState().applyEvent(fileId, taskId, {
+    type: 'pipeline_error',
+    error,
+  });
+  const after = useAgentRunStore.getState().byFileId[fileId];
+  useFilesStore.getState().setTranslationPathMeta(fileId, {
+    translationPath: 'agent',
+    agentSnapshot: {
+      glossaryCount: after?.glossaryCount ?? 0,
+      styleGuidePreview: after?.styleGuidePreview || undefined,
+      lastActionLine: after?.actionLine || `失败：${error}`,
+      completedAt: Date.now(),
+      error,
+      totalEntries: after?.totalEntries,
+      totalWindows: after?.totalWindows,
+    },
+  });
+}
+
+/**
+ * Agent 路径：事件 → 现有 store（overlay / phase / entries）。
+ * 与旧 orchestrator 隔离；仅 agentTranslationEnabled 时进入。
+ */
+async function runAgentTranslationPath(opts: {
+  fileId: string;
+  file: SubtitleFileMetadata;
+  entries: SubtitleEntry[];
+  config: TranslationConfig;
+  controller: AbortController;
+  deps: TranslationServiceDeps;
+}): Promise<void> {
+  const { fileId, file, entries, config, controller, deps } = opts;
+  const total = entries.length || 1;
+
+  /** 终态快照：success 显式 error=null，不会被旧 st.error 污染 */
+  const persistAgentSnapshot = (outcome: 'success' | 'error', errorMessage?: string) => {
+    const st = useAgentRunStore.getState().byFileId[fileId];
+    const error =
+      outcome === 'success' ? null : (errorMessage ?? st?.error ?? '未知错误');
+    useFilesStore.getState().setTranslationPathMeta(fileId, {
+      translationPath: 'agent',
+      agentSnapshot: {
+        glossaryCount: st?.glossaryCount ?? 0,
+        styleGuidePreview: st?.styleGuidePreview || undefined,
+        lastActionLine:
+          st?.actionLine ||
+          (error ? `失败：${error}` : 'Agent 流程完成'),
+        completedAt: Date.now(),
+        error,
+        totalEntries: st?.totalEntries,
+        totalWindows: st?.totalWindows,
+      },
+    });
+  };
+
+  const onEvent = async (event: AgentEvent) => {
+    // UI 读模型：阶段摘要 / 大脑面板（与列表落库并行）
+    useAgentRunStore.getState().applyEvent(fileId, file.taskId, event);
+
+    switch (event.type) {
+      case 'translation_partial':
+        deps.applyStreamingPartials(fileId, event.updates);
+        break;
+      case 'window_done': {
+        if (event.translations.length) {
+          deps.batchUpdateEntries(
+            fileId,
+            event.translations.map((t) => ({
+              id: t.entryId,
+              text:
+                entries.find((e) => e.id === t.entryId)?.text ?? '',
+              translatedText: t.text,
+              status: 'completed' as TranslationStatus,
+            }))
+          );
+          deps.clearStreamingIds(
+            fileId,
+            event.translations.map((t) => t.entryId)
+          );
+        }
+        break;
+      }
+      case 'progress': {
+        const progress =
+          event.totalEntries > 0
+            ? Math.min(
+                99,
+                Math.round((event.completedEntries / event.totalEntries) * 100)
+              )
+            : 0;
+        // 术语阶段给 5–12% 可见进度
+        const displayProgress =
+          event.statusText?.includes('术语') && event.completedEntries === 0
+            ? Math.max(progress, 8)
+            : progress;
+        // UI 进度条用短状态，长叙事只在大脑面板
+        const shortStatus =
+          useAgentRunStore.getState().byFileId[fileId]?.compactSummary ||
+          'Agent 翻译中…';
+        await deps.updateUiProgress(
+          event.completedEntries,
+          event.totalEntries || total,
+          'direct',
+          shortStatus,
+          file.taskId
+        );
+        if (event.tokensDelta && event.tokensDelta > 0) {
+          deps.updatePhase(fileId, 'translating', {
+            progress: displayProgress,
+            tokensDelta: event.tokensDelta,
+          });
+        } else {
+          deps.updatePhase(fileId, 'translating', { progress: displayProgress });
+        }
+        break;
+      }
+      case 'pipeline_error':
+        logger.error('Agent pipeline error:', event.error);
+        persistAgentSnapshot('error', event.error);
+        break;
+      case 'pipeline_end':
+        // 终态写入任务（持久化）；关设置也不丢
+        persistAgentSnapshot('success');
+        break;
+      default:
+        break;
+    }
+  };
+
+  await runAgentTranslation(entries, {
+    fileId,
+    taskId: file.taskId,
+    filename: file.name,
+    config,
+    signal: controller.signal,
+    userTerms: deps.getAllTerms(),
+    onEvent,
+    translateBatch: (cfg, texts, options) => deps.translateBatch(cfg, texts, options),
+  });
 }

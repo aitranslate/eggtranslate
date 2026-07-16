@@ -9,7 +9,6 @@ import { useFilesStore, useFile } from '@/stores/filesStore';
 import {
   EMPTY_STREAMING_OVERLAY,
   calcDisplayTranslationProgress,
-  countStreamingLines,
   mergeEntriesWithOverlay,
   useStreamingOverlayStore,
 } from '@/stores/streamingOverlayStore';
@@ -24,6 +23,8 @@ import { getBilingualDisplayLines } from '@/utils/srtParser';
 import { generateStableFileId } from '@/utils/taskIdGenerator';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { formatMatchCount, swapLanguages } from '@/utils/uxHelpers';
+import { useAgentRunStore } from '@/stores/agentRunStore';
+import { AgentProcessControl } from '@/components/agent/AgentProcessControl';
 
 const EMPTY_ENTRIES: SubtitleEntry[] = [];
 /** 五列平铺；原文/译文可显示 SRT 内建换行（约 2 行） */
@@ -422,6 +423,19 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const streamCaretEntryId = useStreamingOverlayStore(
     (s) => s.activeCaretByFile[fileId] ?? null
   );
+  const agentRun = useAgentRunStore((s) => s.byFileId[fileId]);
+  // 设置里的 Agent 开关只决定「下次」走哪条路径，不隐藏历史/当前运行态
+  const agentUiVisible = Boolean(
+    agentRun && (agentRun.active || agentRun.error || agentRun.actionLine)
+  );
+
+  // 从任务持久化快照回填大脑面板（刷新 / 关 Agent 开关后仍可见）
+  useEffect(() => {
+    if (!file?.taskId || !file.agentSnapshot) return;
+    useAgentRunStore
+      .getState()
+      .hydrateFromSnapshot(fileId, file.taskId, file.agentSnapshot);
+  }, [fileId, file?.taskId, file?.agentSnapshot]);
   const displayEntries = useMemo(
     () => mergeEntriesWithOverlay(fileEntries, streamingOverlay),
     [fileEntries, streamingOverlay]
@@ -621,11 +635,28 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     }
   }, [filteredEntries, editingId, onSaveEdit]);
 
-  // 进度跟流式可见译文同步：已完成 + overlay 里已出字的行
-  const streamingLineCount = useMemo(
-    () => countStreamingLines(streamingOverlay),
-    [streamingOverlay]
-  );
+  // 进度：已 completed + overlay 中「尚未 completed」的行（避免 store 已落库仍占 soft 导致 3 已译只见 2 条）
+  const completedEntryIds = useMemo(() => {
+    const set = new Set<number>();
+    for (const e of fileEntries) {
+      if (e.translationStatus === 'completed' && e.translatedText?.trim()) {
+        set.add(e.id);
+      }
+    }
+    return set;
+  }, [fileEntries]);
+  const streamingLineCount = useMemo(() => {
+    if (!streamingOverlay) return 0;
+    let n = 0;
+    for (const key of Object.keys(streamingOverlay)) {
+      const text = streamingOverlay[Number(key)] ?? streamingOverlay[key as unknown as number];
+      if (!text) continue;
+      const id = Number(key);
+      if (completedEntryIds.has(id)) continue;
+      n += 1;
+    }
+    return n;
+  }, [streamingOverlay, completedEntryIds]);
   const translationStats = useMemo(() => {
     const total = file?.entryCount ?? 0;
     const hard = file?.translatedCount ?? 0;
@@ -708,6 +739,12 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
               <span>
                 {translationStats.translated}/{translationStats.total} 已译 · {translationStats.percentage}%
               </span>
+              {agentUiVisible && agentRun ? (
+                <>
+                  <span className="hidden sm:inline">·</span>
+                  <AgentProcessControl status={agentRun} visible />
+                </>
+              ) : null}
             </div>
           </div>
         </div>

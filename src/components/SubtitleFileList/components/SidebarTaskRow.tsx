@@ -20,7 +20,11 @@ import type { SubtitleFileMetadata } from '@/types';
 import { ALL_PHASES } from '@/types';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useFilesStore } from '@/stores/filesStore';
-import { getCardBadge } from '@/utils/badgeHelper';
+import {
+  getCardBadge,
+  resolveBusyPrimaryLabel,
+  resolveTaskCardStateText,
+} from '@/utils/badgeHelper';
 import {
   calcDisplayTranslationProgress,
   countStreamingLines,
@@ -31,8 +35,9 @@ import { canRetranscribe } from '@/utils/fileUtils';
 import type { ExportFormat } from '@/utils/fileExport';
 import { ExportButton } from '@/components/common/ExportButton';
 import { copyToClipboard } from '@/utils/appToast';
-import { getFailedPhaseError } from '@/utils/uxHelpers';
+import { getFailedPhaseError, shouldShowTaskErrorDetail } from '@/utils/uxHelpers';
 import { formatFileSize, formatDuration } from '../utils/fileHelpers';
+import { useAgentRunStore } from '@/stores/agentRunStore';
 
 interface SidebarTaskRowProps {
   file: SubtitleFileMetadata;
@@ -84,6 +89,12 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
   );
 
   const badge = getCardBadge(file.phases, displayPhases, isQueued, queuePosition);
+  const agentBadge = useAgentRunStore((s) => s.byFileId[file.id]?.compactBadge ?? '');
+  const stateText = resolveTaskCardStateText({
+    badgeText: badge.text,
+    agentBadge,
+    phases: file.phases,
+  });
   // 侧栏进度轨与流式可见行同步（不写 filesStore）
   const streamOverlay = useStreamingOverlayStore(
     (s) => s.overlays[file.id] ?? EMPTY_STREAMING_OVERLAY
@@ -142,17 +153,20 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
     return true;
   }, [isQueued, isBusy, allPhasesDone, isAudioVideo, isTranscriptionDone, pct]);
 
-  const primaryLabel = isQueued
-    ? '取消排队'
-    : isBusy
-      ? '处理中'
-      : isFailed
-        ? '重试'
-        : allPhasesDone
-          ? '已完成'
-          : isAudioVideo && !isTranscriptionDone
-            ? '转译'
-            : '翻译';
+  const idlePrimary = isFailed
+    ? '重试'
+    : allPhasesDone
+      ? '已完成'
+      : isAudioVideo && !isTranscriptionDone
+        ? '转译'
+        : '翻译';
+  const primaryLabel = resolveBusyPrimaryLabel({
+    isQueued,
+    isBusy,
+    isAudioVideo,
+    isTranscriptionDone,
+    idleLabel: idlePrimary,
+  });
 
   const metaLine = useMemo(() => {
     const parts: string[] = [];
@@ -195,7 +209,10 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
     ]
   );
 
-  const showRail = isRunning || isQueued || (pct > 0 && pct < 100) || isFailed;
+  // 失败不铺满红进度条；阶段 chip + 状态文案已够
+  const showRail =
+    !isFailed && (isRunning || isQueued || (pct > 0 && pct < 100));
+  const showErrorDetail = isFailed && shouldShowTaskErrorDetail(failedInfo);
 
   return (
     <div
@@ -221,8 +238,31 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
           </div>
           <div className="wb-proj-sub">
             <span className={`wb-proj-dot tone-${statusTone}`} aria-hidden />
-            <span className={`wb-proj-state tone-${statusTone}`}>{badge.text}</span>
-            {metaLine ? <span className="wb-proj-meta">· {metaLine}</span> : null}
+            {stateText ? (
+              <span
+                className={`wb-proj-state tone-${statusTone}${
+                  agentBadge && stateText === agentBadge ? ' is-agent' : ''
+                }`}
+                data-testid={
+                  agentBadge && stateText === agentBadge
+                    ? 'task-agent-badge'
+                    : undefined
+                }
+                title={
+                  agentBadge && stateText === agentBadge
+                    ? 'Agent 翻译阶段'
+                    : undefined
+                }
+              >
+                {stateText}
+              </span>
+            ) : null}
+            {metaLine ? (
+              <span className="wb-proj-meta">
+                {stateText ? ' · ' : ''}
+                {metaLine}
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -257,8 +297,8 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
         </div>
       )}
 
-      {/* 失败原因常驻可见（不依赖 hover） */}
-      {isFailed && failedInfo && (
+      {/* 有实质错误信息时再展示次要行；笼统「任务失败」不重复 */}
+      {showErrorDetail && failedInfo && (
         <div
           className="wb-proj-error"
           data-testid="task-error-banner"
@@ -270,6 +310,7 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
           <button
             type="button"
             className="wb-proj-error-copy"
+            data-testid="task-error-copy"
             onClick={(e) => void handleCopyError(e)}
             title="复制错误信息"
             aria-label="复制错误信息"
@@ -306,7 +347,9 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
                   {st === 'completed' ? (
                     '✓'
                   ) : st === 'failed' ? (
-                    '!'
+                    <span className="wb-proj-phase-x" aria-hidden>
+                      ×
+                    </span>
                   ) : st === 'active' ? (
                     <Loader2 className="wb-proj-phase-spin" aria-hidden />
                   ) : (

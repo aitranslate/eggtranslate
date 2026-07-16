@@ -7,10 +7,11 @@ import toast from 'react-hot-toast';
 import { ChevronRight, Copy, FileText, Music, Video, Loader2 } from 'lucide-react';
 import type { SubtitleFileMetadata } from '@/types';
 import { ALL_PHASES } from '@/types';
-import { getCardBadge } from '@/utils/badgeHelper';
-import { getFailedPhaseError } from '@/utils/uxHelpers';
+import { getCardBadge, resolveTaskCardStateText } from '@/utils/badgeHelper';
+import { getFailedPhaseError, shouldShowTaskErrorDetail } from '@/utils/uxHelpers';
 import { copyToClipboard } from '@/utils/appToast';
 import { formatFileSize, formatDuration } from '@/components/SubtitleFileList/utils/fileHelpers';
+import { useAgentRunStore } from '@/stores/agentRunStore';
 
 interface MobileTaskCardProps {
   file: SubtitleFileMetadata;
@@ -40,6 +41,12 @@ export const MobileTaskCard = memo(function MobileTaskCard({
   }, [file.fileType]);
 
   const badge = getCardBadge(file.phases, displayPhases, isQueued, queuePosition);
+  const agentBadge = useAgentRunStore((s) => s.byFileId[file.id]?.compactBadge ?? '');
+  const stateText = resolveTaskCardStateText({
+    badgeText: badge.text,
+    agentBadge,
+    phases: file.phases,
+  });
   const pct =
     (file.entryCount ?? 0) > 0
       ? Math.round(((file.translatedCount ?? 0) / (file.entryCount ?? 1)) * 100)
@@ -111,10 +118,28 @@ export const MobileTaskCard = memo(function MobileTaskCard({
         <div className="m-task-title">{file.name}</div>
         <div className="m-task-sub">
           <span className={`m-task-dot tone-${tone}`} aria-hidden />
-          <span className={`m-task-state tone-${tone}`}>{badge.text}</span>
-          {meta ? <span className="m-task-meta">· {meta}</span> : null}
+          {stateText ? (
+            <span
+              className={`m-task-state tone-${tone}${
+                agentBadge && stateText === agentBadge ? ' is-agent' : ''
+              }`}
+              data-testid={
+                agentBadge && stateText === agentBadge
+                  ? 'task-agent-badge'
+                  : undefined
+              }
+            >
+              {stateText}
+            </span>
+          ) : null}
+          {meta ? (
+            <span className="m-task-meta">
+              {stateText ? ' · ' : ''}
+              {meta}
+            </span>
+          ) : null}
         </div>
-        {isFailed && failedInfo && (
+        {isFailed && shouldShowTaskErrorDetail(failedInfo) && failedInfo && (
           <div
             className="m-task-error"
             data-testid="task-error-banner"
@@ -134,11 +159,11 @@ export const MobileTaskCard = memo(function MobileTaskCard({
             </button>
           </div>
         )}
-        {(isRunning || isQueued || (pct > 0 && pct < 100) || isFailed) && (
-          <div className={`m-task-rail ${isFailed ? 'fail' : ''}`}>
+        {!isFailed && (isRunning || isQueued || (pct > 0 && pct < 100)) && (
+          <div className="m-task-rail">
             <i
               style={{
-                width: `${isFailed ? 100 : Math.max(pct, isRunning || isQueued ? 12 : 0)}%`,
+                width: `${Math.max(pct, isRunning || isQueued ? 12 : 0)}%`,
               }}
             />
           </div>

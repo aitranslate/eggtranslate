@@ -103,5 +103,9 @@ export function ensureProfiles(config: TranslationConfig): TranslationConfig {
     ...config,
     profiles,
     activeProfileId: activeExists ? config.activeProfileId : 'agnes',
+    // Agent 字段缺省补齐（个人配置；关开关=旧路径）
+    agentTranslationEnabled: config.agentTranslationEnabled ?? false,
+    agentWindowSize: config.agentWindowSize ?? 30,
+    agentMaxConcurrency: config.agentMaxConcurrency ?? 3,
   };
 }

@@ -4,7 +4,6 @@
  */
 
 import {
-  createElement,
   useCallback,
   useEffect,
   useRef,
@@ -25,8 +24,7 @@ import {
 import {
   isMediaImportFileName,
   isTranscriptionApiConfigured,
-} from '@/utils/onboarding';
-import { useOnboardingStore } from '@/stores/onboardingStore';
+} from '@/utils/taskGuards';
 
 export const IMPORT_ACCEPT =
   '.srt,.mp3,.wav,.m4a,.ogg,.flac,.mp4,.webm,.mkv,.avi,.mov,audio/*,video/*';
@@ -128,32 +126,14 @@ export function useFileImport() {
         useWorkspaceStore.getState().openEditor();
       }
 
-      // 成功导入音视频且未配置 AssemblyAI：toast + 一次性 tip（不打断导入成功）
+      // 导入音视频但未配置转录：简短提示（无引导 tip）
       if (okMedia > 0) {
         const apiKeys = useTranscriptionStore.getState().apiKeys;
         if (!isTranscriptionApiConfigured(apiKeys)) {
-          useOnboardingStore.getState().showTipIfNew('after_media_import');
-          toast(
-            (t) =>
-              createElement(
-                'span',
-                { className: 'ob-toast-row' },
-                createElement('span', null, '已导入音视频。开始转录前请配置 AssemblyAI Key。'),
-                createElement(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'ob-toast-link',
-                    onClick: () => {
-                      toast.dismiss(t.id);
-                      useWorkspaceStore.getState().openSettings('transcription');
-                    },
-                  },
-                  '去配置'
-                )
-              ),
-            { duration: 6000, id: 'ob-transcription-hint' }
-          );
+          toast('已导入音视频。开始转录前请在设置中配置 AssemblyAI Key。', {
+            duration: 4500,
+            id: 'transcription-key-hint',
+          });
         }
       }
     },

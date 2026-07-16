@@ -15,11 +15,14 @@ import {
   FilePhases,
   PhaseProgress,
   WorkflowType,
+  type AgentRunSnapshot,
+  type TranslationPath,
 } from "@/types";
 import { convertTaskToMetadata } from "@/services/SubtitleFileManager";
 import { generateStableFileId } from "@/utils/taskIdGenerator";
 import localforage from "localforage";
 import type { SingleTask } from "@/types";
+import { useAgentRunStore } from "@/stores/agentRunStore";
 
 /** 快速连续写入时合并 IDB persist（翻译热路径） */
 export const FILES_PERSIST_DEBOUNCE_MS = 800;
@@ -86,6 +89,14 @@ interface FilesState {
   ) => void;
   setWorkflow: (fileId: string, workflow: WorkflowType) => void;
   setSelectedKeytermGroupId: (fileId: string, groupId: string | null) => void;
+  /** 记录最近翻译路径 / Agent 终态（持久化，与设置开关无关） */
+  setTranslationPathMeta: (
+    fileId: string,
+    meta: {
+      translationPath?: TranslationPath;
+      agentSnapshot?: AgentRunSnapshot | null;
+    }
+  ) => void;
 
   getFile: (fileId: string) => SubtitleFileMetadata | undefined;
   getAllFiles: () => SubtitleFileMetadata[];
@@ -181,6 +192,7 @@ export const useFilesStore = create<FilesState>()(
 
       removeTask: (taskId) => {
         const fileId = generateStableFileId(taskId);
+        useAgentRunStore.getState().clearFile(fileId);
         set((state) => ({
           tasks: state.tasks.filter((t) => t.taskId !== taskId),
           // selectedFileId 存的是 fileId（稳定 id），兼容旧数据里可能写过 taskId
@@ -193,6 +205,7 @@ export const useFilesStore = create<FilesState>()(
       },
 
       clearAllTasks: () => {
+        useAgentRunStore.setState({ byFileId: {} });
         set({ tasks: [], selectedFileId: null });
         void flushFilesStorePersist();
       },
@@ -347,6 +360,26 @@ export const useFilesStore = create<FilesState>()(
         }));
       },
 
+      setTranslationPathMeta: (fileId, meta) => {
+        const file = get().getFile(fileId);
+        if (!file) return;
+        set((state) => ({
+          tasks: state.tasks.map((t) => {
+            if (t.taskId !== file.taskId) return t;
+            return {
+              ...t,
+              ...(meta.translationPath !== undefined
+                ? { translationPath: meta.translationPath }
+                : {}),
+              ...(meta.agentSnapshot !== undefined
+                ? { agentSnapshot: meta.agentSnapshot }
+                : {}),
+            };
+          }),
+        }));
+        void flushFilesStorePersist();
+      },
+
       getFile: (fileId) => {
         const task = get().tasks.find((t) => generateStableFileId(t.taskId) === fileId);
         return task ? convertTaskToMetadata(task) : undefined;
@@ -444,3 +477,9 @@ export const useSelectedFile = () => {
     return task ? convertTaskToMetadata(task) : null;
   }, [tasks, selectedFileId]);
 };
+
+/** DEV：agent-browser 读取选中文件 */
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  (window as unknown as { __eggFilesStore?: typeof useFilesStore }).__eggFilesStore =
+    useFilesStore;
+}

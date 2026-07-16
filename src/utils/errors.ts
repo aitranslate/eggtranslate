@@ -43,11 +43,12 @@ export class AbortOperationError extends AppError {
 export function isAbortError(error: unknown): error is AbortOperationError {
   return (
     error instanceof AbortOperationError ||
-    error instanceof Error && (
-      error.name === 'AbortError' ||
-      error.message?.includes('翻译被取消') ||
-      error.message?.includes('操作被取消')
-    )
+    (error instanceof Error &&
+      (error.name === 'AbortError' ||
+        error.message?.includes('翻译被取消') ||
+        error.message?.includes('翻译已取消') ||
+        error.message?.includes('操作被取消') ||
+        error.message?.includes('请求被取消')))
   );
 }
 
