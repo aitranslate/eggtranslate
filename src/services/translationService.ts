@@ -401,7 +401,10 @@ async function runAgentTranslationPath(opts: {
 
     switch (event.type) {
       case 'translation_partial':
-        deps.applyStreamingPartials(fileId, event.updates);
+        deps.applyStreamingPartials(
+          fileId,
+          event.updates.map((u) => ({ id: u.entryId, text: u.text }))
+        );
         break;
       case 'window_done': {
         if (event.translations.length) {

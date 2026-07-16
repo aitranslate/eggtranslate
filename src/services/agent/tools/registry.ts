@@ -168,7 +168,7 @@ const webSearch: ToolHandler = async (params, ctx) => {
     sessionId: `eggtranslate_${(ctx.title || 'session').slice(0, 40)}`,
   });
 
-  if (!result.ok) {
+  if (result.ok === false) {
     return toolOk(
       `[web_search failed: ${result.error}]. ` +
         'Reason from transcript + title + knowledge instead.'

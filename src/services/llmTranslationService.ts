@@ -443,7 +443,7 @@ export async function translateBatch(
         lastError = new Error('翻译结果为空或无法解析');
         logger.error(
           `批次翻译无法解析（第${attempt}次尝试）:`,
-          lastError.message
+          lastError instanceof Error ? lastError.message : lastError
         );
         if (attempt < MAX_FORMAT_ATTEMPTS) {
           appendRepairTurn(rawForParse || '', directResult, true);
