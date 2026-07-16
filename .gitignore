@@ -13,5 +13,7 @@ claude.md
 # agent-browser E2E
 /e2e/output/
 /e2e/.env.e2e
+# 本地一次性探针，勿提交
+/e2e/probe-mobile-editor.mjs
 /test-fixtures/
 /test-media-list.json

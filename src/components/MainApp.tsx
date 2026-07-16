@@ -197,7 +197,13 @@ export const MainApp: React.FC = () => {
     );
   }
 
+  /**
+   * 布局契约：`.workbench` 只放网格槽位（顶栏 / 侧栏 / 主舞台 / 状态栏）。
+   * 设置、菜单、引导等浮层必须是 workbench 的**兄弟节点**，不能当 grid 子项——
+   * 否则 Suspense 占位或未 portal 的节点会生成隐式第 4 行，把状态栏顶上去。
+   */
   return (
+    <>
     <div
       className={`workbench apple-style${isDragging ? ' is-file-drag' : ''}`}
       data-theme={theme}
@@ -403,27 +409,30 @@ export const MainApp: React.FC = () => {
         </AnimatePresence>
       </main>
 
-      <OnboardingHost />
       <StatusBar />
-
-      {/* 首次打开后懒加载并保持挂载；isOpen 控制显隐，保留未保存草稿 */}
-      {settingsMounted && (
-        <LazySurface fallback={null}>
-          <LazySettingsModal isOpen={settingsOpen} />
-        </LazySurface>
-      )}
-
-      <MobileMenu
-        isOpen={isMobileMenuOpen}
-        onClose={() => setIsMobileMenuOpen(false)}
-        termsCount={termsCount}
-        historyCount={historyCount}
-        isSettingsRequired={!isConfigured}
-        onOpenWorkspace={openEditor}
-        onOpenTerms={openTerms}
-        onOpenHistory={openHistory}
-        onOpenSettings={openSettings}
-      />
     </div>
+
+    {/* 浮层：在布局壳外，不参与 workbench grid */}
+    <OnboardingHost />
+
+    {/* 首次打开后懒加载并保持挂载；isOpen 控制显隐，保留未保存草稿 */}
+    {settingsMounted && (
+      <LazySurface fallback={null}>
+        <LazySettingsModal isOpen={settingsOpen} />
+      </LazySurface>
+    )}
+
+    <MobileMenu
+      isOpen={isMobileMenuOpen}
+      onClose={() => setIsMobileMenuOpen(false)}
+      termsCount={termsCount}
+      historyCount={historyCount}
+      isSettingsRequired={!isConfigured}
+      onOpenWorkspace={openEditor}
+      onOpenTerms={openTerms}
+      onOpenHistory={openHistory}
+      onOpenSettings={openSettings}
+    />
+    </>
   );
 };

@@ -37,4 +37,27 @@ describe('lazy surface wiring', () => {
     expect(src).not.toMatch(/from ['"]@\/components\/TermsManager['"]/);
     expect(src).not.toMatch(/from ['"]@\/components\/HistoryModal['"]/);
   });
+
+  it('LazySurface preserves explicit null fallback (no ?? that revives SurfaceFallback)', () => {
+    const src = readSrc('components/lazySurfaces.tsx');
+    // 默认参数写法：fallback = <SurfaceFallback />，再原样交给 Suspense
+    expect(src).toMatch(/fallback\s*=\s*<SurfaceFallback/);
+    expect(src).toMatch(/<Suspense\s+fallback=\{fallback\}/);
+    // 禁止 fallback ?? …：null 会被 ?? 吃掉，设置首次打开会在状态栏下闪「加载中…」
+    expect(src).not.toMatch(/fallback\s*\?\?/);
+  });
+
+  it('settings uses null fallback and mounts outside layout shells', () => {
+    const main = readSrc('components/MainApp.tsx');
+    const mobile = readSrc('components/mobile/MobileShell.tsx');
+    expect(main).toMatch(/LazySurface\s+fallback=\{null\}/);
+    expect(mobile).toMatch(/LazySurface\s+fallback=\{null\}/);
+    // 源头：浮层与布局壳兄弟
+    expect(main).toMatch(
+      /<StatusBar\s*\/>\s*<\/div>\s*\{\/\*\s*浮层[\s\S]*?<LazySettingsModal/
+    );
+    expect(mobile).toMatch(
+      /\{\/\*\s*浮层：在 m-shell 外[\s\S]*?<LazySettingsModal/
+    );
+  });
 });

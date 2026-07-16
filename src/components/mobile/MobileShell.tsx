@@ -149,7 +149,12 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
     return '项目';
   }, [stage, inDetail, selectedFile?.name]);
 
+  /**
+   * 布局契约：`.m-shell` 只放壳层槽位（顶栏 / 主区 / 底栏）。
+   * 设置抽屉等浮层放在壳外，避免 Suspense 占位挤进 flex 列把底栏顶歪。
+   */
   return (
+    <>
     <div className="m-shell apple-style" data-theme={theme}>
       {fileInput}
 
@@ -397,23 +402,26 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
         </nav>
       )}
 
-      {settingsMounted && (
-        <LazySurface fallback={null}>
-          <LazySettingsModal isOpen={settingsOpen} />
-        </LazySurface>
-      )}
-
-      <ConfirmDialog
-        isOpen={showClearConfirm}
-        onClose={() => setShowClearConfirm(false)}
-        onConfirm={() => void handleClearAll()}
-        title="清空全部项目？"
-        message="将删除所有任务与本地字幕数据，不可恢复。"
-        confirmText="清空"
-        tone="danger"
-      />
-
-      <OnboardingHost />
     </div>
+
+    {/* 浮层：在 m-shell 外，不参与壳层 flex 布局 */}
+    {settingsMounted && (
+      <LazySurface fallback={null}>
+        <LazySettingsModal isOpen={settingsOpen} />
+      </LazySurface>
+    )}
+
+    <ConfirmDialog
+      isOpen={showClearConfirm}
+      onClose={() => setShowClearConfirm(false)}
+      onConfirm={() => void handleClearAll()}
+      title="清空全部项目？"
+      message="将删除所有任务与本地字幕数据，不可恢复。"
+      confirmText="清空"
+      tone="danger"
+    />
+
+    <OnboardingHost />
+    </>
   );
 };

@@ -6,9 +6,12 @@
  *
  * 流式与定稿必须对齐：
  * - 流式 UI 用 extractStreamingDirects（容忍半截 JSON）
- * - 旧逻辑定稿用严格 JSON.parse + 全 key 校验 → 缺 1 条就整批重试/失败，
- *   但 UI 已显示 31/32，表现为「卡在处理中」。
- * - 现：定稿解析与流式同口径；末次重试允许部分成功，缺条交给 orchestrator 标 missing。
+ * - 定稿解析与流式同口径；末次允许部分成功，缺条交给 orchestrator 标 missing
+ *
+ * 纠错（仅失败路径，成功首轮零开销）：
+ * - 第 1 次：原 prompt 流式主译
+ * - 不齐/解不出：把模型输出回灌 assistant + user 写明 missing/extra/empty，再请求
+ * - 最多 3 轮；纠错轮低温；结果按非空 direct merge 取优
  */
 
 import type { LlmProfile, TranslationConfig } from '@/types';
@@ -44,7 +47,16 @@ export type TranslateBatchOptions = {
   onAttemptStart?: (attempt: number) => void;
 };
 
+type LlmChatMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+};
+
+/** 批内格式/键校验最大尝试次数：1 主译 + 最多 2 轮对话纠错 */
 const MAX_FORMAT_ATTEMPTS = 3;
+const PRIMARY_TEMPERATURE = 0.3;
+/** 纠错轮低温，提高「按 missing 列表补键」服从度 */
+const REPAIR_TEMPERATURE = 0.1;
 
 /**
  * 校验模型返回的 JSON 是否覆盖每一行原文（且 direct 非空）。
@@ -89,6 +101,121 @@ export function isTranslationComplete(
   originalTexts: string[]
 ): boolean {
   return countFilledKeys(result, originalTexts) === originalTexts.length;
+}
+
+export type TranslationGaps = {
+  /** 完全没有该键 */
+  missingKeys: string[];
+  /** 有键但 direct 为空 */
+  emptyKeys: string[];
+  /** 不在 1..n 的多余数字键 */
+  extraKeys: string[];
+  filled: number;
+  total: number;
+};
+
+/**
+ * 对照期望行数，描述模型结果缺口（纠错 prompt 与单测用）。
+ */
+export function describeTranslationGaps(
+  result: Record<string, { direct: string }>,
+  originalTexts: string[]
+): TranslationGaps {
+  const total = originalTexts.length;
+  const expected = new Set(originalTexts.map((_, i) => String(i + 1)));
+  const missingKeys: string[] = [];
+  const emptyKeys: string[] = [];
+
+  for (let i = 0; i < total; i++) {
+    const key = String(i + 1);
+    const direct = result[key]?.direct;
+    if (direct === undefined) {
+      missingKeys.push(key);
+    } else if (typeof direct !== 'string' || !direct.trim()) {
+      emptyKeys.push(key);
+    }
+  }
+
+  const extraKeys = Object.keys(result)
+    .filter((k) => /^\d+$/.test(k) && !expected.has(k))
+    .sort((a, b) => Number(a) - Number(b));
+
+  return {
+    missingKeys,
+    emptyKeys,
+    extraKeys,
+    filled: countFilledKeys(result, originalTexts),
+    total,
+  };
+}
+
+/**
+ * 构造纠错 user 消息：明确 missing / empty / extra，要求完整 JSON（VC 风格，ET schema）。
+ */
+export function buildRepairFeedbackMessage(
+  originalTexts: string[],
+  result: Record<string, { direct: string }>,
+  options?: { unparseable?: boolean }
+): string {
+  const required = originalTexts.map((_, i) => String(i + 1));
+  const requiredList = required.join(', ');
+
+  if (options?.unparseable || countFilledKeys(result, originalTexts) === 0) {
+    return [
+      'Validation failed: could not parse a usable translation JSON (0 filled entries).',
+      `Required keys: ${requiredList} (exactly ${required.length} items).`,
+      'Output ONLY a valid JSON object. Each value MUST be {"origin":"<source>","direct":"<translation>"}.',
+      'Do not wrap in markdown. Do not omit any key.',
+    ].join('\n');
+  }
+
+  const gaps = describeTranslationGaps(result, originalTexts);
+  const parts: string[] = ['Validation failed.'];
+
+  if (gaps.missingKeys.length) {
+    parts.push(
+      `Missing keys (no entry at all): ${JSON.stringify(gaps.missingKeys)} — you must translate these.`
+    );
+  }
+  if (gaps.emptyKeys.length) {
+    parts.push(
+      `Empty "direct" fields: ${JSON.stringify(gaps.emptyKeys)} — provide non-empty translations.`
+    );
+  }
+  if (gaps.extraKeys.length) {
+    parts.push(
+      `Extra keys (not in input, remove them): ${JSON.stringify(gaps.extraKeys)}.`
+    );
+  }
+
+  parts.push(
+    `Required keys: ${requiredList} (ALL ${required.length} keys).`,
+    `Progress: ${gaps.filled}/${gaps.total} filled.`,
+    'Fix the errors above and output ONLY a complete valid JSON object.',
+    'Each value MUST be {"origin":"<source line>","direct":"<translation>"}.',
+    'Keep already-correct directs; fill every missing/empty key. No markdown, no explanation.'
+  );
+
+  return parts.join('\n');
+}
+
+/**
+ * 合并两次解析结果：仅用非空 direct 覆盖，避免纠错轮把已有好译文冲掉。
+ */
+export function mergeTranslationResults(
+  base: Record<string, { direct: string }>,
+  incoming: Record<string, { direct: string }>,
+  originalTexts: string[]
+): Record<string, { direct: string }> {
+  const out: Record<string, { direct: string }> = { ...base };
+  for (let i = 0; i < originalTexts.length; i++) {
+    const key = String(i + 1);
+    const direct = incoming[key]?.direct;
+    if (typeof direct === 'string' && direct.trim()) {
+      out[key] = { direct };
+    }
+  }
+  return out;
 }
 
 /**
@@ -136,12 +263,10 @@ export function parseTranslationContent(
 
 /**
  * 调用 LLM 翻译一批字幕文本。
- * 重试策略（与流式对齐）：
- * - 每次尝试：流式优先 → 失败回退非流式
- * - 解析与 UI partial 同一套 parseTranslationContent
- * - 未齐 key：换温度/强调格式再试
- * - 末次仍不齐：返回已有部分（partial:true），不再整批抛死
- * - 仅当 0 条可用译文时才 throw
+ *
+ * 成功路径：第 1 次齐 → 立即返回（无纠错消息、无额外请求）。
+ * 失败路径：对话式纠错（assistant 回灌 + missing/extra 反馈），最多 3 轮；
+ * 末次仍不齐 → partial:true；仅 0 条可用时 throw。
  */
 export async function translateBatch(
   config: TranslationConfig,
@@ -172,19 +297,15 @@ export async function translateBatch(
     config.targetLanguage
   );
 
-  const retryTemperatures = [0.3, 0.6, 0.9];
-  const formatEmphasis = [
-    '',
-    '\n\nIMPORTANT: Ensure your response is valid JSON with "direct" field for EVERY entry.',
-    '\n\nCRITICAL: You MUST return valid JSON with "direct" field for EVERY single line. Do NOT skip any entries.',
-  ];
-
   const llmConfig = {
     baseURL: llm.baseURL,
     apiKey: llm.apiKey,
     model: llm.model,
     rpm: config.rpm,
   };
+
+  /** 累积对话：仅在需要纠错时追加 assistant/user，成功首轮不增长 */
+  const messages: LlmChatMessage[] = [{ role: 'user', content: directPrompt }];
 
   let lastError: unknown = null;
   let bestPartial: TranslateBatchResult | null = null;
@@ -194,7 +315,8 @@ export async function translateBatch(
   for (let attempt = 1; attempt <= MAX_FORMAT_ATTEMPTS; attempt++) {
     onAttemptStart?.(attempt);
 
-    const promptWithEmphasis = directPrompt + formatEmphasis[attempt - 1];
+    const isRepair = attempt > 1;
+    const temperature = isRepair ? REPAIR_TEMPERATURE : PRIMARY_TEMPERATURE;
     let lastPartialSig = '';
     let latestAccumulated = '';
     let parseRaf = 0;
@@ -216,8 +338,9 @@ export async function translateBatch(
     };
 
     const scheduleEmit = (accumulated: string) => {
-      if (!onPartial) return;
+      // 始终记下流式累积：异常抢救/定稿不依赖是否挂了 onPartial
       latestAccumulated = accumulated;
+      if (!onPartial) return;
       if (parseRaf !== 0) return;
       parseRaf =
         typeof requestAnimationFrame === 'function'
@@ -235,33 +358,69 @@ export async function translateBatch(
       parseRaf = 0;
     };
 
+    const rememberPartial = (translations: Record<string, { direct: string }>) => {
+      const merged = bestPartial
+        ? mergeTranslationResults(bestPartial.translations, translations, texts)
+        : translations;
+      const filled = countFilledKeys(merged, texts);
+      if (filled === 0) return;
+      const prevFilled = bestPartial
+        ? countFilledKeys(bestPartial.translations, texts)
+        : 0;
+      if (filled >= prevFilled) {
+        bestPartial = {
+          translations: merged,
+          tokensUsed: tokensAcc,
+          partial: filled < texts.length,
+        };
+      } else if (bestPartial) {
+        bestPartial = { ...bestPartial, tokensUsed: tokensAcc };
+      }
+    };
+
+    /**
+     * 校验失败时扩展对话，供下一轮纠错。
+     * @param rawAssistant 本轮模型原文（回灌用）
+     * @param gapsSource 用于 missing/empty/extra 的视图——须为 merge 后累计结果，避免把已填好的键再报成 Missing
+     */
+    const appendRepairTurn = (
+      rawAssistant: string,
+      gapsSource: Record<string, { direct: string }>,
+      unparseable: boolean
+    ) => {
+      const assistantContent =
+        rawAssistant?.trim() ||
+        (Object.keys(gapsSource).length
+          ? JSON.stringify(gapsSource)
+          : '(empty or unparseable output)');
+      messages.push({ role: 'assistant', content: assistantContent });
+      messages.push({
+        role: 'user',
+        content: buildRepairFeedbackMessage(texts, gapsSource, { unparseable }),
+      });
+    };
+
     try {
       let llmResult: { content: string; tokensUsed: number };
+      // 传拷贝：避免调用方/mock 持有同一数组引用，且本轮请求快照不被后续纠错追加污染
+      const requestMessages = messages.map((m) => ({ ...m }));
       try {
-        llmResult = await callLLMStream(
-          llmConfig,
-          [{ role: 'user', content: promptWithEmphasis }],
-          {
-            signal,
-            temperature: retryTemperatures[attempt - 1],
-            maxRetries: 1,
-            onDelta: (_delta, accumulated) => scheduleEmit(accumulated),
-          }
-        );
+        llmResult = await callLLMStream(llmConfig, requestMessages, {
+          signal,
+          temperature,
+          maxRetries: 1,
+          onDelta: (_delta, accumulated) => scheduleEmit(accumulated),
+        });
       } catch (streamErr) {
         if (streamErr instanceof Error && streamErr.name === 'AbortError') {
           throw streamErr;
         }
         logger.error('流式翻译失败，回退非流式:', streamErr);
-        llmResult = await callLLM(
-          llmConfig,
-          [{ role: 'user', content: promptWithEmphasis }],
-          {
-            signal,
-            temperature: retryTemperatures[attempt - 1],
-            maxRetries: 1,
-          }
-        );
+        llmResult = await callLLM(llmConfig, requestMessages, {
+          signal,
+          temperature,
+          maxRetries: 1,
+        });
         // 非流式也喂一次 partial，便于 UI 立刻出字
         if (llmResult.content) scheduleEmit(llmResult.content);
       } finally {
@@ -281,51 +440,60 @@ export async function translateBatch(
       const filled = countFilledKeys(directResult, texts);
 
       if (filled === 0) {
-        throw new Error('翻译结果为空或无法解析');
+        lastError = new Error('翻译结果为空或无法解析');
+        logger.error(
+          `批次翻译无法解析（第${attempt}次尝试）:`,
+          lastError.message
+        );
+        if (attempt < MAX_FORMAT_ATTEMPTS) {
+          appendRepairTurn(rawForParse || '', directResult, true);
+          continue;
+        }
+        if (bestPartial && countFilledKeys(bestPartial.translations, texts) > 0) {
+          return { ...bestPartial, tokensUsed: tokensAcc };
+        }
+        throw lastError;
       }
 
-      if (isTranslationComplete(directResult, texts)) {
+      // 与历史 partial merge 后再判是否齐（纠错轮可能只补缺键）
+      const merged = bestPartial
+        ? mergeTranslationResults(bestPartial.translations, directResult, texts)
+        : directResult;
+      rememberPartial(directResult);
+      // rememberPartial 可能进一步提升 bestPartial；统一用累计视图
+      const accumulated = bestPartial?.translations ?? merged;
+
+      if (isTranslationComplete(accumulated, texts)) {
         return {
-          translations: directResult,
+          translations: accumulated,
           tokensUsed: tokensAcc,
           partial: false,
         };
       }
 
-      // 不齐：记下最佳部分结果（tokens 用累计）
-      const prevFilled = bestPartial
-        ? countFilledKeys(bestPartial.translations, texts)
-        : 0;
-      if (filled > prevFilled) {
-        bestPartial = {
-          translations: directResult,
-          tokensUsed: tokensAcc,
-          partial: true,
-        };
-      } else if (bestPartial) {
-        bestPartial = { ...bestPartial, tokensUsed: tokensAcc };
-      }
-
-      const missing = texts.length - filled;
+      const gaps = describeTranslationGaps(accumulated, texts);
       lastError = new Error(
-        `翻译结果不完整：${filled}/${texts.length} 条有译文，缺 ${missing} 条`
+        `翻译结果不完整：${gaps.filled}/${gaps.total} 条有译文，缺 ${
+          gaps.total - gaps.filled
+        } 条`
       );
       logger.error(
         `批次翻译不完整（第${attempt}次尝试）:`,
-        lastError instanceof Error ? lastError.message : lastError
+        lastError instanceof Error ? lastError.message : lastError,
+        gaps
       );
 
-      // 未到末次 → 重试凑齐
       if (attempt < MAX_FORMAT_ATTEMPTS) {
+        // 回灌本轮原文；缺口按累计结果算（已有键不再报 Missing）
+        appendRepairTurn(rawForParse || '', accumulated, false);
         continue;
       }
 
-      // 末次：接受部分成功（缺条由 finalizeBatchTranslations 标 missing）
       logger.info(
-        `末次重试仍不齐，接受部分结果 ${filled}/${texts.length}，缺条标 missing`
+        `末次纠错仍不齐，接受部分结果 ${gaps.filled}/${gaps.total}，缺条标 missing`
       );
       return {
-        translations: directResult,
+        translations: accumulated,
         tokensUsed: tokensAcc,
         partial: true,
       };
@@ -338,38 +506,57 @@ export async function translateBatch(
       logger.error(`批次翻译失败（第${attempt}次尝试）:`, error);
 
       // 尝试从本轮累积流里抢救
-      if (latestAccumulated) {
+      if (latestAccumulated?.trim()) {
         const salvaged = parseTranslationContent(latestAccumulated);
         const filled = countFilledKeys(salvaged, texts);
         if (filled > 0) {
-          const prevFilled = bestPartial
-            ? countFilledKeys(bestPartial.translations, texts)
-            : 0;
-          if (filled > prevFilled) {
-            bestPartial = {
-              translations: salvaged,
+          rememberPartial(salvaged);
+          const accumulated = bestPartial?.translations ?? salvaged;
+          if (isTranslationComplete(accumulated, texts)) {
+            return {
+              translations: accumulated,
               tokensUsed: tokensAcc,
-              partial: true,
+              partial: false,
             };
-          } else if (bestPartial) {
-            bestPartial = { ...bestPartial, tokensUsed: tokensAcc };
           }
-          if (attempt === MAX_FORMAT_ATTEMPTS) {
-            logger.info(
-              `异常后从流式缓冲抢救 ${filled}/${texts.length} 条`
-            );
-            return { ...bestPartial!, tokensUsed: tokensAcc };
+          if (attempt < MAX_FORMAT_ATTEMPTS) {
+            // 有真实模型碎片：回灌 + 按累计缺口纠错
+            appendRepairTurn(latestAccumulated, accumulated, false);
+            continue;
           }
+          logger.info(
+            `异常后从流式缓冲抢救 ${countFilledKeys(accumulated, texts)}/${texts.length} 条`
+          );
+          return {
+            translations: accumulated,
+            tokensUsed: tokensAcc,
+            partial: true,
+          };
+        }
+        // 有文本但 0 条可解析：仍可走 unparseable 纠错（真实 raw，非假 assistant）
+        if (attempt < MAX_FORMAT_ATTEMPTS) {
+          appendRepairTurn(
+            latestAccumulated,
+            bestPartial?.translations ?? {},
+            true
+          );
+          continue;
         }
       }
 
-      if (attempt === MAX_FORMAT_ATTEMPTS) {
-        if (bestPartial && countFilledKeys(bestPartial.translations, texts) > 0) {
-          logger.info('全部尝试结束，返回历史最佳部分结果');
-          return { ...bestPartial, tokensUsed: tokensAcc };
-        }
-        throw lastError instanceof Error ? lastError : new Error('翻译失败');
+      if (attempt < MAX_FORMAT_ATTEMPTS) {
+        // 纯网络/API 失败且无模型输出：不造假 assistant，原 messages 原样重试
+        logger.info(
+          `第${attempt}次无模型输出，不扩展对话，下一轮重试（attempt ${attempt + 1}）`
+        );
+        continue;
       }
+
+      if (bestPartial && countFilledKeys(bestPartial.translations, texts) > 0) {
+        logger.info('全部尝试结束，返回历史最佳部分结果');
+        return { ...bestPartial, tokensUsed: tokensAcc };
+      }
+      throw lastError instanceof Error ? lastError : new Error('翻译失败');
     }
   }
 

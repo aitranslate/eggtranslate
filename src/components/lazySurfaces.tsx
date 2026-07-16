@@ -30,14 +30,22 @@ export function SurfaceFallback({ label = '加载中…' }: { label?: string }) 
   );
 }
 
+/**
+ * 懒加载表面（用于主舞台内面板：术语 / 历史）。
+ *
+ * API：`fallback` 用默认参数，不用 `??`——否则 `fallback={null}` 会被当成空又变回占位。
+ * 布局：设置类浮层不要把本组件挂在 `.workbench` / `.m-shell` 内部；
+ * 浮层应与布局壳兄弟挂载（见 MainApp / MobileShell），由 SettingsModal 自行 portal。
+ */
 export function LazySurface({
   children,
-  fallback,
+  fallback = <SurfaceFallback />,
 }: {
   children: ReactNode;
+  /** 传 null 表示加载期完全不占位（浮层首次加载） */
   fallback?: ReactNode;
 }) {
-  return <Suspense fallback={fallback ?? <SurfaceFallback />}>{children}</Suspense>;
+  return <Suspense fallback={fallback}>{children}</Suspense>;
 }
 
 export type LazySettingsModalProps = ComponentProps<typeof LazySettingsModal>;

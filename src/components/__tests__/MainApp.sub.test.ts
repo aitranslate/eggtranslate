@@ -37,6 +37,21 @@ describe('MainApp workbench shell', () => {
     expect(src).not.toContain("stage === 'settings'");
   });
 
+  it('keeps workbench grid pure: overlays are siblings outside .workbench', () => {
+    // 布局壳在 StatusBar 后闭合；设置挂载在「浮层」注释之后
+    expect(src).toMatch(/<StatusBar\s*\/>\s*<\/div>/);
+    expect(src).toMatch(
+      /<StatusBar\s*\/>\s*<\/div>\s*\{\/\*\s*浮层[\s\S]*?<LazySettingsModal[\s\S]*?<MobileMenu/
+    );
+    // 设置不得再出现在 workbench 开标签与 StatusBar 之间
+    const wbOpen = src.indexOf('className={`workbench');
+    const status = src.indexOf('<StatusBar');
+    const slice = src.slice(wbOpen, status);
+    expect(slice).not.toMatch(/<LazySettingsModal/);
+    expect(slice).not.toMatch(/<MobileMenu/);
+    expect(slice).not.toMatch(/<OnboardingHost/);
+  });
+
   it('defaults to editor-first without auto-opening settings', () => {
     expect(src).toContain('openEditor');
     expect(src).not.toMatch(/if\s*\(\s*!isConfigured\s*\)\s*\{\s*openSettings/);
