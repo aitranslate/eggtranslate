@@ -1,4 +1,4 @@
-/* ── Mobile shell (≤767px via MainApp branch; styles always available) ── */
+/* ── Mobile shell (≤899px via MainApp / useIsMobile 900px; styles always available) ── */
 
 .m-shell {
   --m-top-h: 52px;
@@ -28,23 +28,25 @@
 
 .m-shell[data-theme='dark'] {
   color-scheme: dark;
-  --wb-bg: #0b0c0f;
-  --wb-panel: #12141a;
-  --wb-panel-2: #1a1d26;
-  --wb-border: #2c303c;
-  --wb-border-strong: #3d4354;
-  --wb-text: #eceef2;
-  --wb-text-2: #a8afbb;
-  --wb-text-3: #8b929e;
-  --wb-brand: #0a84ff;
-  --wb-brand-soft: rgba(10, 132, 255, 0.12);
-  --apple-blue: #0a84ff;
-  --apple-blue-hover: #409cff;
-  --apple-blue-active: #0070e0;
-  --apple-blue-soft: rgba(10, 132, 255, 0.12);
-  --apple-success: #30d158;
-  --apple-danger: #ff453a;
-  --apple-warning: #ff9f0a;
+  --wb-bg: #14171c;
+  --wb-panel: #1b1f26;
+  --wb-panel-2: #242a33;
+  --wb-border: #2a303a;
+  --wb-border-strong: #39414d;
+  --wb-text: #e6eaf0;
+  --wb-text-2: #9aa4b2;
+  --wb-text-3: #77818e;
+  --wb-brand: #2f81f7;
+  --wb-brand-soft: rgba(47, 129, 247, 0.14);
+  --wb-scroll: #3d4450;
+  --wb-scroll-hover: #4d5563;
+  --apple-blue: #2f81f7;
+  --apple-blue-hover: #4c94ff;
+  --apple-blue-active: #1f6feb;
+  --apple-blue-soft: rgba(47, 129, 247, 0.14);
+  --apple-success: #3fb950;
+  --apple-danger: #f85149;
+  --apple-warning: #d29922;
   background: var(--wb-bg);
   color: var(--wb-text);
 }
@@ -547,26 +549,111 @@
   font-size: 14px;
 }
 
-/* 移动端字幕行：更大触控、略增高 */
+/* ── 移动端字幕行：堆叠卡片（元信息一行 / 原文整行 / 译文整行），不再五列挤压 ── */
+.m-shell .se-colhead {
+  display: none;
+}
+
 .m-shell .se-row {
-  min-height: 76px;
-  padding: 10px 8px;
+  height: auto;
+  min-height: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  gap: 2px 8px;
+  padding: 9px 12px 10px;
+  overflow: visible;
 }
 
 .m-shell .se-row-idx {
+  order: 0;
+  min-width: 30px;
   font-size: 11px;
+  text-align: left;
 }
 
-.m-shell .se-time-btn,
+/* 时间戳与序号同一行：#12  00:00:01,200 → 00:00:03,840 */
+.m-shell button.se-row-time {
+  order: 1;
+  min-height: 26px;
+  padding: 2px 4px;
+  font-size: 11.5px;
+  color: var(--wb-text-3);
+}
+
+.m-shell button.se-row-time + button.se-row-time::before {
+  content: '→';
+  margin-right: 7px;
+  opacity: 0.55;
+}
+
+/* 原文 / 译文各占一整行，高度随内容自适应（虚拟列表由 measureElement 实测） */
+.m-shell .se-row-src,
+.m-shell .se-row-dst {
+  flex: 1 1 100%;
+  order: 3;
+  min-height: 0;
+  max-height: none;
+  margin-right: 0;
+  padding: 2px 0;
+  align-self: auto;
+  box-shadow: none;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.m-shell .se-row-dst {
+  order: 4;
+}
+
+/* 编辑态：两个时间输入并排一行，原文/译文文本框各整行 */
 .m-shell .se-time-input {
+  order: 1;
+  flex: 1 1 40%;
+  min-height: 34px;
+  padding: 5px 8px;
   font-size: 12px;
-  min-height: 32px;
 }
 
 .m-shell .se-inline-input {
+  --se-pad-y: 7px;
+  flex: 1 1 100%;
+  order: 3;
   font-size: 15px;
-  min-height: 44px;
-  padding: 8px;
+}
+
+.m-shell .se-inline-input.se-row-src {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--wb-brand) 40%, transparent);
+  border-radius: 6px;
+}
+
+.m-shell .se-inline-input.se-row-dst {
+  order: 4;
+}
+
+/* 工具行：进度条一行，搜索 + 筛选一行 */
+.m-shell .se-toolbar {
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.m-shell .se-toolbar-progress {
+  flex: 1 1 100%;
+  max-width: none;
+}
+
+.m-shell .se-toolbar-filters {
+  flex: 1 1 100%;
+}
+
+.m-shell .se-toolbar-filters > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.m-shell .se-toolbar-filters .se-search-input {
+  width: 100%;
 }
 
 .m-detail-bar {
@@ -660,136 +747,6 @@
   color: var(--wb-brand);
 }
 
-/* ── Mobile menu (portal) ── */
-.m-menu-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 2200;
-  background: rgba(0, 0, 0, 0.45);
-}
-
-.m-menu-panel {
-  position: fixed;
-  top: max(12px, env(safe-area-inset-top, 0px));
-  left: 12px;
-  right: 12px;
-  z-index: 2201;
-  max-width: 480px;
-  margin: 0 auto;
-  padding: 12px;
-  border-radius: 16px;
-  background: var(--wb-panel, #ffffff);
-  color: var(--wb-text, #1d1d1f);
-  border: 1px solid var(--wb-border, #e5e5ea);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
-}
-
-html.dark .m-menu-panel {
-  background: #12141a;
-  color: #eceef2;
-  border-color: #2c303c;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
-}
-
-.m-menu-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 2px 10px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid var(--wb-border, #e5e5ea);
-}
-
-html.dark .m-menu-head {
-  border-bottom-color: #2c303c;
-}
-
-.m-menu-title {
-  flex: 1;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--wb-text, #1d1d1f);
-}
-
-html.dark .m-menu-title {
-  color: #eceef2;
-}
-
-.m-menu-close {
-  width: 36px;
-  height: 36px;
-  border: none;
-  border-radius: 50%;
-  background: var(--wb-panel-2, #f5f5f7);
-  color: var(--wb-text-2, #6e6e73);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-
-html.dark .m-menu-close {
-  background: #1a1d26;
-  color: #a8afbb;
-}
-
-.m-menu-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.m-menu-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 48px;
-  padding: 10px 10px;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--wb-text, #1d1d1f);
-  font-family: inherit;
-  font-size: 15px;
-  text-align: left;
-  cursor: pointer;
-}
-
-html.dark .m-menu-row {
-  color: #eceef2;
-}
-
-.m-menu-row:active {
-  background: var(--wb-panel-2, #f5f5f7);
-}
-
-html.dark .m-menu-row:active {
-  background: #1a1d26;
-}
-
-.m-menu-row.is-warn {
-  background: color-mix(in srgb, var(--apple-warning, #ff9500) 14%, transparent);
-  color: var(--apple-warning, #ff9500);
-}
-
-.m-menu-row-label {
-  flex: 1;
-  font-weight: 500;
-}
-
-.m-menu-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--wb-brand, #0071e3);
-  color: #fff;
-}
-
-.m-menu-badge.warn {
-  background: var(--apple-warning, #ff9500);
-}
-
 /* Settings: 高 z-index + 窄屏强制不透明全屏（不依赖 JS class） */
 .wb-drawer-backdrop {
   z-index: 2300 !important;
@@ -824,20 +781,20 @@ html.dark .m-menu-row:active {
   html.dark .wb-drawer.is-mobile-sheet,
   .workbench[data-theme='dark'] ~ .wb-drawer,
   body:has([data-theme='dark']) .wb-drawer {
-    background: #12141a !important;
-    color: #eceef2 !important;
+    background: var(--wb-panel) !important;
+    color: var(--wb-text) !important;
   }
 
   html.dark .wb-drawer .wb-drawer-title,
   html.dark .wb-drawer .wb-prefs-section-head h3,
   html.dark .wb-drawer .wb-prefs-block-title,
   body:has([data-theme='dark']) .wb-drawer .wb-drawer-title {
-    color: #eceef2 !important;
+    color: var(--wb-text) !important;
   }
 
   html.dark .wb-drawer .wb-prefs-section-head p,
   body:has([data-theme='dark']) .wb-drawer .wb-prefs-section-head p {
-    color: #a8afbb !important;
+    color: var(--wb-text-2) !important;
   }
 }
 
@@ -883,14 +840,9 @@ html.dark .m-menu-row:active {
   border-color: transparent !important;
 }
 
-/* 历史空状态：无记录时隐藏统计四宫格 */
-.m-shell .wb-panel-stack:has(.wb-empty) .wb-stats {
+/* 历史空状态：无记录时隐藏统计四宫格（wb-sheet 单卡结构） */
+.m-shell .wb-sheet:has(.wb-empty) .wb-stats {
   display: none;
-}
-
-.m-shell .wb-stats {
-  gap: 8px;
-  padding: 10px 8px;
 }
 
 .m-shell .wb-empty {

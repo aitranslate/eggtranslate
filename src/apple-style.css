@@ -30,9 +30,9 @@
   --apple-border-lighter: #e8e8ed;
 
   /* 控件高度节奏 */
-  --apple-control-h: 42px;
-  --apple-control-h-sm: 38px;
-  --apple-control-h-lg: 46px;
+  --apple-control-h: 36px;
+  --apple-control-h-sm: 32px;
+  --apple-control-h-lg: 40px;
 
   /* 字体系统 */
   --apple-font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Display",
@@ -44,11 +44,11 @@
   --apple-content-max-width: 980px;
   --apple-content-padding: 24px;
 
-  /* 圆角系统：工具产品用软方圆，避免满屏大药丸/大圆钮 */
-  --apple-radius-control: 10px; /* 输入框、次要按钮 */
-  --apple-radius-button: 12px; /* 主按钮 */
-  --apple-radius-card: 16px;
-  --apple-radius-card-large: 20px;
+  /* 圆角系统：桌面客户端控件，小圆角 */
+  --apple-radius-control: 7px; /* 输入框、次要按钮 */
+  --apple-radius-button: 7px; /* 主按钮 */
+  --apple-radius-card: 10px;
+  --apple-radius-card-large: 12px;
   --apple-radius-pill: 999px; /* 仅徽章/chip 使用 */
 
   /* 动画 */
@@ -153,16 +153,16 @@
   color: var(--apple-text-secondary);
 }
 
-/* ===== 按钮系统（精致工具风：软方圆，不用大圆/药丸 CTA） ===== */
+/* ===== 按钮系统（桌面客户端：紧凑、小圆角） ===== */
 .apple-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 0 16px;
+  padding: 0 14px;
   height: var(--apple-control-h);
   min-height: var(--apple-control-h);
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 500;
   line-height: 1.2;
   letter-spacing: -0.01em;

@@ -8,14 +8,11 @@ import { useEffect } from 'react';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useFilesStore } from '@/stores/filesStore';
 
-/** 其它组件已消费 Esc 的浮层（确认框、菜单、Dialog） */
+/** 其它组件已自行处理 Esc 的浮层（确认框 / 导出菜单等） */
 export function hasEscPriorityOverlay(): boolean {
   if (typeof document === 'undefined') return false;
   if (document.querySelector('[role="alertdialog"]')) return true;
   if (document.querySelector('[role="menu"]')) return true;
-  // Radix Dialog（如移动端菜单）
-  if (document.querySelector('[role="dialog"][data-state="open"]')) return true;
-  if (document.querySelector('[data-radix-dialog-content]')) return true;
   return false;
 }
 
@@ -46,7 +43,7 @@ export function useWorkbenchShortcuts(options: {
       // Esc：弹层优先 → 关设置 → 回工作区 → 取消任务选中
       if (e.key === 'Escape' && !inField) {
         if (hasEscPriorityOverlay()) {
-          // ConfirmDialog / ExportMenu / MobileMenu 自行处理
+          // ConfirmDialog / ExportMenu 自行处理
           return;
         }
         if (settingsOpen) {

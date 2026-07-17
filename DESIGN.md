@@ -1,9 +1,23 @@
 # EggTranslate 设计语言
 
-> **Workbench 产品壳 + Apple 软方圆控件**  
-> 主色蓝作品牌 CTA · 成功绿仅状态 · 局部菜单可用 Tailwind 浅蓝强调 · 全站优先 token
+> **浅色专业桌面客户端**  
+> 灰壳三层结构 · 高密度数据网格 · 等宽数字 · 细滚动条 · 浅色为一等公民，深色同结构配套
 
-本文档描述**当前已上线的 UI 约定**（以仓库实现为准），而不是未落地的理想稿。新增界面时对齐本文；历史文件里少量硬编码若无碍观感，不强制一次性清扫。
+本文档描述**当前已上线的 UI 约定**（以仓库实现为准）。新增界面时对齐本文；历史文件里少量硬编码若无碍观感，不强制一次性清扫。
+
+---
+
+## 设计模型：客户端，不是网页
+
+借鉴 VS Code / Linear / Aegisub 的结构语言：
+
+- **三层结构**：`--wb-bg` 灰壳（顶栏/侧栏/状态栏/画布）→ `--wb-panel` 内容面（编辑器/卡片/抽屉）→ `--wb-panel-2` 凹槽控件（输入/hover/chip）。浅色下壳是灰、内容是白；深色下壳更暗、内容更亮——两个主题同一层级模型。
+- **窗口标题栏**：44px，三段网格（左品牌 / 正中分段导航 / 右系统钮），导航永远居中。
+- **仪表状态栏**：26px，11.5px 字号，计数用等宽数字。
+- **密度**：UI 正文 13px、辅助 11.5–12.5px；桌面字幕行固定 **68px**（`.se-row`）；900px 视口下可用列表区约可放 **~11 行**（顶栏 44 + 状态栏 26 + 工具栏/表头后剩余 ÷ 68）。移动端为堆叠可变高卡片，虚拟列表 `estimateSize ≈ 128`，由 `measureElement` 实测校正。
+- **细滚动条**：全局 10px（视觉 6px、padding-box 内缩），Firefox `scrollbar-width: thin`——宽滚动条是「网页感」最强信号，不允许出现。
+- **键盘优先**：`.workbench` 与 `.m-shell` 下 `:focus-visible` 均为 2px brand 环；`::selection` 品牌浅底；快捷键渲染为 `kbd` 键帽。
+- **断点**：`<900px` 走 `MobileShell`（`useIsMobile` / `MOBILE_BREAKPOINT_PX = 900`）；`≥900px` 走桌面 workbench 双栏。与 `workbench.css` 堆叠媒体查询对齐，避免 768–900 半桌面无底栏路径。
 
 ---
 
@@ -15,7 +29,7 @@
 | `--wb-*` | 顶栏 / 侧栏 / 编辑区壳层 | `src/workbench.css` |
 
 品牌色统一指向蓝：`--wb-brand` → `var(--apple-blue)`。  
-移动端补充：`src/mobile.css`（`.m-*` 类）。
+移动端补充：`src/mobile.css`（`.m-*` 类），消费同一套 `--wb-*` token。
 
 ---
 
@@ -23,81 +37,76 @@
 
 | Token | 值 | 用途 |
 |-------|-----|------|
-| `--apple-bg-primary` | `#ffffff` | 页面/弹窗底 |
-| `--apple-bg-secondary` | `#f5f5f7` | 输入底、次级面 |
-| `--apple-bg-tertiary` | `#e8e8ed` | 按下/更深层 |
-| `--apple-text-primary` | `#1d1d1f` | 主文案 |
-| `--apple-text-secondary` | `#86868b` | 次文案 |
-| `--apple-text-tertiary` | `#a1a1a6` | 占位/弱信息 |
+| `--wb-bg` | `#f2f3f5` | 灰壳：顶栏/侧栏/状态栏/画布 |
+| `--wb-panel` | `#ffffff` | 内容面：编辑器/卡片/抽屉 |
+| `--wb-panel-2` | `#e9ebef` | 凹槽：输入底/hover/chip |
+| `--wb-border` / `--wb-border-strong` | `#e3e5ea` / `#d2d5db` | 发丝线 / 强线 |
+| `--wb-text` / `-2` / `-3` | `#1f2328` / `#5f6670` / `#878e99` | 文案三级 |
 | `--apple-blue` | `#0071e3` | **主色 / 主 CTA** |
-| `--apple-blue-hover` | `#0077ed` | 主色 hover |
-| `--apple-blue-active` | `#0062cc` | 主色 active |
+| `--apple-blue-hover` / `-active` | `#0077ed` / `#0062cc` | 主色态 |
 | `--apple-blue-soft` | `rgba(0,113,227,.08)` | 浅强调底 |
-| `--apple-blue-soft-strong` | `rgba(0,113,227,.14)` | 稍强浅蓝 |
-| `--apple-success` | `#34c759` | 成功状态、完成勾 |
-| `--apple-success-soft` | `#ecfdf5` | 成功浅底 |
+| `--apple-success` | `#34c759` | 成功状态、完成勾（仅状态） |
 | `--apple-danger` | `#ff3b30` | 危险文字/边 |
-| `--apple-danger-soft` | `#fff5f5` | 危险浅底 |
 | `--apple-warning` | `#ff9500` | 警告/必填提示 |
-| `--apple-border-light` | `#d2d2d7` | 边框 |
-| `--apple-border-lighter` | `#e8e8ed` | 弱边框 |
+| `--wb-scroll` / `--wb-scroll-hover` | `#c4c9d1` / `#a7aeb9` | 滚动条 thumb |
 
 ### 允许的局部用法（现状）
 
 - **下拉/菜单选中行**：`bg-blue-50`、`text-blue-600` 等 Tailwind 工具色（导出菜单、模型选择等），与主 CTA 的实心蓝按钮区分层级。
-- **Toast**（`App.tsx`）：浅色卡片固定 hex（白底 + 绿/红 icon），与主题联动可后续再做，不挡当前体验。
-- **PWA `theme_color`**：`#F3C323`（品牌黄，见 `vite.config.ts` manifest），与壳内主 CTA 蓝并存——安装栏/状态栏用黄，工具内操作仍用蓝。
+- **PWA `theme_color`**：`#F3C323`（品牌黄，见 `vite.config.ts` manifest），安装栏/状态栏用黄，工具内操作仍用蓝。
 - **ErrorBoundary**：全页错误降级面，可用偏警示的紫/红铺色，**不作为**日常工作台 CTA 规范。
+- **历史统计紫色** `.wb-stats .val.purple`：语义化统计色，保留。
 
 ### 仍建议避免
 
 - 工作台主操作按钮做成绿/紫大实心块（成功绿只表示「已完成」状态）
 - 进度条再写一套与 `--apple-blue` / `--wb-brand` 无关的主色 hex
 - 管理页再发明第三套品牌主色
+- **新写主题相关 hex**：一律先找 token；暗色覆盖块里出现的 `#xxxxxx` 视为技术债
 
 ---
 
 ## 暗色主题
 
-通过 `html.dark` 或 `.workbench[data-theme='dark']` 覆盖（见 `workbench.css`）：
+通过 `html.dark` 或 `.workbench[data-theme='dark']` 覆盖（见 `workbench.css`、移动端 `mobile.css`）：
 
 | Token | 暗色值 | 说明 |
 |-------|--------|------|
-| `--apple-bg-primary` | `#12141a` | 内容面 |
-| `--apple-bg-secondary` | `#1a1d26` | 次级面 |
-| `--apple-bg-tertiary` | `#232733` | 更深一层 |
-| `--apple-text-primary` | `#eceef2` | 主文案 |
-| `--apple-text-secondary` | `#a8afbb` | 次文案 |
-| `--apple-text-tertiary` | `#8b929e` | 弱信息 |
-| `--apple-blue` | `#0a84ff` | 暗色主色 |
-| `--apple-blue-hover` | `#409cff` | hover |
-| `--apple-blue-active` | `#0070e0` | active |
-| `--apple-blue-soft` | `rgba(10,132,255,.12)` | 浅蓝底 |
-| `--apple-success` | `#30d158` | 成功 |
-| `--apple-danger` | `#ff453a` | 危险 |
-| `--apple-warning` | `#ff9f0a` | 警告 |
-| `--apple-border-light` | `#3d4354` | 边框 |
-| `--apple-border-lighter` | `#2c303c` | 弱边框 |
+| `--wb-bg` | `#14171c` | 灰壳（最深） |
+| `--wb-panel` | `#1b1f26` | 内容面（略亮） |
+| `--wb-panel-2` | `#242a33` | 凹槽控件 |
+| `--wb-border` / `-strong` | `#2a303a` / `#39414d` | 发丝线 |
+| `--wb-text` / `-2` / `-3` | `#e6eaf0` / `#9aa4b2` / `#77818e` | 文案三级 |
+| `--apple-blue` | `#2f81f7` | 暗色主色（hover `#4c94ff` / active `#1f6feb`） |
+| `--apple-success` | `#3fb950` | 成功 |
+| `--apple-danger` | `#f85149` | 危险 |
+| `--apple-warning` | `#d29922` | 警告 |
+| `--wb-scroll` / `-hover` | `#3d4450` / `#4d5563` | 滚动条 |
 
-主题由 `themeStore` 管理，在 `document.documentElement` 上切换 `dark` class。
+主题由 `themeStore` 管理，在 `document.documentElement` 上切换 `dark` class；**默认浅色**。
 
 ---
 
-## Workbench 壳层 token
+## 尺寸与布局
 
-| Token | 浅色（约） | 用途 |
-|-------|------------|------|
-| `--wb-bg` | `#f0f1f3` | 画布底 |
-| `--wb-panel` | `#ffffff` | 侧栏、顶栏、面板 |
-| `--wb-panel-2` | `#f7f7f8` | 次级面板 / 输入底 |
-| `--wb-border` / `--wb-border-strong` | `#e5e5ea` / `#d2d2d7` | 分割线 |
-| `--wb-text` / `--wb-text-2` / `--wb-text-3` | 主 / 次 / 弱 | 壳层文案 |
-| `--wb-brand` | `var(--apple-blue)` | 强调、链接、active |
-| `--wb-brand-soft` | `var(--apple-blue-soft)` | 浅强调底 |
+| Token | 值 | 用途 |
+|-------|-----|------|
+| `--wb-top-h` | `44px` | 标题栏 |
+| `--wb-status-h` | `26px` | 状态栏 |
+| `--wb-sidebar-w` | `288px` | 侧栏 |
+| `--apple-control-h` | `36px` | 表单默认按钮/输入 |
+| `--apple-control-h-sm` | `32px` | 工具条控件 |
+| `--apple-control-h-lg` | `40px` | 少数强调行 |
 
-常用 class：`.wb-tool`、`.wb-chip`、`.wb-seg`、`.wb-topbar`、字幕编辑 `.se-*` 等（`src/workbench.css`）。
+壳层网格：`.workbench` = `grid-template-rows: var(--wb-top-h) 1fr var(--wb-status-h)`，浮层（设置抽屉、菜单、确认框）必须是 `.workbench` 的**兄弟节点**，不能当 grid 子项。
 
-新 UI：**壳层布局/工具条** 优先 `--wb-*` 与 workbench class；**表单主按钮/输入** 优先 `ui/*` + apple token。
+---
+
+## 字体与数字
+
+- UI 字体栈不变：`--apple-font-stack`（系统 SF/Segoe 系）
+- **等宽数字**：`--wb-font-mono`（`ui-monospace, SF Mono, Cascadia Code, Consolas…`）+ `tabular-nums`，用于：时间码、`#` 序号、Tokens 计数、百分比、进度标签
+- 字号节奏：标题栏/正文 13px，辅助 12.5px，标签/表头 10.5–11.5px（表头加大写 + 字距）
 
 ---
 
@@ -105,26 +114,23 @@
 
 | Token | 值 | 用途 |
 |-------|-----|------|
-| `--apple-radius-control` | `10px` | 输入、icon 钮、小按钮 |
-| `--apple-radius-button` | `12px` | Primary / Secondary |
-| `--apple-radius-card` | `16px` | 卡片 |
-| `--apple-radius-card-large` | `20px` | 大卡片/弹窗 |
-| `--apple-radius-pill` | `999px` | badge / chip / 导航小标签；icon 圆形点缀也可 |
-
-**主 CTA 按钮**默认软方圆（12px），不是大药丸。药丸留给计数徽章、版本 chip、状态点。
+| `--wb-radius-ctl` | `6px` | 工具钮、小输入 |
+| `--wb-radius-panel` | `8px` | 列表项、任务行 |
+| `--apple-radius-control` / `-button` | `7px` | 表单输入 / 按钮 |
+| `--apple-radius-card` | `10px` | 卡片 |
+| `--apple-radius-card-large` | `12px` | 弹窗/抽屉 |
+| `--apple-radius-pill` | `999px` | badge / chip / 状态点 |
 
 ---
 
-## 高度节奏
+## 关键组件语言
 
-| Token | 值 | 用途 |
-|-------|-----|------|
-| `--apple-control-h-sm` | `38px` | 工具条、密集区 |
-| `--apple-control-h` | `42px` | 默认按钮/输入 |
-| `--apple-control-h-lg` | `46px` | 少数强调行 |
-
-表单行：输入与同排按钮尽量同高。  
-icon-only 按钮常见 **36×36**。
+- **主导航**：标题栏正中 `.wb-seg.wb-seg-nav` 分段控件；active 段 = 内容面凸起 + 发丝边（灰壳上的白片）
+- **侧栏任务行**：选中 = `--wb-panel` 白块凸起 + 内嵌发丝边 + 左 2px 品牌色条；hover = `--wb-panel-2`
+- **字幕网格**：表头 10.5px 大写 + 底部发丝线；行间 1px 发丝分隔，无卡片、无大留白；时间码 mono 11.5px；编辑中行 = brand soft 底 + 左 2px brand 条
+- **状态栏**：左 = 状态点 + `Provider · 模型` + 任务/队列；右 = `Tokens n`（mono）
+- **空工作区**：居中虚线拖放面板 + brand-soft 图标方块 + 主/次 CTA + `kbd` 键帽
+- **弹窗/抽屉**：`--wb-panel` 底、`--apple-radius-card-large` 圆角；遮罩 `bg-black/40 backdrop-blur-sm`
 
 ---
 
@@ -140,27 +146,17 @@ icon-only 按钮常见 **36×36**。
 | `danger` | `+ .apple-button-danger` | 清空、删除（红字/描边向，非大红实心） |
 | icon-only | `.apple-icon-button` / `iconOnly` | 关闭等 |
 
-| size | class |
-|------|-------|
-| `sm` | `.apple-button-sm` |
-| `md` | 默认 |
-| `lg` | `.apple-button-lg` |
-
-**动效**：颜色/阴影变化为主；工作台 CTA 避免夸张 `scale`。ErrorBoundary 等特殊页可例外。
-
-壳层工具钮也可直接用 `.wb-tool` 等，不必强行包一层 `Button`。
+壳层工具钮用 `.wb-tool` / `.wb-nav-btn`（图标变体 `.wb-nav-btn-icon`），侧栏用 `.wb-proj-*` 族。  
+**动效**：颜色/阴影变化为主；工作台 CTA 避免夸张 `scale`。
 
 ---
 
-## 输入框
+## 滚动条与焦点（全局，`src/index.css`）
 
-优先 `import { Input } from '@/components/ui'`，或 `.apple-input` / `.apple-input-sm`。
-
-- 默认高与按钮 md 对齐  
-- focus：panel 底 + brand 边 + soft ring  
-- password：隐藏浏览器原生 reveal（`::-ms-reveal`）
-
-设置表单里也常见 Tailwind + CSS 变量拼出的 `inputClass`（与 apple-input 视觉一致即可）。
+- `*::-webkit-scrollbar`：10px 槽、thumb `var(--wb-scroll)`、2px transparent border + `padding-box` 内缩
+- Firefox：`* { scrollbar-width: thin; scrollbar-color: var(--wb-scroll) transparent }`
+- `::selection`：品牌 20% 浅底
+- `.workbench :focus-visible`：2px brand 环；input/textarea/select 自带 ring，不叠加
 
 ---
 
@@ -172,51 +168,19 @@ src/components/ui/Input.tsx
 src/components/ui/index.ts
 src/apple-style.css      // apple tokens + .apple-button / .apple-input
 src/workbench.css        // --wb-* 壳层 + 暗色 + 编辑器 se-*
-src/mobile.css           // 移动壳
+src/mobile.css           // 移动壳（同一套 --wb-* token）
+src/index.css            // 滚动条 / 选中色 / 焦点环全局基底
 ```
-
-当前 primitive 以 **Button / Input** 为主；Select、Modal、菜单等仍由业务组件 + token/class 组合实现。新增高频控件时再抽 `ui/*`，避免为抽而抽。
-
----
-
-## 进度 / 状态
-
-- 品牌进度色：`var(--apple-blue)` / `var(--wb-brand)`  
-- 完成：`var(--apple-success)` + soft 底  
-- 失败：`var(--apple-danger)`  
-- 阶段 UI：`StepperProgress`（侧栏摘要 / 进度轨 / tooltip）
-
----
-
-## 弹窗与抽屉
-
-- 遮罩：`bg-black/40 backdrop-blur-sm`  
-- 面板：白底（暗色 panel）、card-large 圆角、限高、头固定内容滚动  
-- 设置：抽屉/全屏向（`SettingsModal`），移动端全屏优先  
-- 标题 + 关闭：icon button  
-
----
-
-## 动效
-
-- 全局常用 **framer-motion**（阶段切换、菜单、弹层）  
-- 尊重 `prefers-reduced-motion` 的组件：如 `CountUp`、`MobileMenu`  
-- 新动画：短、淡、少位移；避免干扰编辑区阅读
-
----
-
-## 与架构的关系
-
-视觉约定见本文；**状态 / 服务分层**见 [`ARCHITECTURE.md`](./ARCHITECTURE.md)。  
-改 UI 不必动 service；改翻译/队列逻辑不必改 DESIGN。
 
 ---
 
 ## 检查清单（PR 自检）
 
-- [ ] 工作台主 CTA 是否仍是品牌蓝、软方圆？  
-- [ ] 成功绿是否只用于完成态，而不是主按钮底？  
-- [ ] 壳层是否优先 `--wb-*`，表单控件是否优先 apple / `ui/*`？  
-- [ ] 新硬编码色是否有理由（菜单选中 / toast / PWA / 错误页）？  
-- [ ] 暗色下正文、边框、主色是否可读？  
-- [ ] 业务逻辑是否落在 service，而不是堆进组件或 config store？  
+- [ ] 新界面是否落在三层结构里（壳 `--wb-bg` / 内容 `--wb-panel` / 凹槽 `--wb-panel-2`），而不是发明新底色？
+- [ ] 工作台主 CTA 是否仍是品牌蓝？成功绿是否只用于完成态？
+- [ ] 数字（时间/计数/百分比）是否用了 `--wb-font-mono` + `tabular-nums`？
+- [ ] 是否引入了新硬编码色（尤其暗色覆盖块）？有理由吗？
+- [ ] 滚动条是否保持细条（10px / thin）？
+- [ ] 暗色下正文、边框、主色是否可读？层级是否仍是「壳暗、内容亮」？
+- [ ] 密度是否对齐客户端（行高/内边距不过度留白）？
+- [ ] 业务逻辑是否落在 service，而不是堆进组件或 config store？

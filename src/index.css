@@ -23,6 +23,42 @@
     max-width: 100%;
   }
 
+  /* ── 客户端基底：细滚动条（WebKit + Firefox） ── */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--wb-scroll, #c4c9d1) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--wb-scroll, #c4c9d1);
+    border-radius: 99px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--wb-scroll-hover, #a7aeb9);
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* 文本选中：品牌浅底 */
+  ::selection {
+    background: color-mix(in srgb, var(--apple-blue, #0071e3) 20%, transparent);
+  }
+
   :root {
     --radius: 0.5rem;
     --sidebar-background: 0 0% 98%;
@@ -52,4 +88,21 @@
     max-width: 100%;
     overflow-x: hidden;
   }
+}
+
+/* 键盘焦点环：必须在 @layer 外（分层规则赢不了 .wb-proj 等未分层的 outline:none）。
+   输入类控件自带 ring，不叠加。桌面 workbench 与移动 m-shell 同一套契约。 */
+.workbench :focus-visible,
+.m-shell :focus-visible {
+  outline: 2px solid var(--wb-brand);
+  outline-offset: 1px;
+}
+
+.workbench input:focus-visible,
+.workbench textarea:focus-visible,
+.workbench select:focus-visible,
+.m-shell input:focus-visible,
+.m-shell textarea:focus-visible,
+.m-shell select:focus-visible {
+  outline: none;
 }

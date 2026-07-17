@@ -5,7 +5,6 @@ import {
   Settings,
   BookOpen,
   History,
-  Menu,
   Moon,
   Sun,
   Volume2,
@@ -21,7 +20,6 @@ import {
   LazyTermsManager,
 } from './lazySurfaces';
 import { StatusBar } from './StatusBar';
-import { MobileMenu } from './MobileMenu';
 import { EmptyWorkspaceHero } from '@/components/EmptyWorkspaceHero';
 import { useFileCount, useFilesStore } from '@/stores/filesStore';
 import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
@@ -48,7 +46,6 @@ const stageMotion = {
 };
 
 export const MainApp: React.FC = () => {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   /** 首次打开后保持设置组件挂载，避免关抽屉丢掉未保存草稿 */
   const [settingsMounted, setSettingsMounted] = useState(false);
   const [sampleLoading, setSampleLoading] = useState(false);
@@ -212,58 +209,58 @@ export const MainApp: React.FC = () => {
             className="wb-brand-logo"
             src="/favicon.svg"
             alt=""
-            width={24}
-            height={24}
+            width={20}
+            height={20}
             draggable={false}
           />
           <span className="wb-brand-title">蛋蛋字幕翻译</span>
           <span className="wb-brand-ver">v2.0</span>
         </div>
 
-        <div className="wb-top-actions">
-          <div className="hidden md:flex items-center gap-1">
+        {/* 主导航：标题栏正中分段控件（工作区 / 术语 / 历史） */}
+        <nav className="wb-top-nav hidden md:flex" aria-label="主导航">
+          <div className="wb-seg wb-seg-nav">
             <button
               type="button"
-              className={`wb-nav-btn ${showEditor && !settingsOpen ? 'active' : ''}`}
+              className={showEditor && !settingsOpen ? 'is-active' : ''}
               onClick={() => handleNav('editor')}
               title="工作区"
             >
               <LayoutList className="h-3.5 w-3.5" />
-              <span className="wb-nav-label">工作区</span>
+              工作区
             </button>
-
-            <span className="wb-top-sep" aria-hidden />
 
             <button
               type="button"
-              className={`wb-nav-btn ${stage === 'terms' ? 'active' : ''}`}
+              className={stage === 'terms' ? 'is-active' : ''}
               onClick={() => handleNav('terms')}
               title="术语"
             >
               <BookOpen className="h-3.5 w-3.5" />
-              <span className="wb-nav-label">术语</span>
+              术语
               {termsCount > 0 && <span className="wb-nav-badge">{termsCount}</span>}
             </button>
 
             <button
               type="button"
-              className={`wb-nav-btn ${stage === 'history' ? 'active' : ''}`}
+              className={stage === 'history' ? 'is-active' : ''}
               onClick={() => handleNav('history')}
               title="历史"
             >
               <History className="h-3.5 w-3.5" />
-              <span className="wb-nav-label">历史</span>
+              历史
               {historyCount > 0 && (
                 <span className="wb-nav-badge">{historyCount}</span>
               )}
             </button>
+          </div>
+        </nav>
 
-            {/* 导航与系统偏好分隔：主题/音效 → 设置置最右 */}
-            <span className="wb-top-sep" aria-hidden />
-
+        <div className="wb-top-actions">
+          <div className="hidden md:flex items-center gap-0.5">
             <button
               type="button"
-              className="wb-nav-btn"
+              className="wb-nav-btn wb-nav-btn-icon"
               onClick={toggleTheme}
               title={theme === 'dark' ? '浅色' : '深色'}
               aria-label="切换主题"
@@ -277,7 +274,7 @@ export const MainApp: React.FC = () => {
 
             <button
               type="button"
-              className="wb-nav-btn"
+              className="wb-nav-btn wb-nav-btn-icon"
               onClick={handleToggleSound}
               title={soundEnabled ? '关闭音效' : '开启音效'}
               aria-label={soundEnabled ? '关闭音效' : '开启音效'}
@@ -289,6 +286,8 @@ export const MainApp: React.FC = () => {
                 <VolumeX className="h-3.5 w-3.5" />
               )}
             </button>
+
+            <span className="wb-top-sep" aria-hidden />
 
             <button
               type="button"
@@ -302,41 +301,6 @@ export const MainApp: React.FC = () => {
               {!isConfigured && <span className="wb-nav-badge">必须</span>}
             </button>
           </div>
-
-          <button
-            type="button"
-            className="md:hidden wb-nav-btn"
-            onClick={toggleTheme}
-            aria-label="切换主题"
-          >
-            {theme === 'dark' ? (
-              <Sun className="h-3.5 w-3.5" />
-            ) : (
-              <Moon className="h-3.5 w-3.5" />
-            )}
-          </button>
-          <button
-            type="button"
-            className="md:hidden wb-nav-btn"
-            onClick={handleToggleSound}
-            aria-label={soundEnabled ? '关闭音效' : '开启音效'}
-            aria-pressed={soundEnabled}
-          >
-            {soundEnabled ? (
-              <Volume2 className="h-3.5 w-3.5" />
-            ) : (
-              <VolumeX className="h-3.5 w-3.5" />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsMobileMenuOpen(true)}
-            className="md:hidden w-8 h-8 flex items-center justify-center rounded-[8px]"
-            style={{ background: 'var(--wb-panel-2)', color: 'var(--wb-text-2)' }}
-            aria-label="打开菜单"
-          >
-            <Menu className="h-4 w-4" />
-          </button>
         </div>
       </header>
 
@@ -411,18 +375,6 @@ export const MainApp: React.FC = () => {
         <LazySettingsModal isOpen={settingsOpen} />
       </LazySurface>
     )}
-
-    <MobileMenu
-      isOpen={isMobileMenuOpen}
-      onClose={() => setIsMobileMenuOpen(false)}
-      termsCount={termsCount}
-      historyCount={historyCount}
-      isSettingsRequired={!isConfigured}
-      onOpenWorkspace={openEditor}
-      onOpenTerms={openTerms}
-      onOpenHistory={openHistory}
-      onOpenSettings={openSettings}
-    />
     </>
   );
 };

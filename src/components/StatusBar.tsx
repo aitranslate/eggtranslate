@@ -86,7 +86,7 @@ export const StatusBar: React.FC = () => {
       </div>
       <div className="wb-statusbar-right">
         <span className="wb-statusbar-item wb-statusbar-muted" title="本次会话 / 任务累计 Token">
-          Tokens {totalTokens.toLocaleString()}
+          Tokens <span className="wb-statusbar-num">{totalTokens.toLocaleString()}</span>
         </span>
       </div>
     </footer>

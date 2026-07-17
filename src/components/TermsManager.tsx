@@ -37,7 +37,7 @@ export const TermsManager: React.FC<TermsManagerProps> = ({
   const importTerms = useCallback(async (termsText: string) => {
     const lines = termsText.split('\n').filter(line => line.trim());
     const newTerms: Term[] = [];
-    const lineRegex = /^(.+?):\s*(.+?)(?:\s*\[(.+)\])?$/;
+    const lineRegex = /^(.+?)[:：]\s*(.+?)(?:\s*\[(.+)\])?$/;
 
     for (const line of lines) {
       const match = line.match(lineRegex);
@@ -312,7 +312,7 @@ export const TermsManager: React.FC<TermsManagerProps> = ({
         )}
       </div>
 
-      <div className={variant === 'panel' ? 'wb-panel-body !flex !flex-col' : 'space-y-4 flex-1 overflow-y-auto'}>
+      <div className={variant === 'panel' ? 'wb-panel-body is-sheet' : 'space-y-4 flex-1 overflow-y-auto'}>
         <div className="wb-glossary-shell flex-1 min-h-0">
           <div className="wb-glossary-toolbar">
             <div className="wb-search">
@@ -324,7 +324,7 @@ export const TermsManager: React.FC<TermsManagerProps> = ({
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <div className="wb-tool-row" style={{ marginLeft: 'auto' }}>
+            <div className="wb-tool-row wb-toolbar-end">
               <button type="button" className="wb-tool" onClick={() => setShowImport(!showImport)}>
                 <Upload className="h-3.5 w-3.5" />
                 导入
@@ -348,13 +348,13 @@ export const TermsManager: React.FC<TermsManagerProps> = ({
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden border-b border-[var(--wb-border)]"
               >
-                <div className="p-2.5 space-y-2 bg-[var(--wb-panel-2)]">
+                <div className="p-3 space-y-2 bg-[var(--wb-panel)]">
                   <textarea
-                    placeholder="每行一条：原文:译文 [备注]"
+                    placeholder={'每行一条：原文: 译文 [备注]\n例：LLM: 大语言模型 [技术]'}
                     value={importText}
                     onChange={(e) => setImportText(e.target.value)}
                     rows={4}
-                    className="apple-input !h-auto py-2 resize-none w-full text-xs"
+                    className="apple-input wb-import-area w-full"
                   />
                   <div className="wb-tool-row">
                     <button type="button" className="wb-tool primary" onClick={onImport}>确认导入</button>

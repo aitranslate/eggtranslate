@@ -114,7 +114,7 @@ const js = {
   importOk: `document.body.innerText.includes('sample-en')||document.body.innerText.includes('Everybody')||!!document.querySelector('.wb-tasks-count')`,
   pressEsc: `(()=>{window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));return 'ok'})()`,
   /** 取消选中后：编辑器关闭，回到空工作区提示 */
-  isDeselected: `!document.querySelector('.se-search-input')&&(document.body.innerText.includes('\u9009\u62e9\u4e00\u4e2a\u9879\u76ee')||document.body.innerText.includes('\u5bfc\u5165\u6587\u4ef6'))`,
+  isDeselected: `!document.querySelector('.se-search-input')&&(document.body.innerText.includes('\u9009\u62e9\u5de6\u4fa7\u4efb\u52a1')||document.body.innerText.includes('\u5bfc\u5165\u6587\u4ef6'))`,
   /** 点「自定义」服务商 */
   pickCustomProvider: `(()=>{
     const d=document.querySelector('.wb-drawer');if(!d)return 'no-drawer';

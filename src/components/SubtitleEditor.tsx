@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef, memo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useRef, memo, useEffect, forwardRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Search, FileText, X } from 'lucide-react';
@@ -25,10 +25,16 @@ import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { formatMatchCount, swapLanguages } from '@/utils/uxHelpers';
 import { useAgentRunStore } from '@/stores/agentRunStore';
 import { AgentProcessControl } from '@/components/agent/AgentProcessControl';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 const EMPTY_ENTRIES: SubtitleEntry[] = [];
-/** 五列平铺；原文/译文可显示 SRT 内建换行（约 2 行） */
+/** 桌面虚拟列表行高：与 `.se-row { height: 68px }` 对齐 */
 const ROW_HEIGHT = 68;
+/**
+ * 移动端堆叠卡片预估行高（P50–P75）。
+ * 实际高度由 measureElement 校正；低估会导致滚动跳动/空白。
+ */
+const ROW_HEIGHT_MOBILE_ESTIMATE = 128;
 
 interface SubtitleEditorProps {
   isOpen?: boolean;
@@ -75,15 +81,12 @@ function MultiLineText({ text, emptyLabel }: { text: string; emptyLabel: string 
   return <span className="se-text-plain">{text}</span>;
 }
 
-/** 只读行：序号 | 开始 | 结束 | 原文 | 译文 */
-export const SubtitleDisplayRow = memo<DisplayRowProps>(({
-  entry,
-  index,
-  start,
-  onStartEdit,
-  showStreamCaret = false,
-  readOnly = false,
-}) => {
+/** 只读行：序号 | 开始 | 结束 | 原文 | 译文（移动端堆叠为卡片） */
+export const SubtitleDisplayRow = memo(
+  forwardRef<HTMLDivElement, DisplayRowProps>(function SubtitleDisplayRow(
+    { entry, index, start, onStartEdit, showStreamCaret = false, readOnly = false },
+    ref
+  ) {
   const isStreaming = entry.translationStatus === 'streaming';
   const isMissing = entry.translationStatus === 'missing';
   const tryEdit = (field: FocusField) => {
@@ -92,6 +95,7 @@ export const SubtitleDisplayRow = memo<DisplayRowProps>(({
   };
   return (
     <div
+      ref={ref}
       data-index={index}
       data-testid={`subtitle-row-${entry.id}`}
       data-editing="false"
@@ -102,7 +106,6 @@ export const SubtitleDisplayRow = memo<DisplayRowProps>(({
         top: 0,
         left: 0,
         width: '100%',
-        height: ROW_HEIGHT,
         transform: `translateY(${start}px)`,
       }}
       className={`se-row${readOnly ? ' is-readonly' : ''}${isMissing ? ' is-missing' : ''}`}
@@ -185,7 +188,8 @@ export const SubtitleDisplayRow = memo<DisplayRowProps>(({
       </div>
     </div>
   );
-});
+  })
+);
 SubtitleDisplayRow.displayName = 'SubtitleDisplayRow';
 
 interface EditingRowProps {
@@ -206,25 +210,29 @@ interface EditingRowProps {
 }
 
 /**
- * 行内编辑：与只读行同一五列布局。
+ * 行内编辑：与只读行同一布局（桌面五列，移动端堆叠）。
  * Enter 保存 · Esc 取消 · 失焦保存
  */
-export const SubtitleEditingRow = memo<EditingRowProps>(({
-  entry,
-  index,
-  start,
-  editText,
-  editTranslation,
-  editStartTime,
-  editEndTime,
-  focusField,
-  onSaveEdit,
-  onCancelEdit,
-  setEditText,
-  setEditTranslation,
-  setEditStartTime,
-  setEditEndTime,
-}) => {
+export const SubtitleEditingRow = memo(
+  forwardRef<HTMLDivElement, EditingRowProps>(function SubtitleEditingRow(
+    {
+      entry,
+      index,
+      start,
+      editText,
+      editTranslation,
+      editStartTime,
+      editEndTime,
+      focusField,
+      onSaveEdit,
+      onCancelEdit,
+      setEditText,
+      setEditTranslation,
+      setEditStartTime,
+      setEditEndTime,
+    },
+    ref
+  ) {
   const textRef = useRef<HTMLTextAreaElement>(null);
   const transRef = useRef<HTMLTextAreaElement>(null);
   const startRef = useRef<HTMLInputElement>(null);
@@ -295,6 +303,7 @@ export const SubtitleEditingRow = memo<EditingRowProps>(({
 
   return (
     <div
+      ref={ref}
       data-index={index}
       data-testid={`subtitle-row-${entry.id}`}
       data-editing="true"
@@ -303,7 +312,6 @@ export const SubtitleEditingRow = memo<EditingRowProps>(({
         top: 0,
         left: 0,
         width: '100%',
-        height: ROW_HEIGHT,
         transform: `translateY(${start}px)`,
       }}
       className="se-row se-row-editing"
@@ -362,7 +370,8 @@ export const SubtitleEditingRow = memo<EditingRowProps>(({
       />
     </div>
   );
-});
+  })
+);
 SubtitleEditingRow.displayName = 'SubtitleEditingRow';
 
 /** 兼容历史 value（en / zh 等）与 LANGUAGE_OPTIONS.value */
@@ -401,6 +410,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   fileId,
   variant = 'panel',
 }) => {
+  const isMobile = useIsMobile();
   const file = useFile(fileId);
   const updateEntry = useFilesStore((state) => state.updateEntry);
   const config = useTranslationConfig();
@@ -547,12 +557,26 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   }, [displayEntries, filterType, searchTerm]);
 
   const parentRef = useRef<HTMLDivElement>(null);
+  const estimateSize = useCallback(
+    () => (isMobile ? ROW_HEIGHT_MOBILE_ESTIMATE : ROW_HEIGHT),
+    [isMobile]
+  );
+  const getItemKey = useCallback(
+    (index: number) => filteredEntries[index]?.id ?? index,
+    [filteredEntries]
+  );
   const virtualizer = useVirtualizer({
     count: filteredEntries.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize,
+    getItemKey,
     overscan: 10,
   });
+
+  // 筛选 / 断点变化后重测，避免沿用错误高度缓存
+  useEffect(() => {
+    virtualizer.measure();
+  }, [virtualizer, filterType, searchTerm, fileId, isMobile, filteredEntries.length]);
 
   const clearDraft = useCallback(() => {
     setEditingId(null);
@@ -812,7 +836,8 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
           <div
             ref={parentRef}
             className="se-list flex-1 overflow-auto min-h-0"
-            style={{ contain: 'strict' }}
+            /* layout+style：避免 size/paint containment 在可变高 measure 前裁切行 */
+            style={{ contain: 'layout style' }}
           >
             <div
               style={{
@@ -828,6 +853,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                   return (
                     <SubtitleEditingRow
                       key={entry.id}
+                      ref={virtualizer.measureElement}
                       entry={entry}
                       index={vItem.index}
                       start={vItem.start}
@@ -848,6 +874,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                 return (
                   <SubtitleDisplayRow
                     key={entry.id}
+                    ref={virtualizer.measureElement}
                     entry={entry}
                     index={vItem.index}
                     start={vItem.start}

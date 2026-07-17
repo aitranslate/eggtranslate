@@ -37,7 +37,7 @@ describe('useIsMobile', () => {
     renderHook(() => useIsMobile());
     expect(window.matchMedia).toHaveBeenCalled();
     const q = vi.mocked(window.matchMedia).mock.calls[0][0];
-    expect(q).toMatch(/max-width:\s*767\.98px/);
+    expect(q).toMatch(/max-width:\s*899\.98px/);
   });
 
   it('returns initial matchMedia snapshot', () => {

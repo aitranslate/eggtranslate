@@ -1,10 +1,11 @@
 /**
- * 移动端断点：与 CSS `--m-bp` / max-width: 768px 一致
+ * 移动端断点：与 workbench 堆叠断点 max-width: 900px 对齐。
+ * <900px 走 MobileShell；≥900px 走桌面 workbench 双栏。
  */
 
 import { useEffect, useState } from 'react';
 
-export const MOBILE_BREAKPOINT_PX = 768;
+export const MOBILE_BREAKPOINT_PX = 900;
 
 const QUERY = `(max-width: ${MOBILE_BREAKPOINT_PX - 0.02}px)`;
 

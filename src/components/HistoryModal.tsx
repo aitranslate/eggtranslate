@@ -129,9 +129,9 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
         )}
       </div>
 
-      <div className={variant === 'panel' ? 'wb-panel-body' : ''}>
-        <div className="wb-panel-stack" style={{ maxWidth: '100%' }}>
-          <div className="wb-stats">
+      <div className={variant === 'panel' ? 'wb-panel-body is-sheet' : ''}>
+        <div className="wb-sheet">
+          <div className="wb-stats in-sheet">
             <div>
               <div className="val">
                 <CountUp value={stats.total} duration={0.7} />
@@ -164,8 +164,8 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
             </div>
           </div>
 
-          <div className="wb-tool-row" style={{ justifyContent: 'space-between' }}>
-            <div className="wb-search" style={{ maxWidth: 320, flex: 1 }}>
+          <div className="wb-sheet-toolbar">
+            <div className="wb-search">
               <Search />
               <input
                 type="text"
@@ -176,7 +176,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
             </div>
             <button
               type="button"
-              className="wb-tool danger"
+              className="wb-tool danger wb-toolbar-end"
               onClick={onClear}
               disabled={history.length === 0}
             >
@@ -185,53 +185,53 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
             </button>
           </div>
 
-          {filteredHistory.length === 0 ? (
-            <div className="wb-card">
+          <div className="wb-sheet-scroll">
+            {filteredHistory.length === 0 ? (
               <div className="wb-empty">
                 {searchTerm ? '没有匹配的记录' : '暂无历史记录'}
               </div>
-            </div>
-          ) : (
-            <div className="wb-hist-list">
-              {filteredHistory.map((entry) => (
-                <div key={entry.taskId} className="wb-hist-row">
-                  <div className="min-w-0">
-                    <div className="wb-hist-name" title={entry.filename}>
-                      <FileText className="inline-block w-3.5 h-3.5 mr-1.5 opacity-50 align-[-2px]" />
-                      {entry.filename}
+            ) : (
+              <div className="wb-hist-list in-sheet">
+                {filteredHistory.map((entry) => (
+                  <div key={entry.taskId} className="wb-hist-row">
+                    <div className="min-w-0">
+                      <div className="wb-hist-name" title={entry.filename}>
+                        <FileText className="inline-block w-3.5 h-3.5 mr-1.5 opacity-50 align-[-2px]" />
+                        {entry.filename}
+                      </div>
+                      <div className="wb-hist-meta">
+                        <span className="inline-flex items-center gap-1">
+                          <BarChart3 className="h-3 w-3" />
+                          {entry.completedCount} 条
+                        </span>
+                        <span>{entry.totalTokens.toLocaleString()} tok</span>
+                        <span className="inline-flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {formatDate(entry.timestamp)}
+                        </span>
+                      </div>
                     </div>
-                    <div className="wb-hist-meta">
-                      <span className="inline-flex items-center gap-1">
-                        <BarChart3 className="h-3 w-3" />
-                        {entry.completedCount} 条
-                      </span>
-                      <span>{entry.totalTokens.toLocaleString()} tok</span>
-                      <span className="inline-flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {formatDate(entry.timestamp)}
-                      </span>
+                    <div className="wb-hist-acts">
+                      <ExportButton
+                        variant="icon"
+                        disabled={!entry.subtitle_entries?.length}
+                        hasTranslation={!!entry.subtitle_entries?.some(e => e.translatedText && e.translatedText.trim() !== '')}
+                        onSelect={(format) => handleExport(entry, format)}
+                      />
+                      <button
+                        type="button"
+                        className="wb-proj-icon-btn danger"
+                        onClick={() => onDelete(entry.taskId)}
+                        title="删除"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-                  <div className="wb-hist-acts">
-                    <ExportButton
-                      variant="icon"
-                      disabled={!entry.subtitle_entries?.length}
-                      hasTranslation={!!entry.subtitle_entries?.some(e => e.translatedText && e.translatedText.trim() !== '')}
-                      onSelect={(format) => handleExport(entry, format)}
-                    />
-                    <button
-                      type="button"
-                      className="wb-proj-icon-btn danger"
-                      onClick={() => onDelete(entry.taskId)}
-                      title="删除"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </>

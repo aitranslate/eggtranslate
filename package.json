@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "dev:lan": "vite --host",
     "build": "tsc -b && vite build",
     "build:prod": "tsc -b && cross-env BUILD_MODE=prod vite build",
     "lint": "eslint .",
     "preview": "vite preview --host 127.0.0.1",
+    "preview:lan": "vite preview --host",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
@@ -20,7 +22,6 @@
   },
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
-    "@radix-ui/react-dialog": "^1.1.4",
     "@tanstack/react-virtual": "^3.13.26",
     "assemblyai": "^4.23.0",
     "framer-motion": "^12.23.12",
