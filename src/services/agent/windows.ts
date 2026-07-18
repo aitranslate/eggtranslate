@@ -40,13 +40,3 @@ export function splitAgentWindows(
 
   return windows;
 }
-
-export function buildWindowContextText(
-  entries: SubtitleEntry[],
-  indices: number[]
-): string {
-  return indices
-    .map((i) => entries[i]?.text?.trim() || '')
-    .filter(Boolean)
-    .join('\n');
-}

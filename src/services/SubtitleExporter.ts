@@ -3,7 +3,7 @@
  * 支持单格式 SRT 下载、全格式 ZIP 打包（含前缀命名）、批量导出
  */
 
-import JSZip from 'jszip';
+import type JSZip from 'jszip';
 import { toSRT, toBilingual, toSrcTrans } from '@/utils/srtParser';
 import type { SubtitleEntry, SingleTask } from '@/types';
 import { useFilesStore } from '@/stores/filesStore';
@@ -79,6 +79,8 @@ function addEntriesToZip(zip: JSZip, entries: SubtitleEntry[], baseName: string)
  * 适用于历史记录等 task 可能已不在文件列表的场景。
  */
 export async function buildEntriesZip(entries: SubtitleEntry[], baseName: string): Promise<Blob> {
+  // jszip 体积较大，仅在导出 ZIP 时动态加载
+  const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
   addEntriesToZip(zip, entries, baseName);
   return zip.generateAsync({ type: 'blob' });
@@ -135,6 +137,7 @@ export async function exportAllPackage(taskIds: string[]): Promise<Blob> {
 
   if (tasks.length === 0) throw new Error('没有可导出的任务');
 
+  const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
   for (const task of tasks) {
     const baseName = getBaseName(task.subtitle_filename || `task_${task.taskId}`);

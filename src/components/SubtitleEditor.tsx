@@ -24,7 +24,11 @@ import { generateStableFileId } from '@/utils/taskIdGenerator';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { formatMatchCount, swapLanguages } from '@/utils/uxHelpers';
 import { useAgentRunStore } from '@/stores/agentRunStore';
-import { AgentProcessControl } from '@/components/agent/AgentProcessControl';
+import {
+  LazyAgentProcessControl,
+  LazySurface,
+} from '@/components/lazySurfaces';
+import { prefetchAgentProcessControl } from '@/components/lazyPrefetch';
 import { useIsMobile } from '@/hooks/useIsMobile';
 
 const EMPTY_ENTRIES: SubtitleEntry[] = [];
@@ -439,6 +443,13 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     agentRun && (agentRun.active || agentRun.error || agentRun.actionLine)
   );
 
+  // Agent 开关或已有运行态时预取面板 chunk，避免分隔符先闪、控件后弹
+  useEffect(() => {
+    if (agentUiVisible || config.agentTranslationEnabled) {
+      void prefetchAgentProcessControl();
+    }
+  }, [agentUiVisible, config.agentTranslationEnabled]);
+
   // 从任务持久化快照回填大脑面板（刷新 / 关 Agent 开关后仍可见）
   useEffect(() => {
     if (!file?.taskId || !file.agentSnapshot) return;
@@ -764,10 +775,13 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                 {translationStats.translated}/{translationStats.total} 已译 · {translationStats.percentage}%
               </span>
               {agentUiVisible && agentRun ? (
-                <>
-                  <span className="hidden sm:inline">·</span>
-                  <AgentProcessControl status={agentRun} visible />
-                </>
+                // 分隔符与控件同在 Suspense 内：chunk 未就绪时不出现孤立「·」
+                <LazySurface fallback={null}>
+                  <>
+                    <span className="hidden sm:inline">·</span>
+                    <LazyAgentProcessControl status={agentRun} visible />
+                  </>
+                </LazySurface>
               ) : null}
             </div>
           </div>

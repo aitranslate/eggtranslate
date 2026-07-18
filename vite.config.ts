@@ -4,15 +4,14 @@ import { defineConfig } from "vite"
 import sourceIdentifierPlugin from 'vite-plugin-source-info'
 import { VitePWA } from 'vite-plugin-pwa'
 
-const isProd = process.env.BUILD_MODE === 'prod'
-
 // 部署到 Cloudflare Pages，使用根路径
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   base: '/',
   plugins: [
     react(),
     sourceIdentifierPlugin({
-      enabled: !isProd,
+      // 仅 dev server 注入定位属性，任何构建产物都不携带
+      enabled: command === 'serve',
       attributePrefix: 'data-matrix',
       includeProps: true,
     }),
@@ -85,9 +84,29 @@ export default defineConfig({
       output: {
         manualChunks: (id) => {
           if (id.includes('node_modules')) {
-            if (id.includes('framer-motion')) return 'vendor-framer-motion';
-            if (id.includes('lucide-react')) return 'vendor-lucide';
-            if (id.includes('react') || id.includes('react-dom')) return 'vendor-react';
+            // 仅动态 import 的重库：不要并进常驻 vendor，否则 import() 无效、
+            // 首屏 modulepreload 仍会拉整包（ASR / ZIP / 断句 / lamejs）。
+            // 返回 undefined 交给 Rollup 自动拆成 async chunk。
+            const norm = id.replace(/\\/g, '/');
+            if (
+              norm.includes('assemblyai') ||
+              norm.includes('/jszip/') ||
+              norm.endsWith('/jszip') ||
+              norm.includes('sentence-splitter') ||
+              norm.includes('@breezystack') ||
+              norm.includes('lamejs')
+            ) {
+              return undefined;
+            }
+            if (norm.includes('framer-motion')) return 'vendor-framer-motion';
+            if (norm.includes('lucide-react')) return 'vendor-lucide';
+            // 避免把 react-hot-toast 等「含 react 子串」的包误并入 react 核
+            if (
+              /\/(react|react-dom)(\/|$)/.test(norm) ||
+              norm.includes('/scheduler/')
+            ) {
+              return 'vendor-react';
+            }
             return 'vendor';
           }
         },
@@ -97,4 +116,4 @@ export default defineConfig({
       }
     }
   },
-})
+}))

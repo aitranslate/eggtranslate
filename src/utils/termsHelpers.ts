@@ -12,6 +12,19 @@ export function cleanText(text: string): string {
   return text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 }
 
+// 术语清洗结果缓存：翻译每批都会调 getRelevantTerms，避免对同一批术语重复跑 Unicode 正则。
+// term 对象由 termsStore 不可变更新产生，编辑后是新对象，旧条目随 GC 回收。
+const cleanedOriginalCache = new WeakMap<Term, string>();
+
+function getCleanedOriginal(term: Term): string {
+  let cleaned = cleanedOriginalCache.get(term);
+  if (cleaned === undefined) {
+    cleaned = cleanText(term.original);
+    cleanedOriginalCache.set(term, cleaned);
+  }
+  return cleaned;
+}
+
 /**
  * 从术语列表中筛选出与给定文本相关的术语
  * @param terms 术语列表
@@ -31,14 +44,10 @@ export function getRelevantTerms(
   const fullText = `${contextBefore} ${text} ${contextAfter}`;
   const cleanedFullText = cleanText(fullText);
 
-  const processedTerms = terms.map(term => ({
-    ...term,
-    cleanedOriginal: cleanText(term.original)
-  }));
-
-  return processedTerms
-    .filter(term => term.cleanedOriginal && cleanedFullText.includes(term.cleanedOriginal))
-    .map(({ original, translation, notes }) => ({ original, translation, notes }));
+  return terms
+    .map(term => ({ term, cleanedOriginal: getCleanedOriginal(term) }))
+    .filter(({ cleanedOriginal }) => cleanedOriginal && cleanedFullText.includes(cleanedOriginal))
+    .map(({ term: { original, translation, notes } }) => ({ original, translation, notes }));
 }
 
 /**

@@ -47,7 +47,8 @@ export async function convertToMP3(
             onProgress?.(msg.progress);
             break;
           case 'done':
-            resolve(new Blob([msg.buffer], { type: 'audio/mp3' }));
+            // 与转录链路统一用 audio/mpeg（audio/mp3 在部分浏览器不规范）
+            resolve(new Blob([msg.buffer], { type: 'audio/mpeg' }));
             worker.terminate();
             break;
           case 'error':

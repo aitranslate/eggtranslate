@@ -55,6 +55,29 @@ export function recoverInterruptedPhases(task: SingleTask): SingleTask {
   return taskChanged ? { ...task, phases: newPhases } : task;
 }
 
+/**
+ * PhaseProgress 固定字段比较。
+ * missing 与 undefined 视为相同，避免 `errorMessage: undefined` 扩散后误判「有变化」。
+ */
+const PHASE_PROGRESS_KEYS = [
+  'status',
+  'progress',
+  'tokens',
+  'language',
+  'errorMessage',
+  'entryCount',
+  'totalEntries',
+  'keytermGroupName',
+] as const satisfies readonly (keyof PhaseProgress)[];
+
+function isSamePhaseProgress(a: PhaseProgress, b: PhaseProgress): boolean {
+  if (a === b) return true;
+  for (const k of PHASE_PROGRESS_KEYS) {
+    if (!Object.is(a[k], b[k])) return false;
+  }
+  return true;
+}
+
 interface FilesState {
   tasks: SingleTask[];
   selectedFileId: string | null;
@@ -269,39 +292,54 @@ export const useFilesStore = create<FilesState>()(
       batchUpdateEntries: (fileId, updates) => {
         const file = get().getFile(fileId);
         if (!file || updates.length === 0) return;
-        set((state) => {
-          const newTasks = state.tasks.map((t) => {
-            if (t.taskId !== file.taskId) return t;
-            const byId = new Map((t.subtitle_entries || []).map((e) => [e.id, e]));
-            let delta = 0;
-            for (const update of updates) {
-              const prev = byId.get(update.id);
-              if (!prev) continue;
-              const wasTranslated = prev.translationStatus === 'completed';
-              const nextTranslated =
-                update.translatedText !== undefined ? update.translatedText : prev.translatedText;
-              const next: SubtitleEntry = {
-                ...prev,
-                text: update.text,
-                translatedText: nextTranslated,
-                translationStatus: update.status ?? prev.translationStatus,
-              };
-              const willBeTranslated = next.translationStatus === 'completed';
-              if (wasTranslated !== willBeTranslated) {
-                delta += willBeTranslated ? 1 : -1;
-              }
-              byId.set(update.id, next);
+        // 先算再 set：无变化时不调用 set，避免 zustand persist 仍走 setItem/序列化
+        const { tasks } = get();
+        let changed = false;
+        const newTasks = tasks.map((t) => {
+          if (t.taskId !== file.taskId) return t;
+          const byId = new Map((t.subtitle_entries || []).map((e) => [e.id, e]));
+          let delta = 0;
+          let taskChanged = false;
+          for (const update of updates) {
+            const prev = byId.get(update.id);
+            if (!prev) continue;
+            const nextTranslated =
+              update.translatedText !== undefined ? update.translatedText : prev.translatedText;
+            const nextStatus = update.status ?? prev.translationStatus;
+            // 值未变：跳过该条目（重试/重复回调）
+            if (
+              prev.text === update.text &&
+              prev.translatedText === nextTranslated &&
+              prev.translationStatus === nextStatus
+            ) {
+              continue;
             }
-            // preserve original order
-            const entries = (t.subtitle_entries || []).map((e) => byId.get(e.id) ?? e);
-            return {
-              ...t,
-              subtitle_entries: entries,
-              translatedCount: Math.max(0, t.translatedCount + delta),
+            const wasTranslated = prev.translationStatus === 'completed';
+            const next: SubtitleEntry = {
+              ...prev,
+              text: update.text,
+              translatedText: nextTranslated,
+              translationStatus: nextStatus,
             };
-          });
-          return { tasks: newTasks };
+            const willBeTranslated = next.translationStatus === 'completed';
+            if (wasTranslated !== willBeTranslated) {
+              delta += willBeTranslated ? 1 : -1;
+            }
+            byId.set(update.id, next);
+            taskChanged = true;
+          }
+          if (!taskChanged) return t;
+          changed = true;
+          // preserve original order
+          const entries = (t.subtitle_entries || []).map((e) => byId.get(e.id) ?? e);
+          return {
+            ...t,
+            subtitle_entries: entries,
+            translatedCount: Math.max(0, t.translatedCount + delta),
+          };
         });
+        if (!changed) return;
+        set({ tasks: newTasks });
       },
 
       updatePhase: (fileId, phase, update) => {
@@ -312,28 +350,33 @@ export const useFilesStore = create<FilesState>()(
         if (patch.status === "completed") {
           patch = { ...patch, errorMessage: undefined };
         }
-        set((state) => ({
-          tasks: state.tasks.map((t) => {
-            if (t.taskId !== file.taskId) return t;
-            const prev = t.phases[phase];
-            const next: PhaseProgress = { ...prev, ...patch };
-            // 并发 batch：tokens 在单次 set 内累加，避免 read-modify-write 丢数
-            if (typeof tokensDelta === "number" && tokensDelta !== 0) {
-              next.tokens = Math.max(0, (prev.tokens || 0) + tokensDelta);
-            }
-            // 进度只前进不回退（并发回调乱序时）
-            if (
-              typeof patch.progress === "number" &&
-              typeof prev.progress === "number" &&
-              patch.progress < prev.progress &&
-              patch.status !== "failed" &&
-              patch.status !== "completed"
-            ) {
-              next.progress = prev.progress;
-            }
-            return { ...t, phases: { ...t.phases, [phase]: next } };
-          }),
-        }));
+        // 先算再 set：无变化时不调用 set（订阅者 + persist 一并跳过）
+        const { tasks } = get();
+        let changed = false;
+        const newTasks = tasks.map((t) => {
+          if (t.taskId !== file.taskId) return t;
+          const prev = t.phases[phase];
+          const next: PhaseProgress = { ...prev, ...patch };
+          // 并发 batch：tokens 在单次更新内累加
+          if (typeof tokensDelta === "number" && tokensDelta !== 0) {
+            next.tokens = Math.max(0, (prev.tokens || 0) + tokensDelta);
+          }
+          // 进度只前进不回退（并发回调乱序时）
+          if (
+            typeof patch.progress === "number" &&
+            typeof prev.progress === "number" &&
+            patch.progress < prev.progress &&
+            patch.status !== "failed" &&
+            patch.status !== "completed"
+          ) {
+            next.progress = prev.progress;
+          }
+          if (prev && isSamePhaseProgress(prev, next)) return t;
+          changed = true;
+          return { ...t, phases: { ...t.phases, [phase]: next } };
+        });
+        if (!changed) return;
+        set({ tasks: newTasks });
         // terminal phase transitions: flush coalesced persist promptly
         if (patch.status === "completed" || patch.status === "failed") {
           void flushFilesStorePersist();

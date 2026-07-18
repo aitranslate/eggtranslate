@@ -75,10 +75,6 @@ export const useAgentRunStore = create<AgentRunState>((set, get) => ({
   getStatus: (fileId) => get().byFileId[fileId],
 }));
 
-export function selectAgentRun(fileId: string): (s: AgentRunState) => AgentRunStatus | undefined {
-  return (s) => s.byFileId[fileId];
-}
-
 /** DEV：agent-browser / 本地探针注入 Agent 运行态 */
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as unknown as { __eggAgentRunStore?: typeof useAgentRunStore }).__eggAgentRunStore =

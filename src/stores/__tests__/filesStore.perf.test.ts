@@ -191,6 +191,75 @@ describe('filesStore batchUpdateEntries', () => {
     expect(mutationCount).toBe(1);
     expect(useFilesStore.getState().tasks[0].translatedCount).toBe(20);
   });
+
+  it('identical batchUpdateEntries does not notify subscribers (no set)', () => {
+    const fileId = generateStableFileId('t1');
+    useFilesStore.setState({
+      tasks: [
+        makeTask({
+          subtitle_entries: [
+            makeEntry(1, { translatedText: '已有', translationStatus: 'completed' }),
+          ],
+          entryCount: 1,
+          translatedCount: 1,
+        }),
+      ],
+    });
+
+    let mutations = 0;
+    const unsub = useFilesStore.subscribe(() => {
+      mutations += 1;
+    });
+    const tasksBefore = useFilesStore.getState().tasks;
+
+    useFilesStore.getState().batchUpdateEntries(fileId, [
+      { id: 1, text: 'text-1', translatedText: '已有', status: 'completed' },
+    ]);
+    unsub();
+
+    expect(mutations).toBe(0);
+    // 同一引用：未调用 set
+    expect(useFilesStore.getState().tasks).toBe(tasksBefore);
+  });
+
+  it('identical updatePhase does not notify subscribers (no set)', () => {
+    const fileId = generateStableFileId('t1');
+    useFilesStore.setState({
+      tasks: [
+        makeTask({
+          phases: {
+            workflow: 'translate',
+            converting: { status: 'completed', progress: 100, tokens: 0 },
+            transcribing: { status: 'completed', progress: 100, tokens: 0 },
+            translating: { status: 'active', progress: 50, tokens: 10 },
+          },
+        }),
+      ],
+    });
+
+    let mutations = 0;
+    const unsub = useFilesStore.subscribe(() => {
+      mutations += 1;
+    });
+    const tasksBefore = useFilesStore.getState().tasks;
+
+    useFilesStore.getState().updatePhase(fileId, 'translating', {
+      status: 'active',
+      progress: 50,
+      tokens: 10,
+    });
+    // completed 清 errorMessage:undefined 也不应误触发
+    useFilesStore.getState().updatePhase(fileId, 'translating', {
+      status: 'active',
+      progress: 50,
+      tokens: 10,
+      errorMessage: undefined,
+    });
+    unsub();
+
+    expect(mutations).toBe(0);
+    expect(useFilesStore.getState().tasks).toBe(tasksBefore);
+  });
 });
 
 describe('filesStore persist coalescing', () => {

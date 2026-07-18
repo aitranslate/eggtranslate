@@ -1,12 +1,22 @@
-import { AssemblyAI } from "assemblyai";
+import type { AssemblyAI } from "assemblyai";
 import { ASSEMBLYAI_CONFIG } from "@/constants/assemblyai";
 import type { TranscriptionWord } from "@/types";
 import { toAppError } from "@/utils/errors";
 import { useTranscriptionStore } from "@/stores/transcriptionStore";
 import { convertToMP3 } from "@/utils/convertToMP3";
-import { type AssemblyAISentence } from "@/utils/subtitleSegmentation";
-import { segmentWords } from "@/services/sentenceSegmentation";
+import type { AssemblyAISentence } from "@/utils/subtitleSegmentation";
 import { logger } from "@/utils/logger";
+
+/**
+ * 是否已是 MP3（可跳过二次转码）。
+ * 兼容 audio/mpeg、audio/mp3，以及空 type + .mp3 文件名。
+ */
+export function isAlreadyMp3(file: { type?: string; name?: string }): boolean {
+  const type = (file.type || "").toLowerCase();
+  if (type === "audio/mpeg" || type === "audio/mp3") return true;
+  if (/\.mp3$/i.test(file.name || "")) return true;
+  return false;
+}
 
 /**
  * AssemblyAI 转录服务
@@ -26,13 +36,15 @@ class AssemblyAIService {
 
   /**
    * 随机获取一个 KEY 并创建客户端
+   * SDK 体积较大，按需动态加载（首次转录时才下载）
    */
-  private createClient(): AssemblyAI {
+  private async createClient(): Promise<AssemblyAI> {
     const keys = this.getKeys();
     if (keys.length === 0) {
       throw new Error('请先在设置中配置 AssemblyAI API Key');
     }
     const apiKey = keys[Math.floor(Math.random() * keys.length)];
+    const { AssemblyAI } = await import("assemblyai");
     return new AssemblyAI({ apiKey });
   }
 
@@ -47,16 +59,21 @@ class AssemblyAIService {
     options: { keyterms?: string[] } = {}
   ): Promise<TranscriptionWord[]> {
     try {
-      const client = this.createClient();
+      const client = await this.createClient();
 
-      // 尝试转换为 MP3 以减小文件大小，失败则使用原文件
+      // 已是 MP3（addFile 阶段已转码）则直接用，避免二次转码
       let audioFile: File;
-      try {
-        const mp3Blob = await convertToMP3(mediaFile);
-        audioFile = new File([mp3Blob], 'audio.mp3', { type: 'audio/mpeg' });
-      } catch (convertError) {
-        logger.warn('MP3 转码失败，使用原文件上传:', convertError);
+      if (isAlreadyMp3(mediaFile)) {
         audioFile = mediaFile;
+      } else {
+        // 尝试转换为 MP3 以减小文件大小，失败则使用原文件
+        try {
+          const mp3Blob = await convertToMP3(mediaFile);
+          audioFile = new File([mp3Blob], 'audio.mp3', { type: 'audio/mpeg' });
+        } catch (convertError) {
+          logger.warn('MP3 转码失败，使用原文件上传:', convertError);
+          audioFile = mediaFile;
+        }
       }
 
       const transcript = await client.transcripts.transcribe({
@@ -98,24 +115,30 @@ class AssemblyAIService {
     onProgress?: (status: string, percent: number) => void
   ): Promise<{ sentences: AssemblyAISentence[], language: string }> {
     try {
-      const client = this.createClient();
+      const client = await this.createClient();
 
-      // 尝试转换为 MP3 以减小文件大小，失败则使用原文件
-      onProgress?.('converting', 5);
+      // addFile 阶段已完成 MP3 转码并缓存，传入的即为 16kHz MP3，跳过二次转码
       let audioFile: File;
-      try {
-        logger.info('开始 MP3 转码，原文件大小:', (mediaFile.size / 1024 / 1024).toFixed(2), 'MB');
-        const mp3Blob = await convertToMP3(mediaFile);
-        audioFile = new File([mp3Blob], 'audio.mp3', { type: 'audio/mpeg' });
-        logger.info('MP3 转码完成，新文件大小:', (audioFile.size / 1024 / 1024).toFixed(2), 'MB');
-      } catch (convertError) {
-        logger.warn('MP3 转码失败，使用原文件上传:', convertError);
+      if (isAlreadyMp3(mediaFile)) {
         audioFile = mediaFile;
+      } else {
+        // 非常规路径（未缓存 MP3）：尝试转换为 MP3 以减小文件大小，失败则使用原文件
+        onProgress?.('converting', 5);
+        try {
+          logger.info('开始 MP3 转码，原文件大小:', (mediaFile.size / 1024 / 1024).toFixed(2), 'MB');
+          const mp3Blob = await convertToMP3(mediaFile);
+          audioFile = new File([mp3Blob], 'audio.mp3', { type: 'audio/mpeg' });
+          logger.info('MP3 转码完成，新文件大小:', (audioFile.size / 1024 / 1024).toFixed(2), 'MB');
+        } catch (convertError) {
+          logger.warn('MP3 转码失败，使用原文件上传:', convertError);
+          audioFile = mediaFile;
+        }
       }
 
       logger.info('开始上传并转录（获取单词级别时间戳）...');
       onProgress?.('transcribing', 10);
 
+      // SDK 的 transcribe() 内部已轮询至完成，返回即终态
       const transcript = await client.transcripts.transcribe({
         audio: audioFile,
         language_detection: true,
@@ -123,14 +146,6 @@ class AssemblyAIService {
       });
 
       logger.info('转录完成，语言代码:', transcript.language_code);
-
-      // 3. 轮询状态直到完成
-      while (transcript.status === 'queued' || transcript.status === 'processing') {
-        onProgress?.('transcribing', transcript.status === 'processing' ? 50 : 10);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const updated = await client.transcripts.get(transcript.id);
-        Object.assign(transcript, updated);
-      }
 
       if (transcript.status === 'error') {
         throw new Error(`Transcription failed: ${transcript.error}`);
@@ -148,8 +163,10 @@ class AssemblyAIService {
       }));
 
       // 5. DP 断句（两层流水线：句末硬切分 + 超长句 DP 软切分，带 VAD 静音代价）
+      // 断句模块（含 sentence-splitter）体积较大，转录到这一步才动态加载
       onProgress?.('segmenting', 80);
       const preset = useTranscriptionStore.getState().subtitleLengthPreset || 'standard';
+      const { segmentWords } = await import("@/services/sentenceSegmentation");
       const segments = segmentWords(words, languageCode, preset, { watchabilityMerge: true });
 
       logger.info('DP 断句完成，共', segments.length, '个句子，语言代码:', languageCode);

@@ -16,8 +16,7 @@ import { useTermsStore } from '@/stores/termsStore';
 import { useStreamingOverlayStore } from '@/stores/streamingOverlayStore';
 import { executeTranslation } from './TranslationOrchestrator';
 import { translateBatch as llmTranslateBatch } from './llmTranslationService';
-import { runAgentTranslation } from './agent';
-import type { AgentEvent } from './agent';
+import type { AgentEvent } from './agent/types';
 import { useAgentRunStore } from '@/stores/agentRunStore';
 import { isAbortError, toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
@@ -373,6 +372,8 @@ async function runAgentTranslationPath(opts: {
 }): Promise<void> {
   const { fileId, file, entries, config, controller, deps } = opts;
   const total = entries.length || 1;
+  // window_done 事件按 entryId 回查原文，预建索引避免每窗口 O(window × n) 线性查找
+  const entriesById = new Map(entries.map((e) => [e.id, e]));
 
   /** 终态快照：success 显式 error=null，不会被旧 st.error 污染 */
   const persistAgentSnapshot = (outcome: 'success' | 'error', errorMessage?: string) => {
@@ -412,8 +413,7 @@ async function runAgentTranslationPath(opts: {
             fileId,
             event.translations.map((t) => ({
               id: t.entryId,
-              text:
-                entries.find((e) => e.id === t.entryId)?.text ?? '',
+              text: entriesById.get(t.entryId)?.text ?? '',
               translatedText: t.text,
               status: 'completed' as TranslationStatus,
             }))
@@ -472,6 +472,8 @@ async function runAgentTranslationPath(opts: {
     }
   };
 
+  // 按需加载 Agent 管线：关 Agent 时冷启动不拉 pipeline / tool-loop 图
+  const { runAgentTranslation } = await import('./agent');
   await runAgentTranslation(entries, {
     fileId,
     taskId: file.taskId,

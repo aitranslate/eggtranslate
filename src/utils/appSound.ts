@@ -65,7 +65,13 @@ export function bindAudioUnlock(): void {
 
   const unlock = () => {
     const ctx = getAudioContext();
-    if (ctx) void ensureRunning(ctx);
+    if (!ctx) return;
+    void ensureRunning(ctx).then((running) => {
+      // 已解锁：自摘除监听，后续点击/按键不再触发
+      if (!running) return;
+      window.removeEventListener('pointerdown', unlock, { capture: true });
+      window.removeEventListener('keydown', unlock, { capture: true });
+    });
   };
 
   // 捕获阶段，尽量赶在业务 handler 之前解锁

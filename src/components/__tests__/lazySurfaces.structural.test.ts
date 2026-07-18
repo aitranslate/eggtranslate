@@ -30,6 +30,73 @@ describe('lazy surface wiring', () => {
     expect(src).toMatch(/LazySettingsModal|LazyTermsManager|LazyHistoryModal/);
   });
 
+  it('MainApp lazy-loads MobileShell (desktop cold path skips mobile graph)', () => {
+    const src = readSrc('components/MainApp.tsx');
+    expect(src).toMatch(/LazyMobileShell/);
+    expect(src).toMatch(/prefetchMobileShell/);
+    expect(src).not.toMatch(/from ['"]@\/components\/mobile\/MobileShell['"]/);
+    expect(src).not.toMatch(/from ['"]\.\/mobile\/MobileShell['"]/);
+  });
+
+  it('lazySurfaces exposes LazyMobileShell + LazyAgentProcessControl', () => {
+    const src = readSrc('components/lazySurfaces.tsx');
+    expect(src).toMatch(/LazyMobileShell\s*=\s*React\.lazy/);
+    expect(src).toMatch(/import\(['"]\.\/mobile\/MobileShell['"]\)/);
+    expect(src).toMatch(/LazyAgentProcessControl\s*=\s*React\.lazy/);
+    expect(src).toMatch(/import\(['"]\.\/agent\/AgentProcessControl['"]\)/);
+  });
+
+  it('lazyPrefetch triggers the same dynamic graphs without mounting UI', () => {
+    const src = readSrc('components/lazyPrefetch.ts');
+    expect(src).toMatch(/export function prefetchMobileShell/);
+    expect(src).toMatch(/import\(['"]\.\/mobile\/MobileShell['"]\)/);
+    expect(src).toMatch(/export function prefetchAgentProcessControl/);
+    expect(src).toMatch(/import\(['"]\.\/agent\/AgentProcessControl['"]\)/);
+  });
+
+  it('SubtitleEditor lazy-loads AgentProcessControl (separator inside Suspense)', () => {
+    const src = readSrc('components/SubtitleEditor.tsx');
+    expect(src).toMatch(/LazyAgentProcessControl/);
+    expect(src).toMatch(/prefetchAgentProcessControl/);
+    expect(src).toMatch(/from ['"]@\/components\/lazyPrefetch['"]/);
+    expect(src).not.toMatch(
+      /from ['"]@\/components\/agent\/AgentProcessControl['"]/
+    );
+    // 分隔符必须在 LazySurface 内，避免孤立「·」
+    expect(src).toMatch(
+      /LazySurface\s+fallback=\{null\}[\s\S]*?hidden sm:inline[\s\S]*?LazyAgentProcessControl/
+    );
+  });
+
+  it('heavy libs stay dynamic-only; vite keeps them out of static vendor', () => {
+    const asm = readSrc('services/assemblyaiService.ts');
+    expect(asm).toMatch(/await\s+import\(['"]assemblyai['"]\)/);
+    // 允许 import type，禁止值导入
+    expect(asm).not.toMatch(
+      /import\s+(?!type\b)[^'"\n]*from\s+['"]assemblyai['"]/
+    );
+
+    const exp = readSrc('services/SubtitleExporter.ts');
+    expect(exp).toMatch(/import\(['"]jszip['"]\)/);
+    expect(exp).not.toMatch(
+      /import\s+(?!type\b)[^'"\n]*from\s+['"]jszip['"]/
+    );
+
+    const hard = readSrc('services/sentenceSegmentation/hardSplit.ts');
+    // sentence-splitter 仅由动态 import 的 sentenceSegmentation 图持有
+    expect(hard).toMatch(/from\s+['"]sentence-splitter['"]/);
+    const aaiCaller = readSrc('services/assemblyaiService.ts');
+    expect(aaiCaller).toMatch(
+      /import\(['"]@\/services\/sentenceSegmentation['"]\)/
+    );
+
+    // project root is parent of src/
+    const vite = readFileSync(resolve(root, '../vite.config.ts'), 'utf8');
+    expect(vite).toMatch(/assemblyai/);
+    expect(vite).toMatch(/sentence-splitter/);
+    expect(vite).toMatch(/return undefined/);
+  });
+
   it('MobileShell does not statically import modal implementations', () => {
     const src = readSrc('components/mobile/MobileShell.tsx');
     expect(src).toMatch(/from ['"]@\/components\/lazySurfaces['"]/);
@@ -58,6 +125,14 @@ describe('lazy surface wiring', () => {
     );
     expect(mobile).toMatch(
       /\{\/\*\s*浮层：在 m-shell 外[\s\S]*?<LazySettingsModal/
+    );
+  });
+
+  it('translationService dynamically imports agent pipeline (not static)', () => {
+    const src = readSrc('services/translationService.ts');
+    expect(src).toMatch(/await\s+import\(['"]\.\/agent['"]\)/);
+    expect(src).not.toMatch(
+      /import\s*\{\s*runAgentTranslation\s*\}\s*from\s*['"]\.\/agent['"]/
     );
   });
 });

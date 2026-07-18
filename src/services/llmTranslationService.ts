@@ -219,42 +219,65 @@ export function mergeTranslationResults(
 }
 
 /**
- * 与流式 UI 同口径解析模型输出：
- * 1) jsonrepair + JSON.parse（完整/近完整）
- * 2) extractStreamingDirects（半截 JSON / 缺闭合）
+ * 与流式 UI 同口径解析模型输出（三阶段，后两阶段按需）：
+ * 1) 严格 `JSON.parse`（完整合法 JSON → 可走快路径）
+ * 2) `jsonrepair` + `JSON.parse`（近完整 / 可修复）
+ * 3) `extractStreamingDirects`（半截 JSON / 缺闭合 / 非常规结构）
+ *
+ * 快路径：步骤 1 成功且所有数值键的 `direct` 均非空时，跳过步骤 3 的全文本扫描。
+ * 经 jsonrepair 得到的对象仍会跑步骤 3（修补可能吞掉半截字段）。
  */
 export function parseTranslationContent(
   content: string
 ): Record<string, { direct: string }> {
   const out: Record<string, { direct: string }> = {};
+  // 流式抽取是否还可能补出新条目
+  let streamingCanAddMore = true;
 
   if (content?.trim()) {
+    let parsed: unknown;
+    let isCompleteJson = false;
     try {
-      const repaired = jsonrepair(content);
-      const parsed: unknown = JSON.parse(repaired);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        for (const [key, value] of Object.entries(
-          parsed as Record<string, unknown>
-        )) {
-          if (!/^\d+$/.test(key)) continue;
-          if (value && typeof value === 'object' && value !== null && 'direct' in value) {
-            const d = (value as { direct: unknown }).direct;
-            out[key] = { direct: typeof d === 'string' ? d : d == null ? '' : String(d) };
-          } else if (typeof value === 'string') {
-            out[key] = { direct: value };
-          }
+      parsed = JSON.parse(content);
+      isCompleteJson = true;
+    } catch {
+      try {
+        const repaired = jsonrepair(content);
+        parsed = JSON.parse(repaired);
+      } catch {
+        parsed = undefined;
+      }
+    }
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      let allFilled = true;
+      for (const [key, value] of Object.entries(
+        parsed as Record<string, unknown>
+      )) {
+        if (!/^\d+$/.test(key)) continue;
+        if (value && typeof value === 'object' && value !== null && 'direct' in value) {
+          const d = (value as { direct: unknown }).direct;
+          const direct = typeof d === 'string' ? d : d == null ? '' : String(d);
+          out[key] = { direct };
+          if (!direct.trim()) allFilled = false;
+        } else if (typeof value === 'string') {
+          out[key] = { direct: value };
+          if (!value.trim()) allFilled = false;
+        } else {
+          // 非常规结构（嵌套/数组等）：流式抽取仍可能补出译文
+          allFilled = false;
         }
       }
-    } catch {
-      // fall through to streaming extractor
+      streamingCanAddMore = !(isCompleteJson && allFilled);
     }
   }
 
   // 流式抽取可补全 parse 失败或残缺对象
-  const directs = extractStreamingDirects(content || '');
-  for (const [key, text] of Object.entries(directs)) {
-    if (!out[key]?.direct?.trim() && text.trim()) {
-      out[key] = { direct: text };
+  if (streamingCanAddMore) {
+    const directs = extractStreamingDirects(content || '');
+    for (const [key, text] of Object.entries(directs)) {
+      if (!out[key]?.direct?.trim() && text.trim()) {
+        out[key] = { direct: text };
+      }
     }
   }
 

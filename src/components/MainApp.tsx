@@ -15,10 +15,13 @@ import { SubtitleFileList } from './SubtitleFileList';
 import { SubtitleEditor } from './SubtitleEditor';
 import {
   LazyHistoryModal,
+  LazyMobileShell,
   LazySettingsModal,
   LazySurface,
   LazyTermsManager,
+  SurfaceFallback,
 } from './lazySurfaces';
+import { prefetchMobileShell } from './lazyPrefetch';
 import { StatusBar } from './StatusBar';
 import { EmptyWorkspaceHero } from '@/components/EmptyWorkspaceHero';
 import { useFileCount, useFilesStore } from '@/stores/filesStore';
@@ -34,7 +37,6 @@ import { useFileImport } from '@/hooks/useFileImport';
 import { useActiveJobBeforeUnload } from '@/hooks/useActiveJobGuard';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-import { MobileShell } from '@/components/mobile/MobileShell';
 import { importSampleSubtitle } from '@/utils/importSampleSubtitle';
 import { SubtitleFileMetadata } from '@/types';
 
@@ -71,6 +73,12 @@ export const MainApp: React.FC = () => {
   const setSoundEnabled = useSoundStore((s) => s.setSoundEnabled);
   const isMobile = useIsMobile();
   const { handleError } = useErrorHandler();
+
+  // 一判为移动端立刻预取壳 chunk，Suspense 几乎不展示「加载中」
+  useEffect(() => {
+    if (!isMobile) return;
+    void prefetchMobileShell();
+  }, [isMobile]);
 
   /** 开关音效；打开时播一声确认，方便立刻验证听得到 */
   const handleToggleSound = useCallback(() => {
@@ -182,7 +190,10 @@ export const MainApp: React.FC = () => {
     return (
       <>
         {/* beforeunload 已在上方 hook 注册（mobile 与 desktop 共用 MainApp 挂载） */}
-        <MobileShell openFilePicker={openFilePicker} fileInput={fileInput} />
+        {/* 桌面冷启动不拉 MobileShell 依赖图 */}
+        <LazySurface fallback={<SurfaceFallback label="加载中…" />}>
+          <LazyMobileShell openFilePicker={openFilePicker} fileInput={fileInput} />
+        </LazySurface>
       </>
     );
   }
