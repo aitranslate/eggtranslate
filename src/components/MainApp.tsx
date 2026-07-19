@@ -225,7 +225,7 @@ export const MainApp: React.FC = () => {
             draggable={false}
           />
           <span className="wb-brand-title">蛋蛋字幕翻译</span>
-          <span className="wb-brand-ver">v2.0</span>
+          <span className="wb-brand-ver">v2.1</span>
         </div>
 
         {/* 主导航：标题栏正中分段控件（工作区 / 术语 / 历史） */}
