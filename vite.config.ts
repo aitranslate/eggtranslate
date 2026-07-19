@@ -35,8 +35,11 @@ export default defineConfig(({ command }) => ({
         ],
       },
       workbox: {
-        // 在线 App，不预缓存任何资源
+        // 在线 App：不预缓存静态资源
         globPatterns: [],
+        // 必须关闭：createHandlerBoundToURL('index.html') 要求 index 在 precache 里，
+        // globPatterns 为空时会抛 non-precached-url，整页 SW 初始化失败
+        navigateFallback: null,
       },
       devOptions: {
         // dev 模式下不启用 SW；手动 QA 用 pnpm preview 跑生产构建
@@ -84,10 +87,9 @@ export default defineConfig(({ command }) => ({
       output: {
         manualChunks: (id) => {
           if (id.includes('node_modules')) {
-            // 仅动态 import 的重库：不要并进常驻 vendor，否则 import() 无效、
-            // 首屏 modulepreload 仍会拉整包（ASR / ZIP / 断句 / lamejs）。
-            // 返回 undefined 交给 Rollup 自动拆成 async chunk。
             const norm = id.replace(/\\/g, '/');
+            // 仅动态 import 的重库：返回 undefined，由 Rollup 打成 async chunk，
+            // 避免并进常驻 vendor + modulepreload 首屏拉取。
             if (
               norm.includes('assemblyai') ||
               norm.includes('/jszip/') ||
@@ -98,15 +100,12 @@ export default defineConfig(({ command }) => ({
             ) {
               return undefined;
             }
+            // 大块 UI 库单独拆，减少主 vendor 解析量
             if (norm.includes('framer-motion')) return 'vendor-framer-motion';
             if (norm.includes('lucide-react')) return 'vendor-lucide';
-            // 避免把 react-hot-toast 等「含 react 子串」的包误并入 react 核
-            if (
-              /\/(react|react-dom)(\/|$)/.test(norm) ||
-              norm.includes('/scheduler/')
-            ) {
-              return 'vendor-react';
-            }
+            // React 与依赖它的运行时（zustand/hot-toast/…）必须同 chunk。
+            // 单独拆 vendor-react 会与 vendor 形成循环依赖（interop 助手 / zustand/react），
+            // 运行时 React 为 undefined → reading 'memo' 白屏。
             return 'vendor';
           }
         },
