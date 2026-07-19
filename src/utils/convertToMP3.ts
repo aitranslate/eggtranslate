@@ -12,6 +12,23 @@ interface AudioContextWindow {
   webkitAudioContext: AudioContextCtor;
 }
 
+/**
+ * 预热 Worker 模块图（dev 下让 Vite 尽早加载 lamejs，避免首次上传时 full reload）。
+ * 安全失败：忽略错误，不影响正式转码。
+ */
+export function warmupMp3Encoder(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const w = new Worker(new URL('./mp3Worker.ts', import.meta.url), {
+      type: 'module',
+    });
+    // 立即终止：只需触发模块解析/缓存，不真正编码
+    w.terminate();
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function convertToMP3(
   file: File,
   onProgress?: (progress: number) => void

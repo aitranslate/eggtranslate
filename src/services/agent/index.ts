@@ -15,6 +15,7 @@ export { runAgentLoop } from './loop';
 export {
   applyAgentEventToStatus,
   agentSnapshotToStatus,
+  statusToAgentSnapshot,
   createIdleAgentRunStatus,
   formatAgentCompactBadge,
   formatAgentCompactSummary,

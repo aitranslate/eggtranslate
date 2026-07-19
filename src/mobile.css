@@ -667,47 +667,89 @@
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
 }
 
+/* 热词：标签靠左 + 下拉占剩余，不整行居中大胶囊 */
 .m-detail-keyterm {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
   font-size: 13px;
   color: var(--wb-text-2);
 }
 
+.m-detail-keyterm > span {
+  flex: 0 0 auto;
+  font-weight: 550;
+  color: var(--wb-text-2);
+}
+
 .m-detail-keyterm select {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: min(100%, 280px);
   min-height: 40px;
   border-radius: 10px;
   border: 1px solid var(--wb-border);
-  background: var(--wb-panel-2);
+  background: var(--wb-panel);
   color: var(--wb-text);
   font-family: inherit;
   font-size: 14px;
   padding: 0 10px;
+  outline: none;
+  text-align: left;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
+.m-detail-keyterm select:hover {
+  border-color: var(--wb-border-strong);
+}
+
+.m-detail-keyterm select:focus {
+  border-color: var(--wb-brand);
+  box-shadow: 0 0 0 3px var(--wb-brand-soft);
+  background: var(--wb-panel);
+}
+
+/* 操作行：禁止换行；导出固定宽，其余均分 */
 .m-detail-actions {
   display: flex;
+  flex-wrap: nowrap;
   align-items: stretch;
   gap: 8px;
+  min-width: 0;
+  width: 100%;
 }
 
 .m-detail-actions .m-btn {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 48px;
-  font-size: 14.5px;
+  font-size: 14px;
+  padding-left: 8px;
+  padding-right: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.m-detail-actions .m-btn-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .m-export-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 48px;
   width: 48px;
-  flex-shrink: 0;
+  min-width: 48px;
   border-radius: 12px;
   border: 1px solid var(--wb-border);
-  background: var(--wb-panel-2);
+  background: var(--wb-panel);
 }
 
 .m-export-wrap button {

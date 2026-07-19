@@ -4,7 +4,7 @@
 
 import type { Term, TranslationConfig } from '@/types';
 import { getActiveLlmConfig } from '@/utils/llmProfiles';
-import { runAgentLoop } from '../loop';
+import { runAgentLoop, type AgentLoopToolHook } from '../loop';
 import { BRIEFING_TOOL_SCHEMAS } from '../tools/registry';
 import type { AgentToolContext, TranscriptEntry } from '../toolTypes';
 import type { GlossaryEntry } from '../types';
@@ -37,11 +37,11 @@ USER TERMS (optional candidates; include only if relevant; may be noisy — not 
 ${userTermsBlock}
 
 Glossary rules (critical for enforcement):
-- source must appear in THIS transcript (exact phrase as written). You judge meaning: if a user term's concept appears under another surface (full form, abbreviation, ASR variant), add that surface → user target.
-- Same concept, multiple surfaces → one row per surface, same target. No invented sources.
+- source must appear in THIS transcript (exact phrase as written). You judge meaning: if a user term's concept appears under another surface (full form, abbreviation, ASR variant), add that surface → user target. Do not invent links the transcript cannot support.
+- Same concept, multiple surfaces → one row per surface, same target. No invented sources; no "A (B)" unless that exact string appears.
 - Prefer names, proper nouns, abbreviations, recurring technical phrases.
 - target: consistent rendering in ${targetLang} (or keep source form when conventional); user target wins when you include a user concept.
-- note: optional, short.
+- note: optional, short. When a concept has multiple surfaces, put a brief note on the primary/full-form row listing the variants you identified — translators use this for context.
 
 Style guide rules:
 - ONE plain string, 2–4 sentences, written to guide a ${targetLang} translator.
@@ -72,8 +72,9 @@ export async function runTerminologyToolAgent(options: {
   title: string;
   signal: AbortSignal;
   maxRounds?: number;
+  onTool?: AgentLoopToolHook;
 }): Promise<{ glossary: GlossaryEntry[]; styleGuide: string; tokensUsed: number }> {
-  const { entries, config, userTerms, title, signal, maxRounds = 30 } = options;
+  const { entries, config, userTerms, title, signal, maxRounds = 30, onTool } = options;
   const llm = getActiveLlmConfig(config);
   const ctx: AgentToolContext = {
     transcriptEntries: entries,
@@ -102,6 +103,7 @@ export async function runTerminologyToolAgent(options: {
     temperature: 0.3,
     submitToolName: 'submit_result',
     submitInstruction: 'with glossary + style_guide',
+    onTool,
   });
 
   let glossary: GlossaryEntry[] = [];

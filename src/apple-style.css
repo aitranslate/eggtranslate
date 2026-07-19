@@ -218,7 +218,7 @@
   font-size: 15px;
 }
 
-/* ===== 输入框系统 ===== */
+/* ===== 输入框系统（方案 A：白底 + 细边，focus 不换底） ===== */
 .apple-input {
   display: block;
   width: 100%;
@@ -229,14 +229,13 @@
   font-weight: 400;
   line-height: 1.3;
   color: var(--apple-text-primary);
-  background-color: var(--apple-bg-secondary);
+  background-color: var(--apple-bg-primary);
   border: 1px solid var(--apple-border-lighter);
   border-radius: var(--apple-radius-control);
   outline: none;
   transition:
     border-color var(--apple-duration-base) var(--apple-ease-out),
-    box-shadow var(--apple-duration-base) var(--apple-ease-out),
-    background-color var(--apple-duration-base) var(--apple-ease-out);
+    box-shadow var(--apple-duration-base) var(--apple-ease-out);
 }
 
 .apple-input::placeholder {

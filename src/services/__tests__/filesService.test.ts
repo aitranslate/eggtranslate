@@ -22,6 +22,10 @@ vi.mock('@/stores/translationConfigStore', () => ({
       isTranslating: false,
       currentTaskId: '',
       stopTranslation: vi.fn(),
+      config: {
+        sourceLanguage: 'English',
+        targetLanguage: '简体中文',
+      },
     }),
   },
 }));
@@ -65,6 +69,13 @@ describe('filesService', () => {
     expect(id).toBe('file-1');
     expect(useFilesStore.getState().tasks).toHaveLength(1);
     expect(useFilesStore.getState().tasks[0].taskId).toBe('t1');
+    expect(loadFromFile).toHaveBeenCalledWith(
+      fakeFile,
+      expect.objectContaining({
+        defaultSourceLanguage: 'English',
+        defaultTargetLanguage: '简体中文',
+      })
+    );
   });
 
   it('removeFile cleans MP3 data and removes task', async () => {

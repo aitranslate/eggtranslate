@@ -25,6 +25,29 @@ export type AgentWindowSpec = {
   contextAfterIndices: number[];
 };
 
+/** 过程面板「工具」时间线条目 */
+export type AgentToolLogEntry = {
+  id: string;
+  name: string;
+  argsSummary: string;
+  ok: boolean;
+  detail?: string;
+  durationMs?: number;
+  at: number;
+  stage?: AgentStage;
+};
+
+/** 过程面板「分窗」列表 */
+export type AgentWindowUi = {
+  windowIndex: number;
+  entryCount: number;
+  status: 'pending' | 'running' | 'done' | 'error';
+  tokensUsed: number;
+  qaCritical?: number;
+  qaTotal?: number;
+  qaNote?: string;
+};
+
 export type AgentEvent =
   | { type: 'pipeline_start'; totalEntries: number; totalWindows: number }
   | { type: 'stage'; stage: AgentStage; detail?: string }
@@ -51,6 +74,31 @@ export type AgentEvent =
       totalEntries: number;
       tokensDelta?: number;
       statusText?: string;
+    }
+  | {
+      type: 'tool_start';
+      name: string;
+      argsSummary: string;
+      /** 与 tool_end 关联；并发同名工具时必需 */
+      callId: string;
+      stage?: AgentStage;
+    }
+  | {
+      type: 'tool_end';
+      name: string;
+      argsSummary: string;
+      callId: string;
+      ok: boolean;
+      detail?: string;
+      durationMs?: number;
+      stage?: AgentStage;
+    }
+  | {
+      type: 'qa_result';
+      windowIndex: number;
+      critical: number;
+      total: number;
+      summary?: string;
     }
   | { type: 'checkpoint'; boundary: 'B1' | 'B2' | 'B3' }
   | { type: 'pipeline_end' }

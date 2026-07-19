@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { dispatchTool } from '../tools/registry';
+import { coerceToolInt, parseToolArgs } from '../toolTypes';
 import type { AgentToolContext } from '../toolTypes';
 
 function baseCtx(over: Partial<AgentToolContext> = {}): AgentToolContext {
@@ -11,6 +12,19 @@ function baseCtx(over: Partial<AgentToolContext> = {}): AgentToolContext {
     ...over,
   };
 }
+
+describe('parseToolArgs (lenient)', () => {
+  it('repairs trailing commas and markdown fences', () => {
+    expect(parseToolArgs('{"pattern":"x",}')).toEqual({ pattern: 'x' });
+    expect(parseToolArgs('```json\n{"a":1}\n```')).toEqual({ a: 1 });
+  });
+
+  it('coerceToolInt accepts numeric strings', () => {
+    expect(coerceToolInt('12')).toBe(12);
+    expect(coerceToolInt(3.0)).toBe(3);
+    expect(coerceToolInt(true)).toBeNull();
+  });
+});
 
 describe('agent tools', () => {
   it('search_transcript finds hits', async () => {

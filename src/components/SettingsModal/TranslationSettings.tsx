@@ -24,8 +24,9 @@ interface TranslationSettingsProps {
   compactParams?: boolean;
 }
 
+/** 方案 A：白底细边，focus 不换底 */
 const inputClass =
-  'w-full p-2.5 bg-[var(--wb-panel-2,#f5f5f7)] border border-transparent rounded-[10px] text-[var(--apple-text-primary,#1d1d1f)] text-sm focus:outline-none focus:border-[var(--apple-blue)] focus:ring-2 focus:ring-[var(--apple-blue-soft)] focus:bg-[var(--wb-panel,#fff)] transition-all';
+  'w-full p-2.5 bg-[var(--wb-panel,#fff)] border border-[var(--wb-border,#e3e5ea)] rounded-[10px] text-[var(--apple-text-primary,#1d1d1f)] text-sm hover:border-[var(--wb-border-strong,#d2d5db)] focus:outline-none focus:border-[var(--apple-blue)] focus:ring-2 focus:ring-[var(--apple-blue-soft)] focus:bg-[var(--wb-panel,#fff)] transition-[border-color,box-shadow]';
 
 export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
   config,
@@ -254,7 +255,7 @@ function ParamsFields({
 
       {/* Agent 翻译：增量能力；关闭时完全走现有批译 */}
       <div
-        className={`${compact ? 'mt-2' : 'mt-3'} rounded-lg border border-[var(--wb-border)] bg-[var(--wb-panel-2)] p-3`}
+        className={`${compact ? 'mt-2' : 'mt-3'} rounded-lg border border-[var(--wb-border)] bg-[var(--wb-panel)] p-3`}
       >
         <label className="flex items-start gap-2.5 cursor-pointer">
           <input

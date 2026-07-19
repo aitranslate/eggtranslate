@@ -4,7 +4,7 @@
 
 import type { TranslationConfig } from '@/types';
 import { getActiveLlmConfig } from '@/utils/llmProfiles';
-import { runAgentLoop } from '../loop';
+import { runAgentLoop, type AgentLoopToolHook } from '../loop';
 import { QA_TOOL_SCHEMAS } from '../tools/registry';
 import type { AgentToolContext, TranscriptEntry } from '../toolTypes';
 import type { GlossaryEntry } from '../types';
@@ -65,6 +65,7 @@ export async function runWindowQaAgent(options: {
   config: TranslationConfig;
   signal: AbortSignal;
   maxRounds?: number;
+  onTool?: AgentLoopToolHook;
 }): Promise<{ issues: QaIssue[]; tokensUsed: number }> {
   const {
     segments,
@@ -74,6 +75,7 @@ export async function runWindowQaAgent(options: {
     config,
     signal,
     maxRounds = 16,
+    onTool,
   } = options;
 
   const ctx: AgentToolContext = {
@@ -107,6 +109,7 @@ Review ONLY these segments. Call submit_qa_report.
     temperature: 0.2,
     submitToolName: 'submit_qa_report',
     submitInstruction: 'with issues list (or empty if clean)',
+    onTool,
   });
 
   const fr = loop.finalResult as { issues?: QaIssue[] } | undefined;

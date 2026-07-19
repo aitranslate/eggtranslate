@@ -112,6 +112,11 @@ interface FilesState {
   ) => void;
   setWorkflow: (fileId: string, workflow: WorkflowType) => void;
   setSelectedKeytermGroupId: (fileId: string, groupId: string | null) => void;
+  /** 任务级源/目标语言（编辑器修改；不影响全局设置） */
+  setTaskLanguages: (
+    fileId: string,
+    languages: { sourceLanguage: string; targetLanguage: string }
+  ) => void;
   /** 记录最近翻译路径 / Agent 终态（持久化，与设置开关无关） */
   setTranslationPathMeta: (
     fileId: string,
@@ -401,6 +406,22 @@ export const useFilesStore = create<FilesState>()(
             t.taskId === file.taskId ? { ...t, selectedKeytermGroupId: groupId } : t
           ),
         }));
+      },
+
+      setTaskLanguages: (fileId, languages) => {
+        const file = get().getFile(fileId);
+        if (!file) return;
+        const sourceLanguage = languages.sourceLanguage.trim();
+        const targetLanguage = languages.targetLanguage.trim();
+        if (!sourceLanguage || !targetLanguage) return;
+        set((state) => ({
+          tasks: state.tasks.map((t) =>
+            t.taskId === file.taskId
+              ? { ...t, sourceLanguage, targetLanguage }
+              : t
+          ),
+        }));
+        void flushFilesStorePersist();
       },
 
       setTranslationPathMeta: (fileId, meta) => {

@@ -9,7 +9,7 @@ interface LanguageSelectorProps {
 }
 
 /** 历史脏数据：en / zh-cn 等 → LANGUAGE_OPTIONS.value */
-function normalizeLangValue(raw: string): string {
+export function normalizeLangValue(raw: string): string {
   if (!raw) return raw;
   if (LANGUAGE_OPTIONS.some((l) => l.value === raw)) return raw;
   const key = raw.trim().toLowerCase();
@@ -50,12 +50,13 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
         value={selectValue}
         onChange={(e) => onChange(e.target.value)}
         className="w-full h-10 px-3 rounded-[8px] text-[14px] font-medium
-          bg-[var(--wb-panel-2,#f5f5f7)] text-[var(--wb-text,#1d1d1f)]
-          border border-transparent
+          bg-[var(--wb-panel,#fff)] text-[var(--wb-text,#1d1d1f)]
+          border border-[var(--wb-border,#e3e5ea)]
+          hover:border-[var(--wb-border-strong,#d2d5db)]
           focus:outline-none focus:border-[var(--wb-brand,#0071e3)]
           focus:ring-2 focus:ring-[var(--wb-brand-soft,rgba(0,113,227,0.12))]
           focus:bg-[var(--wb-panel,#fff)]
-          transition-all"
+          transition-[border-color,box-shadow]"
       >
         {LANGUAGE_OPTIONS.map((lang) => (
           <option key={lang.value} value={lang.value}>

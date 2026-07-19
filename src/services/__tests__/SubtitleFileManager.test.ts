@@ -30,6 +30,8 @@ interface MakeTaskOptions {
   phases?: FilePhases;
   index?: number;
   selectedKeytermGroupId?: string | null;
+  sourceLanguage?: string;
+  targetLanguage?: string;
   entryCount?: number;
   translatedCount?: number;
   fileType?: SingleTask['fileType'];
@@ -110,6 +112,23 @@ describe('convertTaskToMetadata', () => {
       const task = makeTask({ duration: 3600 });
       const result = convertTaskToMetadata(task);
       expect(result.duration).toBe(3600);
+    });
+
+    it('任务级 sourceLanguage / targetLanguage 透传', () => {
+      const task = makeTask({
+        sourceLanguage: 'Japanese',
+        targetLanguage: 'Korean',
+      });
+      const result = convertTaskToMetadata(task);
+      expect(result.sourceLanguage).toBe('Japanese');
+      expect(result.targetLanguage).toBe('Korean');
+    });
+
+    it('旧任务无语言字段时 metadata 也为 undefined', () => {
+      const task = makeTask();
+      const result = convertTaskToMetadata(task);
+      expect(result.sourceLanguage).toBeUndefined();
+      expect(result.targetLanguage).toBeUndefined();
     });
   });
 

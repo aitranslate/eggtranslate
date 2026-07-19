@@ -18,24 +18,36 @@ import { playAppSound } from '@/utils/appSound';
 import localforage from 'localforage';
 import toast from 'react-hot-toast';
 
+function defaultTaskLanguages() {
+  const { sourceLanguage, targetLanguage } = useTranslationConfigStore.getState().config;
+  return { sourceLanguage, targetLanguage };
+}
+
 export async function addFile(file: File): Promise<string | null> {
   // Store 已在 main bootstrap 中 rehydrate 完成；此处不再做 per-call hydrate 等待
   const { defaultKeytermGroupId } = useTranscriptionStore.getState();
+  const langs = defaultTaskLanguages();
 
   // 音视频文件：转码 + 持久化 + 上传完成才加入 store（用 toast 持续提示）
   if (file.type.startsWith('audio/') || file.type.startsWith('video/') || /\.(mp3|m4a|wav|mp4|mov|webm|mkv)$/i.test(file.name)) {
-    return addMediaFile(file, defaultKeytermGroupId);
+    return addMediaFile(file, defaultKeytermGroupId, langs);
   }
 
   // SRT 字幕：直接加载，无转码
-  return addSubtitleFile(file, defaultKeytermGroupId);
+  return addSubtitleFile(file, defaultKeytermGroupId, langs);
 }
 
-async function addSubtitleFile(file: File, defaultKeytermGroupId: string | null): Promise<string> {
+async function addSubtitleFile(
+  file: File,
+  defaultKeytermGroupId: string | null,
+  langs: { sourceLanguage: string; targetLanguage: string }
+): Promise<string> {
   try {
     const result = await loadFromFile(file, {
       existingFilesCount: useFilesStore.getState().tasks.length,
       defaultKeytermGroupId,
+      defaultSourceLanguage: langs.sourceLanguage,
+      defaultTargetLanguage: langs.targetLanguage,
     });
     useFilesStore.getState().addTask(result.task);
     toast.success(`已添加：${file.name}`);
@@ -48,7 +60,11 @@ async function addSubtitleFile(file: File, defaultKeytermGroupId: string | null)
   }
 }
 
-async function addMediaFile(file: File, defaultKeytermGroupId: string | null): Promise<string | null> {
+async function addMediaFile(
+  file: File,
+  defaultKeytermGroupId: string | null,
+  langs: { sourceLanguage: string; targetLanguage: string }
+): Promise<string | null> {
   // 上传中 toast（持续显示，转码完成或失败才更新）
   const toastId = toast.loading(`正在上传 ${file.name}…`, { duration: Infinity });
 
@@ -57,6 +73,8 @@ async function addMediaFile(file: File, defaultKeytermGroupId: string | null): P
     const result = await loadFromFile(file, {
       existingFilesCount: useFilesStore.getState().tasks.length,
       defaultKeytermGroupId,
+      defaultSourceLanguage: langs.sourceLanguage,
+      defaultTargetLanguage: langs.targetLanguage,
     });
 
     // 2) 转码为 MP3 并持久化

@@ -64,7 +64,7 @@ export const ProviderPresetPicker: React.FC<ProviderPresetPickerProps> = ({
                 ${
                   isSelected
                     ? 'border-[var(--apple-blue)] bg-[var(--apple-blue-soft)] shadow-sm shadow-blue-500/10 ring-1 ring-[var(--apple-blue-soft-strong)]'
-                    : 'border-transparent bg-[var(--wb-panel-2,#f5f5f7)] hover:border-[var(--wb-border,#e5e5ea)] hover:bg-[var(--wb-panel,#fff)]'
+                    : 'border-[var(--wb-border,#e3e5ea)] bg-[var(--wb-panel,#fff)] hover:border-[var(--wb-border-strong,#d2d5db)]'
                 }
               `}
             >

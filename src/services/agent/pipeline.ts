@@ -25,8 +25,14 @@ import {
   saveAgentJob,
 } from './checkpointStore';
 import { runTerminologyAgent } from './terminology';
-import type { AgentEventHandler, GlossaryEntry, RunAgentTranslationInput } from './types';
+import type {
+  AgentEventHandler,
+  AgentStage,
+  GlossaryEntry,
+  RunAgentTranslationInput,
+} from './types';
 import type { TranscriptEntry } from './toolTypes';
+import type { AgentLoopToolHook } from './loop';
 import { splitAgentWindows } from './windows';
 
 function abortError(message = '翻译已取消'): Error {
@@ -41,6 +47,35 @@ function assertNotAborted(signal: AbortSignal) {
 
 async function emit(handler: AgentEventHandler, event: Parameters<AgentEventHandler>[0]) {
   await handler(event);
+}
+
+/** 将 loop 工具钩子映射为 AgentEvent（过程面板「工具」Tab） */
+function makeToolBridge(
+  onEvent: AgentEventHandler,
+  stage: AgentStage
+): AgentLoopToolHook {
+  return async (e) => {
+    if (e.phase === 'start') {
+      await emit(onEvent, {
+        type: 'tool_start',
+        name: e.name,
+        argsSummary: e.argsSummary,
+        callId: e.callId,
+        stage,
+      });
+      return;
+    }
+    await emit(onEvent, {
+      type: 'tool_end',
+      name: e.name,
+      argsSummary: e.argsSummary,
+      callId: e.callId,
+      ok: e.ok !== false,
+      detail: e.detail,
+      durationMs: e.durationMs,
+      stage,
+    });
+  };
 }
 
 async function mapPool<T, R>(
@@ -245,6 +280,7 @@ async function executeAgentTranslation(
         title: filename,
         signal,
         maxRounds: 30,
+        onTool: makeToolBridge(onEvent, 'terminology'),
       });
       glossary = term.glossary;
       styleGuide = term.styleGuide;
@@ -370,6 +406,7 @@ async function executeAgentTranslation(
         signal,
         qaFeedback,
         maxRounds: 24,
+        onTool: makeToolBridge(onEvent, 'translate'),
       });
       winTokens += tr.tokensUsed;
       translations = tr.translations;
@@ -442,8 +479,22 @@ async function executeAgentTranslation(
         config,
         signal,
         maxRounds: 16,
+        onTool: makeToolBridge(onEvent, 'qa'),
       });
       winTokens += qa.tokensUsed;
+      const critical = qa.issues.filter(
+        (i) => String(i.severity || '').toLowerCase() === 'critical'
+      ).length;
+      await emit(onEvent, {
+        type: 'qa_result',
+        windowIndex: win.windowIndex,
+        critical,
+        total: qa.issues.length,
+        summary:
+          critical > 0
+            ? `窗 ${win.windowIndex + 1}：${critical} 条 critical，将重译`
+            : `窗 ${win.windowIndex + 1} QA 通过`,
+      });
       if (!hasCriticalIssues(qa.issues)) {
         if (qa.tokensUsed > 0) {
           await emit(onEvent, {
@@ -475,6 +526,7 @@ async function executeAgentTranslation(
         signal,
         qaFeedback: feedback,
         maxRounds: 24,
+        onTool: makeToolBridge(onEvent, 'translate'),
       });
       winTokens += tr.tokensUsed;
       translations = tr.translations;

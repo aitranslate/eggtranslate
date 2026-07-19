@@ -17,6 +17,7 @@ import { useStreamingOverlayStore } from '@/stores/streamingOverlayStore';
 import { executeTranslation } from './TranslationOrchestrator';
 import { translateBatch as llmTranslateBatch } from './llmTranslationService';
 import type { AgentEvent } from './agent/types';
+import { statusToAgentSnapshot } from './agent/agentRunStatus';
 import { useAgentRunStore } from '@/stores/agentRunStore';
 import { isAbortError, toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
@@ -32,6 +33,7 @@ import type {
   TranslationConfig,
   TranslationStatus,
 } from '@/types';
+import { withTaskLanguages } from '@/utils/taskLanguages';
 import toast from 'react-hot-toast';
 
 /** 可注入依赖：单测时 mock，默认走全局 store */
@@ -120,7 +122,8 @@ export async function startTranslation(
     return null;
   }
 
-  const config = deps.getConfig();
+  // 任务级源/目标语言优先；旧任务无字段时回退全局设置
+  const config = withTaskLanguages(deps.getConfig(), file);
   if (!deps.isConfigured()) {
     deps.notifyError('请先配置翻译 API');
     return null;
@@ -319,42 +322,23 @@ function deactivateAgentRunIfNeeded(fileId: string) {
   });
 }
 
-/** 失败快照兜底：pipeline 已 emit 时 store 已有 error 终态，再落盘一次幂等 */
+/**
+ * 失败快照兜底：统一走 statusToAgentSnapshot，保留术语/工具/分窗等富字段。
+ * pipeline 已 emit pipeline_error 时幂等重写；未 emit 时先合成终态再落盘。
+ */
 function ensureAgentFailureSnapshot(fileId: string, taskId: string, error: string) {
-  const st = useAgentRunStore.getState().byFileId[fileId];
-  // 已由 pipeline_error 写入且 inactive
-  if (st && !st.active && st.error) {
-    useFilesStore.getState().setTranslationPathMeta(fileId, {
-      translationPath: 'agent',
-      agentSnapshot: {
-        glossaryCount: st.glossaryCount ?? 0,
-        styleGuidePreview: st.styleGuidePreview || undefined,
-        lastActionLine: st.actionLine || `失败：${st.error}`,
-        completedAt: Date.now(),
-        error: st.error,
-        totalEntries: st.totalEntries,
-        totalWindows: st.totalWindows,
-      },
+  let st = useAgentRunStore.getState().byFileId[fileId];
+  if (!st || st.active || !st.error) {
+    useAgentRunStore.getState().applyEvent(fileId, taskId, {
+      type: 'pipeline_error',
+      error,
     });
-    return;
+    st = useAgentRunStore.getState().byFileId[fileId];
   }
-  // store 仍 active 或无 error：合成终态事件
-  useAgentRunStore.getState().applyEvent(fileId, taskId, {
-    type: 'pipeline_error',
-    error,
-  });
-  const after = useAgentRunStore.getState().byFileId[fileId];
+  if (!st) return;
   useFilesStore.getState().setTranslationPathMeta(fileId, {
     translationPath: 'agent',
-    agentSnapshot: {
-      glossaryCount: after?.glossaryCount ?? 0,
-      styleGuidePreview: after?.styleGuidePreview || undefined,
-      lastActionLine: after?.actionLine || `失败：${error}`,
-      completedAt: Date.now(),
-      error,
-      totalEntries: after?.totalEntries,
-      totalWindows: after?.totalWindows,
-    },
+    agentSnapshot: statusToAgentSnapshot(st, 'error', st.error || error),
   });
 }
 
@@ -375,24 +359,13 @@ async function runAgentTranslationPath(opts: {
   // window_done 事件按 entryId 回查原文，预建索引避免每窗口 O(window × n) 线性查找
   const entriesById = new Map(entries.map((e) => [e.id, e]));
 
-  /** 终态快照：success 显式 error=null，不会被旧 st.error 污染 */
+  /** 终态快照：含完整术语/工具/分窗，过程面板刷新后可复看 */
   const persistAgentSnapshot = (outcome: 'success' | 'error', errorMessage?: string) => {
     const st = useAgentRunStore.getState().byFileId[fileId];
-    const error =
-      outcome === 'success' ? null : (errorMessage ?? st?.error ?? '未知错误');
+    if (!st) return;
     useFilesStore.getState().setTranslationPathMeta(fileId, {
       translationPath: 'agent',
-      agentSnapshot: {
-        glossaryCount: st?.glossaryCount ?? 0,
-        styleGuidePreview: st?.styleGuidePreview || undefined,
-        lastActionLine:
-          st?.actionLine ||
-          (error ? `失败：${error}` : 'Agent 流程完成'),
-        completedAt: Date.now(),
-        error,
-        totalEntries: st?.totalEntries,
-        totalWindows: st?.totalWindows,
-      },
+      agentSnapshot: statusToAgentSnapshot(st, outcome, errorMessage),
     });
   };
 

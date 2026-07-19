@@ -12,6 +12,10 @@ import { generateTaskId, generateStableFileId } from '@/utils/taskIdGenerator';
 export interface LoadFileOptions {
   existingFilesCount: number;
   defaultKeytermGroupId?: string | null;
+  /** 创建任务时写入的默认源语言（来自全局设置） */
+  defaultSourceLanguage?: string;
+  /** 创建任务时写入的默认目标语言（来自全局设置） */
+  defaultTargetLanguage?: string;
 }
 
 export interface LoadFileResult {
@@ -72,6 +76,8 @@ export async function loadFromFile(
   const taskId = generateTaskId();
   const fileId = generateStableFileId(taskId);
   const selectedKeytermGroupId = options.defaultKeytermGroupId ?? null;
+  const sourceLanguage = options.defaultSourceLanguage;
+  const targetLanguage = options.defaultTargetLanguage;
 
   // 音视频文件立即获取 duration（不需要转码）
   const duration = fileType !== 'srt' ? await getMediaDuration(file) : undefined;
@@ -89,6 +95,8 @@ export async function loadFromFile(
       fileType: 'srt',
       fileSize: file.size,
       selectedKeytermGroupId,
+      sourceLanguage,
+      targetLanguage,
       entryCount: entries.length,
       translatedCount: entries.filter(e => e.translatedText).length,
     };
@@ -107,6 +115,8 @@ export async function loadFromFile(
         tokensUsed: 0,
         entriesVersion: 0,
         selectedKeytermGroupId,
+        sourceLanguage,
+        targetLanguage,
       },
       task: newTask
     };
@@ -121,6 +131,8 @@ export async function loadFromFile(
       fileSize: file.size,
       duration,
       selectedKeytermGroupId,
+      sourceLanguage,
+      targetLanguage,
       entryCount: 0,
       translatedCount: 0,
     };
@@ -140,6 +152,8 @@ export async function loadFromFile(
         tokensUsed: 0,
         entriesVersion: 0,
         selectedKeytermGroupId,
+        sourceLanguage,
+        targetLanguage,
         fileRef: file
       },
       task: newTask
@@ -182,6 +196,8 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
     tokensUsed: (task.phases?.translating?.tokens || 0),
     entriesVersion: 0,
     selectedKeytermGroupId: task.selectedKeytermGroupId ?? null,
+    sourceLanguage: task.sourceLanguage,
+    targetLanguage: task.targetLanguage,
     translationPath: task.translationPath,
     agentSnapshot: task.agentSnapshot ?? null,
     fileRef: task.fileRef

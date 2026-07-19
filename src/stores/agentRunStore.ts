@@ -21,7 +21,10 @@ interface AgentRunState {
     taskId: string,
     event: AgentEvent
   ) => void;
-  /** 仅当内存无 active 运行时，用任务快照回填终态 UI */
+  /**
+   * 用任务快照回填终态 UI。
+   * 不覆盖：进行中；或本会话已有更完整的终态 live 读模型（事件/工具时间线）。
+   */
   hydrateFromSnapshot: (
     fileId: string,
     taskId: string,
@@ -52,8 +55,19 @@ export const useAgentRunStore = create<AgentRunState>((set, get) => ({
     if (!snapshot) return;
     set((state) => {
       const cur = state.byFileId[fileId];
-      // 正在跑的 live 状态不被快照覆盖
+      // 进行中：live 优先
       if (cur?.active) return state;
+      // 本会话已有终态读模型（跑完后仍开着面板）：快照更瘦，勿冲掉事件/工具时间线
+      if (
+        cur &&
+        !cur.active &&
+        (cur.recentEvents.length > 1 ||
+          cur.toolLog.length > 0 ||
+          cur.glossary.length > 0 ||
+          Boolean(cur.actionLine))
+      ) {
+        return state;
+      }
       return {
         byFileId: {
           ...state.byFileId,

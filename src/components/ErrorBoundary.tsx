@@ -77,9 +77,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 }
 
 /**
- * 默认错误降级 UI
+ * 默认错误降级 UI（导出以满足 react-refresh：文件内仅导出组件）
  */
-function DefaultErrorFallback({
+export function DefaultErrorFallback({
   error,
   onRetry
 }: {

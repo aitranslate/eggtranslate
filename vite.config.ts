@@ -2,9 +2,10 @@ import path from "path"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import sourceIdentifierPlugin from 'vite-plugin-source-info'
-import { VitePWA } from 'vite-plugin-pwa'
 
 // 部署到 Cloudflare Pages，使用根路径
+// 不注册 Service Worker：应用强依赖在线 API，SW 无离线收益且曾导致缓存/白屏问题。
+// 安装元数据用 public/manifest.webmanifest + index.html 静态 link。
 export default defineConfig(({ command }) => ({
   base: '/',
   plugins: [
@@ -15,41 +16,28 @@ export default defineConfig(({ command }) => ({
       attributePrefix: 'data-matrix',
       includeProps: true,
     }),
-    VitePWA({
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
-      manifest: {
-        name: '蛋蛋字幕翻译',
-        short_name: '蛋蛋字幕翻译',
-        description: '音视频转录 + 字幕翻译，本地处理隐私安全',
-        start_url: '/?source=pwa',
-        display: 'standalone',
-        theme_color: '#F3C323',
-        background_color: '#ffffff',
-        lang: 'zh-CN',
-        orientation: 'any',
-        icons: [
-          { src: '/icons/192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icons/512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-        ],
-      },
-      workbox: {
-        // 在线 App：不预缓存静态资源
-        globPatterns: [],
-        // 必须关闭：createHandlerBoundToURL('index.html') 要求 index 在 precache 里，
-        // globPatterns 为空时会抛 non-precached-url，整页 SW 初始化失败
-        navigateFallback: null,
-      },
-      devOptions: {
-        // dev 模式下不启用 SW；手动 QA 用 pnpm preview 跑生产构建
-        enabled: false,
-      },
-    }),
   ],
+  /**
+   * 避免「服务刚起来第一次上传音视频 → 整页刷新丢上传」：
+   * mp3Worker 首次 import @breezystack/lamejs 时，Vite 会现场 optimizeDeps 并 full reload。
+   * 启动时预构建 + warmup，把重载挪到空闲冷启动，不打断用户上传。
+   */
+  optimizeDeps: {
+    include: ['@breezystack/lamejs', 'localforage'],
+  },
+  worker: {
+    format: 'es',
+  },
   server: {
     host: '127.0.0.1',
     port: 5173,
+    warmup: {
+      clientFiles: [
+        './src/utils/convertToMP3.ts',
+        './src/utils/mp3Worker.ts',
+        './src/services/filesService.ts',
+      ],
+    },
     // Agent web_search：开发态代理 Parallel（免费无 Key），避免浏览器 CORS
     proxy: {
       '/api/parallel-mcp': {

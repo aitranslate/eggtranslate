@@ -5,6 +5,7 @@
 import type { LLMToolSchema } from '@/utils/llmApi';
 import {
   asGlossary,
+  coerceToolInt,
   parseToolArgs,
   toolErr,
   toolOk,
@@ -14,11 +15,7 @@ import {
 } from '../toolTypes';
 import { DEFAULT_MAX_SEARCHES, parallelWebSearch } from './parallelSearch';
 
-function coerceInt(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v);
-  if (typeof v === 'string' && /^-?\d+$/.test(v.trim())) return parseInt(v.trim(), 10);
-  return null;
-}
+const coerceInt = coerceToolInt;
 
 // ── transcript ──────────────────────────────────────────
 

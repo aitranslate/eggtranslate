@@ -49,6 +49,29 @@ describe('filesStore batchUpdateEntries', () => {
     useFilesStore.setState({ tasks: [], selectedFileId: null });
   });
 
+  it('setTaskLanguages updates task source/target and leaves other tasks alone', () => {
+    useFilesStore.setState({
+      tasks: [
+        makeTask({ taskId: 't1', sourceLanguage: 'English', targetLanguage: '简体中文' }),
+        makeTask({ taskId: 't2', sourceLanguage: 'Japanese', targetLanguage: 'Korean' }),
+      ],
+    });
+    const fileId = generateStableFileId('t1');
+    useFilesStore.getState().setTaskLanguages(fileId, {
+      sourceLanguage: 'French',
+      targetLanguage: 'German',
+    });
+    const tasks = useFilesStore.getState().tasks;
+    expect(tasks.find((t) => t.taskId === 't1')).toMatchObject({
+      sourceLanguage: 'French',
+      targetLanguage: 'German',
+    });
+    expect(tasks.find((t) => t.taskId === 't2')).toMatchObject({
+      sourceLanguage: 'Japanese',
+      targetLanguage: 'Korean',
+    });
+  });
+
   it('applies multi-entry batch in one store mutation with status + translatedCount', () => {
     const task = makeTask();
     useFilesStore.setState({ tasks: [task] });

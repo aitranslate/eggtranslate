@@ -62,20 +62,36 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
     file.phases.translating.status === 'active';
 
   const canTranscribe = isAudioVideo && !isBusy && canRetranscribe(file) && !allPhasesDone;
+  const isTranscribeFailed = file.phases.transcribing.status === 'failed';
+  /** 失败后文案更长，布局须保证单行不换行 */
+  const transcribeLabel = isTranscribeFailed ? '重新转录' : '转录';
 
   const canRun = useMemo(() => {
     if (isQueued) return true;
     if (isBusy || allPhasesDone) return false;
-    if (isAudioVideo && !isTranscriptionDone) return true;
+    // 转录失败：仍可点主按钮走「仅翻译」以外的主路径；有字幕时可译
+    if (isAudioVideo && !isTranscriptionDone && !isTranscribeFailed) return true;
+    if (isAudioVideo && isTranscribeFailed && (file.entryCount ?? 0) === 0) return false;
     if (pct >= 100) return false;
     return true;
-  }, [isQueued, isBusy, allPhasesDone, isAudioVideo, isTranscriptionDone, pct]);
+  }, [
+    isQueued,
+    isBusy,
+    allPhasesDone,
+    isAudioVideo,
+    isTranscriptionDone,
+    isTranscribeFailed,
+    file.entryCount,
+    pct,
+  ]);
 
   const idlePrimary = allPhasesDone
     ? '已完成'
-    : isAudioVideo && !isTranscriptionDone
-      ? '转译'
-      : '翻译';
+    : isAudioVideo && isTranscribeFailed && (file.entryCount ?? 0) === 0
+      ? '重试'
+      : isAudioVideo && !isTranscriptionDone && !isTranscribeFailed
+        ? '转译'
+        : '翻译';
   // 忙时不重复「处理中」：阶段进度/列表状态已表达；按钮灰显保留动作名
   const primaryLabel = isQueued
     ? '取消排队'
@@ -129,7 +145,9 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
         </label>
       )}
 
-      <div className="m-detail-actions">
+      <div
+        className={`m-detail-actions${isAudioVideo ? ' has-transcribe' : ''}`}
+      >
         <div className="m-export-wrap">
           <ExportButton
             variant="icon"
@@ -146,8 +164,8 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
             disabled={!canTranscribe}
             onClick={handleTranscribe}
           >
-            <Mic className="h-4 w-4" />
-            转录
+            <Mic className="h-4 w-4 shrink-0" />
+            <span className="m-btn-label">{transcribeLabel}</span>
           </button>
         )}
 
@@ -158,13 +176,13 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
           onClick={handlePrimary}
         >
           {isBusy && !isQueued ? (
-            <Loader2 className="h-4 w-4 m-spin" />
+            <Loader2 className="h-4 w-4 m-spin shrink-0" />
           ) : isQueued ? (
-            <Square className="h-3.5 w-3.5" />
+            <Square className="h-3.5 w-3.5 shrink-0" />
           ) : (
-            <Play className="h-4 w-4" />
+            <Play className="h-4 w-4 shrink-0" />
           )}
-          {primaryLabel}
+          <span className="m-btn-label">{primaryLabel}</span>
         </button>
       </div>
     </div>

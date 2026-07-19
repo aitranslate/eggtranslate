@@ -13,16 +13,14 @@ import {
   useStreamingOverlayStore,
 } from '@/stores/streamingOverlayStore';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import {
-  useTranslationConfig,
-  useTranslationConfigStore,
-} from '@/stores/translationConfigStore';
+import { useTranslationConfig } from '@/stores/translationConfigStore';
 import { LANGUAGE_OPTIONS } from '@/constants/languages';
+import { normalizeLangValue } from '@/components/SettingsModal/LanguageSelector';
 import { normalizeSrtTime } from '@/utils/timeUtils';
 import { getBilingualDisplayLines } from '@/utils/srtParser';
 import { generateStableFileId } from '@/utils/taskIdGenerator';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { formatMatchCount, swapLanguages } from '@/utils/uxHelpers';
+import { resolveTaskLanguages } from '@/utils/taskLanguages';
 import { useAgentRunStore } from '@/stores/agentRunStore';
 import {
   LazyAgentProcessControl,
@@ -378,36 +376,6 @@ export const SubtitleEditingRow = memo(
 );
 SubtitleEditingRow.displayName = 'SubtitleEditingRow';
 
-/** 兼容历史 value（en / zh 等）与 LANGUAGE_OPTIONS.value */
-function langLabel(code: string): string {
-  if (!code) return code;
-  const direct = LANGUAGE_OPTIONS.find((l) => l.value === code);
-  if (direct) return direct.label;
-  const aliases: Record<string, string> = {
-    en: '英语',
-    eng: '英语',
-    english: '英语',
-    zh: '中文（简体）',
-    'zh-cn': '中文（简体）',
-    'zh-hans': '中文（简体）',
-    'zh-tw': '中文（繁体）',
-    'zh-hant': '中文（繁体）',
-    ja: '日语',
-    jp: '日语',
-    ko: '韩语',
-    fr: '法语',
-    de: '德语',
-    es: '西班牙语',
-    ru: '俄语',
-  };
-  const key = code.trim().toLowerCase();
-  if (aliases[key]) return aliases[key];
-  const byNative = LANGUAGE_OPTIONS.find(
-    (l) => l.nativeName.toLowerCase() === key || l.label === code
-  );
-  return byNative?.label ?? code;
-}
-
 export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   isOpen = true,
   onClose,
@@ -417,9 +385,8 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const isMobile = useIsMobile();
   const file = useFile(fileId);
   const updateEntry = useFilesStore((state) => state.updateEntry);
+  const setTaskLanguages = useFilesStore((state) => state.setTaskLanguages);
   const config = useTranslationConfig();
-  const updateConfig = useTranslationConfigStore((s) => s.updateConfig);
-  const openSettings = useWorkspaceStore((s) => s.openSettings);
 
   const taskId = file?.taskId;
   const fileEntries = useFilesStore(
@@ -708,26 +675,53 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     };
   }, [file?.entryCount, file?.translatedCount, streamingLineCount]);
 
-  const langStrip = useMemo(() => {
-    const src = langLabel(config.sourceLanguage);
-    const dst = langLabel(config.targetLanguage);
-    return `${src} → ${dst}`;
-  }, [config.sourceLanguage, config.targetLanguage]);
+  // 任务级语言优先，旧任务回退全局设置
+  const taskLangs = useMemo(
+    () => resolveTaskLanguages(file, config),
+    [file?.sourceLanguage, file?.targetLanguage, config.sourceLanguage, config.targetLanguage]
+  );
+  const sourceSelectValue = useMemo(
+    () => normalizeLangValue(taskLangs.sourceLanguage),
+    [taskLangs.sourceLanguage]
+  );
+  const targetSelectValue = useMemo(
+    () => normalizeLangValue(taskLangs.targetLanguage),
+    [taskLangs.targetLanguage]
+  );
 
   const hasSearchOrFilter = Boolean(searchTerm) || filterType !== 'all';
   const matchCountLabel = formatMatchCount(filteredEntries.length, hasSearchOrFilter);
 
-  const handleOpenLanguageSettings = useCallback(() => {
-    openSettings();
-  }, [openSettings]);
+  const handleSourceLanguageChange = useCallback(
+    (value: string) => {
+      if (!fileId) return;
+      setTaskLanguages(fileId, {
+        sourceLanguage: value,
+        targetLanguage: taskLangs.targetLanguage,
+      });
+    },
+    [fileId, setTaskLanguages, taskLangs.targetLanguage]
+  );
+
+  const handleTargetLanguageChange = useCallback(
+    (value: string) => {
+      if (!fileId) return;
+      setTaskLanguages(fileId, {
+        sourceLanguage: taskLangs.sourceLanguage,
+        targetLanguage: value,
+      });
+    },
+    [fileId, setTaskLanguages, taskLangs.sourceLanguage]
+  );
 
   const handleSwapLanguages = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      const next = swapLanguages(config.sourceLanguage, config.targetLanguage);
-      void updateConfig(next);
+      if (!fileId) return;
+      const next = swapLanguages(taskLangs.sourceLanguage, taskLangs.targetLanguage);
+      setTaskLanguages(fileId, next);
     },
-    [config.sourceLanguage, config.targetLanguage, updateConfig]
+    [fileId, setTaskLanguages, taskLangs.sourceLanguage, taskLangs.targetLanguage]
   );
 
   if (variant === 'modal' && !isOpen) {
@@ -749,25 +743,46 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
               {file?.name || '未知文件'}
             </div>
             <div className="text-[13px] text-[var(--wb-text-3)] flex flex-wrap gap-x-2 gap-y-0.5 items-center">
-              <button
-                type="button"
-                className="se-lang-strip"
-                onClick={handleOpenLanguageSettings}
-                title="打开设置修改语言"
-                data-testid="editor-lang-strip"
-              >
-                {langStrip}
-              </button>
-              <button
-                type="button"
-                className="se-lang-swap"
-                onClick={handleSwapLanguages}
-                title="交换源语言与目标语言"
-                aria-label="交换语言"
-                data-testid="editor-lang-swap"
-              >
-                ⇄
-              </button>
+              <div className="se-lang-pair" data-testid="editor-lang-pair">
+                <select
+                  className="se-lang-select"
+                  value={sourceSelectValue}
+                  onChange={(e) => handleSourceLanguageChange(e.target.value)}
+                  title="本任务源语言"
+                  aria-label="源语言"
+                  data-testid="editor-source-lang"
+                >
+                  {LANGUAGE_OPTIONS.map((lang) => (
+                    <option key={`src-${lang.value}`} value={lang.value}>
+                      {lang.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="se-lang-swap"
+                  onClick={handleSwapLanguages}
+                  title="交换本任务源语言与目标语言"
+                  aria-label="交换语言"
+                  data-testid="editor-lang-swap"
+                >
+                  ⇄
+                </button>
+                <select
+                  className="se-lang-select"
+                  value={targetSelectValue}
+                  onChange={(e) => handleTargetLanguageChange(e.target.value)}
+                  title="本任务目标语言"
+                  aria-label="目标语言"
+                  data-testid="editor-target-lang"
+                >
+                  {LANGUAGE_OPTIONS.map((lang) => (
+                    <option key={`tgt-${lang.value}`} value={lang.value}>
+                      {lang.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <span>·</span>
               <span>{translationStats.total} 条</span>
               <span>·</span>

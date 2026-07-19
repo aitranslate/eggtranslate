@@ -46,7 +46,8 @@ const entry = (id: number): SubtitleEntry => ({
 
 const makeFile = (
   taskId: string,
-  translating: 'completed' | 'upcoming' | 'active' = 'upcoming'
+  translating: 'completed' | 'upcoming' | 'active' = 'upcoming',
+  overrides: Partial<SingleTask> = {}
 ): SingleTask => ({
   taskId,
   subtitle_filename: `${taskId}.srt`,
@@ -67,6 +68,7 @@ const makeFile = (
       tokens: 0,
     },
   },
+  ...overrides,
 });
 
 function configuredState(agent: boolean) {
@@ -187,6 +189,28 @@ describe('translationService', () => {
     expect(task?.translationPath).toBe('batch');
   });
 
+  it('agent path: prefers task source/target languages over global config', async () => {
+    useFilesStore.setState({
+      tasks: [
+        makeFile('t-lang', 'upcoming', {
+          sourceLanguage: 'Japanese',
+          targetLanguage: 'Korean',
+        }),
+      ],
+    });
+    configuredState(true); // global still en/zh
+    runAgentTranslation.mockImplementation(async (_entries, input) => {
+      expect(input.config.sourceLanguage).toBe('Japanese');
+      expect(input.config.targetLanguage).toBe('Korean');
+      await input.onEvent({ type: 'pipeline_start', totalEntries: 2, totalWindows: 1 });
+      await input.onEvent({ type: 'pipeline_end' });
+      return { tokensUsed: 1 };
+    });
+
+    await startTranslation(generateStableFileId('t-lang'));
+    expect(runAgentTranslation).toHaveBeenCalled();
+  });
+
   it('agent throw: emits pipeline_error via mock path + marks failed + snapshot', async () => {
     useFilesStore.setState({ tasks: [makeFile('t-fail')] });
     configuredState(true);
@@ -194,6 +218,29 @@ describe('translationService', () => {
     // Here the service onEvent is only invoked if runAgentTranslation calls it — mock does that.
     runAgentTranslation.mockImplementation(async (_entries, input) => {
       await input.onEvent({ type: 'pipeline_start', totalEntries: 2, totalWindows: 1 });
+      await input.onEvent({
+        type: 'terminology_done',
+        glossary: [{ source: 'Hi', target: '嗨', note: 'n' }],
+        styleGuide: 'Keep short.',
+        tokensUsed: 3,
+      });
+      await input.onEvent({
+        type: 'tool_start',
+        name: 'web_search',
+        argsSummary: '{}',
+        callId: 'fail-ws',
+        stage: 'terminology',
+      });
+      await input.onEvent({
+        type: 'tool_end',
+        name: 'web_search',
+        argsSummary: '{}',
+        callId: 'fail-ws',
+        ok: true,
+        detail: 'ok',
+        durationMs: 10,
+        stage: 'terminology',
+      });
       await input.onEvent({ type: 'pipeline_error', error: 'boom' });
       throw new Error('boom');
     });
@@ -206,6 +253,13 @@ describe('translationService', () => {
     expect(task?.phases.translating.status).toBe('failed');
     expect(task?.phases.translating.errorMessage).toMatch(/boom/);
     expect(task?.agentSnapshot?.error).toMatch(/boom/);
+    // ensureAgentFailureSnapshot 不得把富快照冲成薄结构
+    expect(task?.agentSnapshot?.glossary).toEqual([
+      { source: 'Hi', target: '嗨', note: 'n' },
+    ]);
+    expect(task?.agentSnapshot?.styleGuide).toMatch(/Keep short/);
+    expect(task?.agentSnapshot?.toolLog?.some((t) => t.id === 'fail-ws')).toBe(true);
+    expect(task?.agentSnapshot?.totalEntries).toBe(2);
     const run = useAgentRunStore.getState().byFileId[fileId];
     expect(run?.active).toBe(false);
     expect(run?.error).toMatch(/boom/);

@@ -92,14 +92,42 @@ export type TranslationPath = 'agent' | 'batch';
 /**
  * Agent 终态快照：落在任务上并随 filesStore 持久化。
  * 设置里关 Agent 只影响下次路径，不擦除历史。
+ * 完整术语/风格/工具日志用于过程面板复看。
  */
 export interface AgentRunSnapshot {
   glossaryCount: number;
   styleGuidePreview?: string;
+  /** 完整术语表（过程面板「术语」Tab） */
+  glossary?: Array<{ source: string; target: string; note?: string }>;
+  /** 完整风格指南 */
+  styleGuide?: string;
+  /** 工具调用摘要（裁剪后，避免 IDB 膨胀） */
+  toolLog?: Array<{
+    id: string;
+    name: string;
+    argsSummary: string;
+    ok: boolean;
+    detail?: string;
+    durationMs?: number;
+    at: number;
+    stage?: string;
+  }>;
+  /** 分窗摘要 */
+  windows?: Array<{
+    windowIndex: number;
+    entryCount: number;
+    status: string;
+    tokensUsed: number;
+    qaCritical?: number;
+    qaTotal?: number;
+    qaNote?: string;
+  }>;
+  tokensTotal?: number;
   lastActionLine: string;
   completedAt: number;
   error?: string | null;
   totalEntries?: number;
+  completedEntries?: number;
   totalWindows?: number;
 }
 
@@ -121,6 +149,14 @@ export interface SingleTask {
 
   /** 该文件要使用的热词分组 ID；null 表示不使用热词 */
   selectedKeytermGroupId: string | null;
+
+  /**
+   * 任务级源语言 / 目标语言。
+   * 创建/导入时从全局设置拷贝；编辑器可单独改。
+   * 缺省（旧任务）时翻译链路回退全局 config。
+   */
+  sourceLanguage?: string;
+  targetLanguage?: string;
 
   /** 最近一次翻译路径；设置开关不改写历史 */
   translationPath?: TranslationPath;

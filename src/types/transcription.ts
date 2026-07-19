@@ -56,6 +56,13 @@ export interface SubtitleFileMetadata {
   /** 该文件要使用的热词分组 ID；null 表示不使用热词 */
   selectedKeytermGroupId: string | null;
 
+  /**
+   * 任务级源语言 / 目标语言（创建时从全局拷贝；旧任务可缺省）。
+   * 翻译/Agent 优先读此字段，缺省回退全局设置。
+   */
+  sourceLanguage?: string;
+  targetLanguage?: string;
+
   /** 最近一次翻译路径（agent / batch），与设置开关解耦 */
   translationPath?: TranslationPath;
   /** Agent 终态快照（持久化在任务上） */

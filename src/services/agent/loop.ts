@@ -24,6 +24,29 @@ export type AgentLoopResult = {
   rounds: number;
 };
 
+export type AgentLoopToolHook = (event: {
+  phase: 'start' | 'end';
+  name: string;
+  argsSummary: string;
+  /** 同一 tool_call 的 start/end 关联 id（并发窗安全） */
+  callId: string;
+  ok?: boolean;
+  detail?: string;
+  durationMs?: number;
+}) => void | Promise<void>;
+
+function summarizeToolArgs(raw: string): string {
+  const s = (raw || '').trim();
+  if (!s) return '';
+  try {
+    const o = JSON.parse(s) as unknown;
+    const flat = JSON.stringify(o);
+    return flat.length > 160 ? `${flat.slice(0, 157)}…` : flat;
+  } catch {
+    return s.length > 120 ? `${s.slice(0, 117)}…` : s;
+  }
+}
+
 export async function runAgentLoop(options: {
   llm: LLMConfig;
   systemPrompt: string;
@@ -35,6 +58,8 @@ export async function runAgentLoop(options: {
   temperature?: number;
   submitToolName?: string;
   submitInstruction?: string;
+  /** 工具调用可观测钩子（过程面板「工具」Tab） */
+  onTool?: AgentLoopToolHook;
 }): Promise<AgentLoopResult> {
   const {
     llm,
@@ -47,6 +72,7 @@ export async function runAgentLoop(options: {
     temperature = 0.3,
     submitToolName = 'submit_result',
     submitInstruction = 'with the required payload',
+    onTool,
   } = options;
 
   ctx.submitToolName = submitToolName;
@@ -96,9 +122,32 @@ export async function runAgentLoop(options: {
 
     for (const tc of toolCalls) {
       const name = tc.function.name;
+      const argsSummary = summarizeToolArgs(tc.function.arguments || '');
+      const callId =
+        (typeof tc.id === 'string' && tc.id) ||
+        `tc-${round}-${name}-${Math.random().toString(36).slice(2, 8)}`;
+      const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (onTool) {
+        await onTool({ phase: 'start', name, argsSummary, callId });
+      }
       const tr = await dispatchTool(name, tc.function.arguments, ctx);
-      if (tr.content.startsWith('Error:') || tr.content.startsWith('[HARNESS]')) {
-        hadError = true;
+      const durationMs = Math.round(
+        (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0
+      );
+      const ok = !(
+        tr.content.startsWith('Error:') || tr.content.startsWith('[HARNESS]')
+      );
+      if (!ok) hadError = true;
+      if (onTool) {
+        await onTool({
+          phase: 'end',
+          name,
+          argsSummary,
+          callId,
+          ok,
+          detail: tr.content.slice(0, 240).replace(/\s+/g, ' '),
+          durationMs,
+        });
       }
       messages.push({
         role: 'tool',

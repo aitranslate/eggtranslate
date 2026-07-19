@@ -5,7 +5,7 @@
 
 import type { TranslationConfig } from '@/types';
 import { getActiveLlmConfig } from '@/utils/llmProfiles';
-import { runAgentLoop } from '../loop';
+import { runAgentLoop, type AgentLoopToolHook } from '../loop';
 import { TRANSLATION_TOOL_SCHEMAS } from '../tools/registry';
 import type { AgentToolContext, TranscriptEntry } from '../toolTypes';
 import type { GlossaryEntry } from '../types';
@@ -114,6 +114,7 @@ export async function runTranslateWindowAgent(options: {
   signal: AbortSignal;
   qaFeedback?: string;
   maxRounds?: number;
+  onTool?: AgentLoopToolHook;
 }): Promise<{ translations: WindowTranslation[]; tokensUsed: number }> {
   const {
     window: win,
@@ -123,6 +124,7 @@ export async function runTranslateWindowAgent(options: {
     signal,
     qaFeedback,
     maxRounds = 24,
+    onTool,
   } = options;
 
   const expected = new Set(win.segments.map((s) => s.index));
@@ -161,6 +163,7 @@ export async function runTranslateWindowAgent(options: {
     temperature: 0.25,
     submitToolName: 'submit_translation',
     submitInstruction: 'with complete {index,text} list for every required index',
+    onTool,
   });
 
   const fr = loop.finalResult as { translations?: WindowTranslation[] } | undefined;

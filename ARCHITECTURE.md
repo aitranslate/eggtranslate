@@ -1,6 +1,6 @@
 # EggTranslate 架构
 
-> 浏览器端 PWA：音视频转录 + 字幕翻译。状态在 Zustand，业务在 service，UI 只编排展示。
+> 浏览器端在线应用：音视频转录 + 字幕翻译。状态在 Zustand，业务在 service，UI 只编排展示。
 
 ## 分层
 

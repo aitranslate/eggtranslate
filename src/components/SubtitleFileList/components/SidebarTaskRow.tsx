@@ -144,20 +144,34 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
     file.phases.translating.status === 'active';
 
   const canTranscribe = isAudioVideo && !isBusy && canRetranscribe(file) && !allPhasesDone;
+  const isTranscribeFailed = file.phases.transcribing.status === 'failed';
+  /** 失败后略长，工具条禁止 wrap，避免挤到下一行 */
+  const transcribeLabel = isTranscribeFailed ? '重转录' : '转录';
+
   const canRun = useMemo(() => {
     if (isQueued) return true; // becomes cancel
     if (isBusy || allPhasesDone) return false;
-    if (isAudioVideo && !isTranscriptionDone) return true; // full pipeline
+    // 识别失败且尚无字幕：主按钮不可用，先走「重转录」
+    if (isAudioVideo && isTranscribeFailed && (file.entryCount ?? 0) === 0) return false;
+    if (isAudioVideo && !isTranscriptionDone && !isTranscribeFailed) return true; // 转译
     if (pct >= 100) return false;
-    if (isAudioVideo && !isTranscriptionDone) return false;
     return true;
-  }, [isQueued, isBusy, allPhasesDone, isAudioVideo, isTranscriptionDone, pct]);
+  }, [
+    isQueued,
+    isBusy,
+    allPhasesDone,
+    isAudioVideo,
+    isTranscriptionDone,
+    isTranscribeFailed,
+    file.entryCount,
+    pct,
+  ]);
 
   const idlePrimary = isFailed
     ? '重试'
     : allPhasesDone
       ? '已完成'
-      : isAudioVideo && !isTranscriptionDone
+      : isAudioVideo && !isTranscriptionDone && !isTranscribeFailed
         ? '转译'
         : '翻译';
   const primaryLabel = resolveBusyPrimaryLabel({
@@ -389,11 +403,11 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
                 type="button"
                 className="wb-proj-tool"
                 disabled={!canTranscribe}
-                title="仅转录"
+                title={isTranscribeFailed ? '重新转录' : '仅转录'}
                 onClick={() => void onTranscribe(file.id)}
               >
-                <Mic className="w-3.5 h-3.5" />
-                <span>转录</span>
+                <Mic className="w-3.5 h-3.5 shrink-0" />
+                <span>{transcribeLabel}</span>
               </button>
             )}
 

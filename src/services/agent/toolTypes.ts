@@ -65,19 +65,60 @@ export function toolErr(message: string, hint?: string): ToolResult {
   return { content: `Error: ${message}${hintLine}`, terminate: false };
 }
 
+/**
+ * 解析工具参数 JSON（对齐 AsrAgent parse_tool_arguments 的宽松策略）。
+ * - 剥 markdown fence
+ * - 修 trailing comma
+ * - 非 object 时返回 {}（由 handler 用 Hint 纠错，不直接炸 loop）
+ */
 export function parseToolArgs(raw: string): Record<string, unknown> {
-  try {
-    let s = raw.trim();
-    if (s.startsWith('```')) {
-      s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-    }
-    const v = JSON.parse(s || '{}');
-    return v && typeof v === 'object' && !Array.isArray(v)
-      ? (v as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
+  let s = (raw || '').trim();
+  if (!s) return {};
+
+  if (s.startsWith('```')) {
+    s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
   }
+
+  const tryParse = (text: string): unknown => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return undefined;
+    }
+  };
+
+  let v = tryParse(s);
+  if (v === undefined) {
+    // {"a":1,} → {"a":1}
+    const repaired = s.replace(/,\s*([}\]])/g, '$1');
+    v = tryParse(repaired);
+  }
+  if (v === undefined) {
+    // 单引号键/值（模型偶发）→ 尽量变成双引号
+    const q = s
+      .replace(/(['"])?([a-zA-Z_][\w]*)\1\s*:/g, '"$2":')
+      .replace(/:\s*'([^']*)'/g, ':"$1"');
+    v = tryParse(q);
+  }
+
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    return v as Record<string, unknown>;
+  }
+  return {};
+}
+
+/** 与 Asr coerce_int 对齐：允许数字字符串 / 整值 float */
+export function coerceToolInt(value: unknown): number | null {
+  if (typeof value === 'boolean') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+  if (typeof value === 'string') {
+    const s = value.trim();
+    if (/^-?\d+$/.test(s)) return parseInt(s, 10);
+    if (/^-?\d+\.0+$/.test(s)) return parseInt(s, 10);
+  }
+  return null;
 }
 
 export function asGlossary(raw: unknown): GlossaryEntry[] {
