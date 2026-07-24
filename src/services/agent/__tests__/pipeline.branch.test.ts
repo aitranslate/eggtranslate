@@ -73,6 +73,10 @@ const baseConfig = (): TranslationConfig => ({
   agentTranslationEnabled: true,
   agentWindowSize: 10,
   agentMaxConcurrency: 1,
+  // Integration mock only submits once; disable soft web friction for path test.
+  agentSoftWebNudge: false,
+  agentMaxWebSearches: 0,
+  agentExpandUserTerms: false,
 });
 
 function assistantTool(
@@ -117,10 +121,10 @@ describe('runAgentTranslation full tool-loop', () => {
     callLLM.mockReset();
   });
 
-  it('terminology submit → translate submit → qa clean → pipeline_end', async () => {
+  it('terminology submit → translate submit → risk-skip QA → pipeline_end', async () => {
     const events: string[] = [];
 
-    // 顺序：术语 submit_result → 翻译 submit_translation → QA submit_qa_report
+    // risk 模式：译文已用 glossary target，干净窗跳过 LLM QA
     callLLM
       .mockResolvedValueOnce(
         assistantTool('submit_result', {
@@ -134,11 +138,6 @@ describe('runAgentTranslation full tool-loop', () => {
             { index: 1, text: '你好' },
             { index: 2, text: '世界' },
           ],
-        })
-      )
-      .mockResolvedValueOnce(
-        assistantTool('submit_qa_report', {
-          issues: [],
         })
       );
 
@@ -194,6 +193,66 @@ describe('runAgentTranslation full tool-loop', () => {
     expect(errEv).toBeTruthy();
     expect(errEv?.error).toBeTruthy();
     expect(events.some((e) => e.type === 'pipeline_end')).toBe(false);
+  });
+
+  it('resume from translate stage re-emits glossary for UI', async () => {
+    const { loadAgentJob } = await import('../checkpointStore');
+    vi.mocked(loadAgentJob).mockResolvedValueOnce({
+      schemaVersion: 1,
+      taskId: 't1',
+      fileId: 'f1',
+      fingerprint: 'fp',
+      stage: 'translate',
+      glossary: [
+        { source: 'key levels', target: '关键位' },
+        { source: 'order block', target: '订单块' },
+      ],
+      styleGuide: 'Trading tone.',
+      windowResults: {},
+      updatedAt: Date.now(),
+    });
+
+    const events: Array<{ type: string; glossary?: unknown[] }> = [];
+    // risk：有 glossary 但译文未用 target → 触发 QA
+    callLLM
+      .mockResolvedValueOnce(
+        assistantTool('submit_translation', {
+          translations: [
+            { index: 1, text: '你好' },
+            { index: 2, text: '世界' },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        assistantTool('submit_qa_report', { issues: [] })
+      );
+
+    await runAgentTranslation(entries, {
+      fileId: 'f1',
+      taskId: 't1',
+      filename: 'a.srt',
+      config: baseConfig(),
+      signal: new AbortController().signal,
+      userTerms: [],
+      onEvent: (e) => {
+        events.push({
+          type: e.type,
+          glossary: e.type === 'terminology_done' ? e.glossary : undefined,
+        });
+      },
+    });
+
+    const termDone = events.find((e) => e.type === 'terminology_done');
+    expect(termDone).toBeTruthy();
+    expect(termDone?.glossary).toHaveLength(2);
+    // Resume must not call terminology submit_result
+    for (const call of callLLM.mock.calls) {
+      const tools = call[2]?.tools as
+        | Array<{ function?: { name?: string } }>
+        | undefined;
+      const names = (tools || []).map((t) => t.function?.name);
+      expect(names).not.toContain('submit_result');
+    }
   });
 
   it('abort does not emit pipeline_error', async () => {

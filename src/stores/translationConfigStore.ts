@@ -61,6 +61,11 @@ const DEFAULT_CONFIG: TranslationConfig = {
   agentTranslationEnabled: false,
   agentWindowSize: 30,
   agentMaxConcurrency: 3,
+  agentForceAllUserTerms: false,
+  agentMaxWebSearches: 3,
+  agentSoftWebNudge: true,
+  agentExpandUserTerms: true,
+  agentGlobalTermCheck: true,
 };
 
 const DEFAULT_PROGRESS: TranslationProgress = {

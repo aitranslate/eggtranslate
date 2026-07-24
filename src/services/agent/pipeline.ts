@@ -16,7 +16,10 @@ import {
   hasCriticalIssues,
   runWindowQaAgent,
 } from './agents/qaAgent';
-import { runTranslateWindowAgent } from './agents/translateAgent';
+import {
+  DEFAULT_TRANSLATE_MAX_ROUNDS,
+  runTranslateWindowAgent,
+} from './agents/translateAgent';
 import {
   clearAgentJob,
   computeAgentFingerprint,
@@ -33,6 +36,12 @@ import type {
 } from './types';
 import type { TranscriptEntry } from './toolTypes';
 import type { AgentLoopToolHook } from './loop';
+import { checkGlobalTerminology } from './terminologyCheck';
+import {
+  filterGlossaryForWindow,
+  textsFromSegments,
+} from './windowGlossary';
+import { assessWindowRisk } from './windowRisk';
 import { splitAgentWindows } from './windows';
 
 function abortError(message = '翻译已取消'): Error {
@@ -52,7 +61,11 @@ async function emit(handler: AgentEventHandler, event: Parameters<AgentEventHand
 /** 将 loop 工具钩子映射为 AgentEvent（过程面板「工具」Tab） */
 function makeToolBridge(
   onEvent: AgentEventHandler,
-  stage: AgentStage
+  stage: AgentStage,
+  opts?: {
+    /** Fallback max when event has no maxWebSearches */
+    webSearchMax?: number;
+  }
 ): AgentLoopToolHook {
   return async (e) => {
     if (e.phase === 'start') {
@@ -71,10 +84,24 @@ function makeToolBridge(
       argsSummary: e.argsSummary,
       callId: e.callId,
       ok: e.ok !== false,
+      kind: e.kind,
+      nudge: e.nudge ?? null,
       detail: e.detail,
       durationMs: e.durationMs,
       stage,
     });
+    // Live web budget: count comes from tool ctx after dispatch (source of truth).
+    if (e.name === 'web_search' && typeof e.webSearchCount === 'number') {
+      const max =
+        typeof e.maxWebSearches === 'number'
+          ? e.maxWebSearches
+          : (opts?.webSearchMax ?? 3);
+      await emit(onEvent, {
+        type: 'web_usage',
+        count: e.webSearchCount,
+        max,
+      });
+    }
   };
 }
 
@@ -205,11 +232,28 @@ async function executeAgentTranslation(
   const windows = splitAgentWindows(entries, windowSize, 5);
   const allTranscript = toTranscriptEntries(entries);
   let tokensUsed = 0;
+  let tokensTerminology = 0;
+  let tokensTranslate = 0;
+  let tokensQa = 0;
+  let qaWindowsRun = 0;
+  let qaWindowsSkipped = 0;
+
+
+  // Briefing window count (for UI); short files → 1
+  const { splitBriefingEntryWindows, BRIEFING_WINDOW_CHARS } = await import(
+    './windows'
+  );
+  const briefingWinCount = splitBriefingEntryWindows(
+    allTranscript,
+    BRIEFING_WINDOW_CHARS,
+    2
+  ).length;
 
   await emit(onEvent, {
     type: 'pipeline_start',
     totalEntries: entries.length,
     totalWindows: windows.length,
+    briefingWindows: briefingWinCount,
   });
 
   let job = await loadAgentJob(taskId);
@@ -268,10 +312,17 @@ async function executeAgentTranslation(
       type: 'progress',
       completedEntries: skipIds.size,
       totalEntries: entries.length,
-      statusText: 'Agent：术语分析中（tool loop）…',
+      stage: 'terminology',
+      statusText: 'Agent：词表分析中…',
     });
 
     let termTokens = 0;
+    const webMax =
+      typeof config.agentMaxWebSearches === 'number'
+        ? Math.max(0, config.agentMaxWebSearches)
+        : 3;
+    // Initial chip: budget known, used 0 until model calls web_search.
+    await emit(onEvent, { type: 'web_usage', count: 0, max: webMax });
     try {
       const term = await runTerminologyToolAgent({
         entries: allTranscript,
@@ -280,11 +331,26 @@ async function executeAgentTranslation(
         title: filename,
         signal,
         maxRounds: 30,
-        onTool: makeToolBridge(onEvent, 'terminology'),
+        onTool: makeToolBridge(onEvent, 'terminology', {
+          webSearchMax: webMax,
+        }),
+        onBriefingProgress: async (p) => {
+          await emit(onEvent, {
+            type: 'briefing_progress',
+            current: p.current,
+            total: p.total,
+            detail: p.detail,
+          });
+        },
       });
       glossary = term.glossary;
       styleGuide = term.styleGuide;
       termTokens = term.tokensUsed;
+      await emit(onEvent, {
+        type: 'web_usage',
+        count: term.webSearchCount ?? 0,
+        max: webMax,
+      });
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') throw e;
       logger.error('Terminology tool agent failed, fallback single-shot:', e);
@@ -302,6 +368,7 @@ async function executeAgentTranslation(
     }
 
     tokensUsed += termTokens;
+    tokensTerminology += termTokens;
     job.glossary = glossary;
     job.styleGuide = styleGuide;
     job.stage = 'translate';
@@ -319,13 +386,36 @@ async function executeAgentTranslation(
       completedEntries: skipIds.size,
       totalEntries: entries.length,
       tokensDelta: termTokens,
-      statusText: `Agent：术语完成（${glossary.length}）· 开始分窗翻译`,
+      stage: 'translate',
+      statusText: `Agent：词表 ${glossary.length} 条 · 开始分窗翻译`,
     });
   } else {
+    // Resume from B1+: glossary/style already in IDB job and still used for
+    // window enforcement. Re-emit terminology_done so the process UI (memory-only
+    // agentRunStore) is not empty after refresh — job persists, UI did not.
+    await emit(onEvent, {
+      type: 'terminology_done',
+      glossary,
+      styleGuide,
+      tokensUsed: 0,
+    });
     await emit(onEvent, {
       type: 'stage',
       stage: 'translate',
-      detail: '从断点恢复…',
+      detail:
+        glossary.length > 0
+          ? `从断点恢复… 词表 ${glossary.length} 条（已加载）`
+          : '从断点恢复…',
+    });
+    await emit(onEvent, {
+      type: 'progress',
+      completedEntries: skipIds.size,
+      totalEntries: entries.length,
+      stage: 'translate',
+      statusText:
+        glossary.length > 0
+          ? `Agent：断点续跑 · 词表 ${glossary.length} · ${skipIds.size}/${entries.length}`
+          : `Agent：断点续跑 · ${skipIds.size}/${entries.length}`,
     });
   }
 
@@ -388,9 +478,17 @@ async function executeAgentTranslation(
 
     let translations: Array<{ index: number; text: string }> = [];
     let winTokens = 0;
+    let winTranslateTokens = 0;
+    let winQaTokens = 0;
     let qaFeedback: string | undefined;
 
-    // 覆盖率重试（对齐 AsrAgent retries=3）
+    // Window-local glossary: only enforce terms grounded in this window + context
+    const windowGlossary = filterGlossaryForWindow(
+      glossary,
+      textsFromSegments(windowSegments, contextBefore, contextAfter)
+    );
+
+    // 覆盖率重试（对齐 AsrAgent retries=3）；窗内 maxRounds 已收紧
     for (let attempt = 1; attempt <= 3; attempt++) {
       assertNotAborted(signal);
       const tr = await runTranslateWindowAgent({
@@ -400,15 +498,16 @@ async function executeAgentTranslation(
           contextBefore,
           contextAfter,
         },
-        glossary,
+        glossary: windowGlossary,
         styleGuide,
         config,
         signal,
         qaFeedback,
-        maxRounds: 24,
+        maxRounds: DEFAULT_TRANSLATE_MAX_ROUNDS,
         onTool: makeToolBridge(onEvent, 'translate'),
       });
       winTokens += tr.tokensUsed;
+      winTranslateTokens += tr.tokensUsed;
       translations = tr.translations;
       const expected = new Set(windowSegments.map((s) => s.index));
       const got = new Set(translations.filter((t) => t.text.trim()).map((t) => t.index));
@@ -454,6 +553,9 @@ async function executeAgentTranslation(
         completedEntries,
         totalEntries: entries.length,
         tokensDelta: tokensDelta && tokensDelta > 0 ? tokensDelta : undefined,
+        stage: 'translate',
+        currentWindow: win.windowIndex + 1,
+        totalWindows: windows.length,
         statusText: `Agent：${completedEntries}/${entries.length} · 窗 ${win.windowIndex + 1}/${windows.length}`,
       });
       return finalized;
@@ -463,91 +565,178 @@ async function executeAgentTranslation(
     const firstDelta = winTokens;
     await commitWindowTranslations(translations, firstDelta);
 
-    // 窗级 QA + critical 重译（对齐 AsrAgent qa_retries=2）
-    for (let qaAttempt = 1; qaAttempt <= 2; qaAttempt++) {
-      assertNotAborted(signal);
-      await emit(onEvent, {
-        type: 'stage',
-        stage: 'qa',
-        detail: `窗 ${win.windowIndex + 1} QA (${qaAttempt}/2)`,
-      });
-      const qa = await runWindowQaAgent({
-        segments: windowSegments,
-        translations,
-        glossary,
-        styleGuide,
-        config,
-        signal,
-        maxRounds: 16,
-        onTool: makeToolBridge(onEvent, 'qa'),
-      });
-      winTokens += qa.tokensUsed;
-      const critical = qa.issues.filter(
-        (i) => String(i.severity || '').toLowerCase() === 'critical'
-      ).length;
+    // 仅 risk：有确定性风险信号才跑 LLM QA
+    const risk = assessWindowRisk({
+      segments: windowSegments,
+      translations,
+      glossary: windowGlossary,
+    });
+
+    if (!risk.risk) {
+      qaWindowsSkipped += 1;
       await emit(onEvent, {
         type: 'qa_result',
         windowIndex: win.windowIndex,
-        critical,
-        total: qa.issues.length,
-        summary:
-          critical > 0
-            ? `窗 ${win.windowIndex + 1}：${critical} 条 critical，将重译`
-            : `窗 ${win.windowIndex + 1} QA 通过`,
+        critical: 0,
+        total: 0,
+        summary: `窗 ${win.windowIndex + 1}：低风险，跳过 LLM QA`,
       });
-      if (!hasCriticalIssues(qa.issues)) {
-        if (qa.tokensUsed > 0) {
-          await emit(onEvent, {
-            type: 'progress',
-            completedEntries: skipIds.size,
-            totalEntries: entries.length,
-            tokensDelta: qa.tokensUsed,
-            statusText: `Agent：${skipIds.size}/${entries.length} · 窗 ${win.windowIndex + 1}/${windows.length}`,
-          });
-        }
-        break;
-      }
-
-      const feedback = formatQaFeedback(qa.issues);
-      logger.info(
-        `Agent 窗 ${win.windowIndex} QA critical，重译 (${qaAttempt}/2)`,
-        feedback
-      );
-      const tr = await runTranslateWindowAgent({
-        window: {
-          windowIndex: win.windowIndex,
+    } else {
+      qaWindowsRun += 1;
+      // 窗级 QA + critical 重译（对齐 AsrAgent qa_retries=2）
+      for (let qaAttempt = 1; qaAttempt <= 2; qaAttempt++) {
+        assertNotAborted(signal);
+        await emit(onEvent, {
+          type: 'stage',
+          stage: 'qa',
+          detail: `窗 ${win.windowIndex + 1} QA (${qaAttempt}/2)`,
+        });
+        const qa = await runWindowQaAgent({
           segments: windowSegments,
-          contextBefore,
-          contextAfter,
-        },
-        glossary,
-        styleGuide,
-        config,
-        signal,
-        qaFeedback: feedback,
-        maxRounds: 24,
-        onTool: makeToolBridge(onEvent, 'translate'),
-      });
-      winTokens += tr.tokensUsed;
-      translations = tr.translations;
-      // 只把本轮新增消耗计入 tokensDelta，避免与首轮重复
-      await commitWindowTranslations(translations, tr.tokensUsed + qa.tokensUsed);
+          translations,
+          glossary: windowGlossary.length ? windowGlossary : glossary,
+          styleGuide,
+          config,
+          signal,
+          maxRounds: 16,
+          onTool: makeToolBridge(onEvent, 'qa'),
+        });
+        winTokens += qa.tokensUsed;
+        winQaTokens += qa.tokensUsed;
+        const critical = qa.issues.filter(
+          (i) => String(i.severity || '').toLowerCase() === 'critical'
+        ).length;
+        await emit(onEvent, {
+          type: 'qa_result',
+          windowIndex: win.windowIndex,
+          critical,
+          total: qa.issues.length,
+          summary:
+            critical > 0
+              ? `窗 ${win.windowIndex + 1}：${critical} 条 critical，将重译`
+              : `窗 ${win.windowIndex + 1} QA 通过`,
+        });
+        if (!hasCriticalIssues(qa.issues)) {
+          if (qa.tokensUsed > 0) {
+            await emit(onEvent, {
+              type: 'progress',
+              completedEntries: skipIds.size,
+              totalEntries: entries.length,
+              tokensDelta: qa.tokensUsed,
+              stage: 'qa',
+              currentWindow: win.windowIndex + 1,
+              totalWindows: windows.length,
+              statusText: `Agent：${skipIds.size}/${entries.length} · 窗 ${win.windowIndex + 1}/${windows.length}`,
+            });
+          }
+          break;
+        }
+
+        const feedback = formatQaFeedback(qa.issues);
+        logger.info(
+          `Agent 窗 ${win.windowIndex} QA critical，重译 (${qaAttempt}/2)`,
+          feedback
+        );
+        const tr = await runTranslateWindowAgent({
+          window: {
+            windowIndex: win.windowIndex,
+            segments: windowSegments,
+            contextBefore,
+            contextAfter,
+          },
+          glossary: windowGlossary,
+          styleGuide,
+          config,
+          signal,
+          qaFeedback: feedback,
+          maxRounds: DEFAULT_TRANSLATE_MAX_ROUNDS,
+          onTool: makeToolBridge(onEvent, 'translate'),
+        });
+        winTokens += tr.tokensUsed;
+        winTranslateTokens += tr.tokensUsed;
+        translations = tr.translations;
+        // 只把本轮新增消耗计入 tokensDelta，避免与首轮重复
+        await commitWindowTranslations(translations, tr.tokensUsed + qa.tokensUsed);
+      }
     }
 
     tokensUsed += winTokens;
+    tokensTranslate += winTranslateTokens;
+    tokensQa += winQaTokens;
     await emit(onEvent, { type: 'checkpoint', boundary: 'B2' });
   });
 
   await persistChain;
+
+  // Global terminology consistency (AsrAgent check_global_terminology)
+  if (config.agentGlobalTermCheck !== false && glossary.length) {
+    const sourceForCheck = allTranscript.map((e) => ({
+      index: e.index,
+      text: e.text || '',
+    }));
+    const translatedForCheck: Array<{ index: number; text: string }> = [];
+    for (const e of allTranscript) {
+      const id = e.entryId;
+      let text = '';
+      if (id != null) {
+        for (const map of Object.values(job.windowResults)) {
+          if (map[id]?.trim()) {
+            text = map[id];
+            break;
+          }
+        }
+      }
+      translatedForCheck.push({ index: e.index, text });
+    }
+    const termIssues = checkGlobalTerminology(
+      glossary,
+      sourceForCheck,
+      translatedForCheck
+    );
+    if (termIssues.length) {
+      logger.info(
+        `Agent global terminology issues: ${termIssues.length}`,
+        termIssues.slice(0, 5)
+      );
+      await emit(onEvent, {
+        type: 'terminology_issues',
+        issues: termIssues.map((i) => ({
+          index: i.index,
+          source: i.source,
+          canonicalTarget: i.canonicalTarget,
+          foundTarget: i.foundTarget.slice(0, 120),
+        })),
+      });
+      await emit(onEvent, {
+        type: 'progress',
+        completedEntries: skipIds.size,
+        totalEntries: entries.length,
+        stage: 'translate',
+        statusText: `Agent：一致性提示 ${termIssues.length} 处（未强制重译）`,
+      });
+    }
+  }
+
   job.stage = 'done';
   await persistJob();
   await emit(onEvent, { type: 'stage', stage: 'finalize' });
   await emit(onEvent, { type: 'checkpoint', boundary: 'B3' });
   await emit(onEvent, {
+    type: 'run_stats',
+    tokensTerminology,
+    tokensTranslate,
+    tokensQa,
+    tokensTotal: tokensUsed,
+    qaWindowsRun,
+    qaWindowsSkipped,
+    totalWindows: windows.length,
+  });
+  await emit(onEvent, {
     type: 'progress',
     completedEntries: entries.length,
     totalEntries: entries.length,
-    statusText: 'Agent：完成',
+    stage: 'finalize',
+    statusText: `Agent：完成 · 审校 ${qaWindowsRun} 跑/${qaWindowsSkipped} 跳`,
   });
   await emit(onEvent, { type: 'pipeline_end' });
   await clearAgentJob(taskId);

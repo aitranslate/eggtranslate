@@ -164,7 +164,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
 
   return (
     <div className={className ?? (isSidebar ? 'wb-task-list-root' : undefined)}>
-      {/* 侧栏：标题 + 操作同一行  [+] [全部开始] [导出] [清空] */}
+      {/* 侧栏：标题 + 操作同一行  [+] [开始] [导出] [清空] — 全是图标钮 */}
       {isSidebar && (
         <div className="wb-tasks-head">
           <div className="wb-tasks-head-main">
@@ -175,7 +175,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
             {onImport && (
               <button
                 type="button"
-                className="wb-tasks-import"
+                className="wb-icon-btn"
                 onClick={(e) => {
                   e.stopPropagation();
                   onImport();
@@ -194,13 +194,15 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                     e.stopPropagation();
                     handleStartAll();
                   }}
-                  className="wb-proj-list-btn primary"
+                  className="wb-icon-btn"
+                  title="全部开始"
+                  aria-label="全部开始"
                 >
-                  <Play className="h-3 w-3" />
-                  全部开始
+                  <Play className="h-3.5 w-3.5" />
                 </button>
                 <ExportButton
                   variant="icon"
+                  className="wb-icon-btn"
                   disabled={!hasFiles}
                   hasTranslation={hasAnyTranslated}
                   onSelect={handleExportAll}
@@ -212,7 +214,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                     e.stopPropagation();
                     void handleClearAll();
                   }}
-                  className="wb-tasks-export-btn"
+                  className="wb-icon-btn is-danger"
                   title="清空全部"
                   aria-label="清空全部"
                 >

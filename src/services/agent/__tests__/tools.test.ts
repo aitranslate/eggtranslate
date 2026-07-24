@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { dispatchTool } from '../tools/registry';
-import { coerceToolInt, parseToolArgs } from '../toolTypes';
+import {
+  coerceToolInt,
+  normalizeTranslationRows,
+  parseToolArgs,
+} from '../toolTypes';
 import type { AgentToolContext } from '../toolTypes';
 
 function baseCtx(over: Partial<AgentToolContext> = {}): AgentToolContext {
@@ -9,6 +13,9 @@ function baseCtx(over: Partial<AgentToolContext> = {}): AgentToolContext {
       { index: 1, text: 'Hello order block world', start: '0' },
       { index: 2, text: 'Another order block', start: '1' },
     ],
+    // Unit tests that only exercise submit shape skip soft web friction.
+    softWebNudge: false,
+    maxWebSearches: 0,
     ...over,
   };
 }
@@ -64,6 +71,65 @@ describe('agent tools', () => {
     expect(ctx.finalResult).toBeTruthy();
   });
 
+  it('submit_translation accepts stringified array (tool double-encode)', async () => {
+    // Real failure mode: model puts translations as a JSON string inside arguments
+    const ctx = baseCtx({
+      expectedIndices: new Set([1, 2]),
+      indexToSource: { 1: 'Hello', 2: 'World' },
+    });
+    const inner = JSON.stringify([
+      { index: 1, text: '你好' },
+      { index: 2, text: '世界' },
+    ]);
+    const r = await dispatchTool(
+      'submit_translation',
+      JSON.stringify({ translations: inner }),
+      ctx
+    );
+    expect(r.terminate).toBe(true);
+    expect(r.content).toMatch(/Accepted/);
+    expect(
+      (ctx.finalResult as { translations: Array<{ index: number; text: string }> })
+        .translations
+    ).toEqual([
+      { index: 1, text: '你好' },
+      { index: 2, text: '世界' },
+    ]);
+  });
+
+  it('submit_translation accepts index→text map packaging', async () => {
+    const ctx = baseCtx({
+      expectedIndices: new Set([1, 2]),
+      indexToSource: { 1: 'Hello', 2: 'World' },
+    });
+    const r = await dispatchTool(
+      'submit_translation',
+      JSON.stringify({
+        translations: { '1': '你好', '2': { text: '世界' } },
+      }),
+      ctx
+    );
+    expect(r.terminate).toBe(true);
+    const rows = (
+      ctx.finalResult as { translations: Array<{ index: number; text: string }> }
+    ).translations;
+    expect(rows.find((x) => x.index === 1)?.text).toBe('你好');
+    expect(rows.find((x) => x.index === 2)?.text).toBe('世界');
+  });
+
+  it('normalizeTranslationRows is content-first harness helper', () => {
+    const fromString = normalizeTranslationRows(
+      JSON.stringify([
+        { index: 1, text: '甲' },
+        { index: 2, translation: '乙' },
+      ])
+    );
+    expect(fromString).toEqual([
+      { index: 1, text: '甲' },
+      { index: 2, text: '乙' },
+    ]);
+  });
+
   it('submit_result accepts glossary', async () => {
     const ctx = baseCtx();
     const r = await dispatchTool(
@@ -76,6 +142,26 @@ describe('agent tools', () => {
     );
     expect(r.terminate).toBe(true);
     expect((ctx.finalResult as { glossary: unknown[] }).glossary).toHaveLength(1);
+  });
+
+  it('submit_result soft web nudge once when search usable', async () => {
+    const ctx = baseCtx({
+      softWebNudge: true,
+      maxWebSearches: 3,
+      webSearchCount: 0,
+      softWebNudgeFired: false,
+    });
+    const payload = JSON.stringify({
+      glossary: [{ source: 'Hello', target: '你好' }],
+      style_guide: 'Keep it short.',
+    });
+    const r1 = await dispatchTool('submit_result', payload, ctx);
+    expect(r1.terminate).toBe(false);
+    expect(r1.content).toMatch(/Not accepted/);
+    expect(ctx.lastToolOutcome?.nudge).toBe('web_soft');
+    expect(ctx.softWebNudgeFired).toBe(true);
+    const r2 = await dispatchTool('submit_result', payload, ctx);
+    expect(r2.terminate).toBe(true);
   });
 
   it('submit_qa_report accepts empty issues', async () => {

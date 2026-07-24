@@ -64,7 +64,7 @@ describe('lazy surface wiring', () => {
     );
     // 分隔符必须在 LazySurface 内，避免孤立「·」
     expect(src).toMatch(
-      /LazySurface\s+fallback=\{null\}[\s\S]*?hidden sm:inline[\s\S]*?LazyAgentProcessControl/
+      /LazySurface\s+fallback=\{null\}[\s\S]*?LazyAgentProcessControl/
     );
   });
 

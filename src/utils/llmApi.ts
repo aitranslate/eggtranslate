@@ -30,13 +30,20 @@ export type LLMToolSchema = {
   };
 };
 
+/** OpenAI-compatible tool_choice (string or named function). */
+export type LLMToolChoice =
+  | 'auto'
+  | 'none'
+  | 'required'
+  | { type: 'function'; function: { name: string } };
+
 interface CallLLMOptions {
   maxRetries?: number;
   temperature?: number;
   signal?: AbortSignal;
   /** Agent tool loop：传入后允许 content 为空并返回 tool_calls */
   tools?: LLMToolSchema[];
-  tool_choice?: 'auto' | 'none' | 'required';
+  tool_choice?: LLMToolChoice;
 }
 
 interface CallLLMStreamOptions extends CallLLMOptions {
@@ -92,6 +99,25 @@ function emptyContentError(finishReason: string): Error {
     '模型返回内容为空(content 为空)。该模型可能不兼容 OpenAI 格式，' +
       '或为推理模型将答案放在 reasoning_content 字段中。'
   );
+}
+
+/**
+ * Provider explicitly rejected tool_choice (forced/named function).
+ * Do not treat generic 400 (context length, bad schema, model id) as this.
+ */
+export function isToolChoiceRejectedMessage(message: string): boolean {
+  const m = (message || '').toLowerCase();
+  if (!m) return false;
+  if (m.includes('tool_choice') || m.includes('tool choice')) return true;
+  // e.g. "forced function call is not supported"
+  if (
+    (m.includes('forced') || m.includes('required')) &&
+    (m.includes('function') || m.includes('tool')) &&
+    (m.includes('not support') || m.includes('unsupported') || m.includes('invalid'))
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -170,12 +196,46 @@ export async function callLLM(
         body.tool_choice = tool_choice ?? 'auto';
       }
 
-      const response = await fetch(`${config.baseURL}/chat/completions`, {
+      let response = await fetch(`${config.baseURL}/chat/completions`, {
         method: 'POST',
         headers: buildHeaders(apiKey),
         body: JSON.stringify(body),
         signal
       });
+
+      // Some providers reject forced/named tool_choice — fall back to auto once.
+      // Only when the error clearly names tool_choice (not every HTTP 400).
+      if (
+        !response.ok &&
+        tools?.length &&
+        tool_choice &&
+        tool_choice !== 'auto' &&
+        tool_choice !== 'none'
+      ) {
+        const errPeek = await response
+          .clone()
+          .json()
+          .catch(() => ({ error: { message: response.statusText } }));
+        const msg = String(
+          (errPeek as { error?: { message?: string } })?.error?.message ||
+            response.statusText ||
+            ''
+        );
+        if (isToolChoiceRejectedMessage(msg)) {
+          logger.warn(
+            '[llmApi] tool_choice rejected by provider; retrying with auto',
+            msg.slice(0, 200)
+          );
+          body.tool_choice = 'auto';
+          // Same key/headers — do not rotate keys on tool_choice fallback
+          response = await fetch(`${config.baseURL}/chat/completions`, {
+            method: 'POST',
+            headers: buildHeaders(apiKey),
+            body: JSON.stringify(body),
+            signal,
+          });
+        }
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }));

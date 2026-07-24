@@ -1,5 +1,4 @@
-import type { FilePhases, ProgressPhase } from '@/types';
-import { isLongAgentNarrative } from '@/services/agent/agentRunStatus';
+import type { FilePhases, ProgressPhase, TranslationPath } from '@/types';
 
 export interface BadgeInfo {
   text: string;
@@ -9,7 +8,7 @@ export interface BadgeInfo {
 /**
  * 根据 phases 和 displayPhases 计算 badge 信息
  * 规则：
- * - 有 active 阶段 → "处理中" 蓝色（列表展示请用 resolveTaskCardStateText 去重）
+ * - 有 active 阶段 → "处理中" 蓝色（列表副标题不展示文案，只用 color 驱动圆点/色调）
  * - displayPhases 全部 completed → "已完成" 绿色
  * - displayPhases 部分 completed（最后一个完成阶段的名称）+ "完成" 蓝色
  * - 全 upcoming → "未开始" 灰色
@@ -82,31 +81,6 @@ export function getQueueBadge(queuePosition: number): BadgeInfo {
 }
 
 /**
- * 任务卡副标题状态文案：去掉与阶段 chip / 按钮重复的「处理中」。
- * - 有 Agent 短徽章 → 只显示 Agent·术语 / Agent·译 n/m
- * - 忙且无 Agent → 阶段名「翻译中」等（比笼统「处理中」更有信息）
- */
-export function resolveTaskCardStateText(opts: {
-  badgeText: string;
-  agentBadge?: string;
-  phases: FilePhases;
-}): string {
-  const agent =
-    opts.agentBadge && !isLongAgentNarrative(opts.agentBadge)
-      ? opts.agentBadge
-      : '';
-  if (agent) return agent;
-
-  if (opts.badgeText === '处理中') {
-    if (opts.phases.translating?.status === 'active') return '翻译中';
-    if (opts.phases.transcribing?.status === 'active') return '转录中';
-    if (opts.phases.converting?.status === 'active') return '转码中';
-    return '进行中';
-  }
-  return opts.badgeText;
-}
-
-/**
  * 主操作按钮在忙碌时的文案：不再写「处理中」（阶段 chip / 进度已表达）。
  * 保留「翻译」「转译」等动作名，禁用态即可。
  */
@@ -121,9 +95,35 @@ export function resolveBusyPrimaryLabel(opts: {
   if (!opts.isBusy) return opts.idleLabel;
   // 忙：显示原动作名（灰显），避免第三处「处理中」
   if (opts.isAudioVideo && !opts.isTranscriptionDone) return '转译';
-  return opts.idleLabel === '转译' || opts.idleLabel === '一键转译'
-    ? opts.idleLabel
-    : '翻译';
+  return opts.idleLabel === '转译' ? opts.idleLabel : '翻译';
+}
+
+/**
+ * 阶段 chip「翻译」文案：按**任务事实**，不跟全局开关瞎改历史。
+ *
+ * 优先级：
+ * 1. 已落库 translationPath（agent/batch）
+ * 2. 本任务 Agent 正在跑
+ * 3. 尚未写出 path 的 upcoming/active：才看全局 agentEnabled（即将走哪条路）
+ * 4. 默认「翻译」
+ */
+export function resolveTranslatePhaseLabel(opts: {
+  translationPath?: TranslationPath | null;
+  agentRunActive?: boolean;
+  agentEnabled?: boolean;
+  translatingStatus?: string | null;
+}): string {
+  if (opts.translationPath === 'agent') return 'Agent翻译';
+  if (opts.translationPath === 'batch') return '翻译';
+  if (opts.agentRunActive) return 'Agent翻译';
+  const st = opts.translatingStatus || '';
+  if (
+    (st === 'upcoming' || st === 'active') &&
+    opts.agentEnabled
+  ) {
+    return 'Agent翻译';
+  }
+  return '翻译';
 }
 
 /**

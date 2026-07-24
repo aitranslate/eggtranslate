@@ -97,4 +97,67 @@ describe('AgentProcessControl', () => {
       expect(screen.queryByTestId('agent-brain-panel')).toBeNull();
     });
   });
+
+  it('shows progress track, soft tool status, term issues, web chip', () => {
+    let s = runningStatus();
+    s = applyAgentEventToStatus(s, {
+      type: 'briefing_progress',
+      current: 1,
+      total: 2,
+      detail: '术语分析 1/2…',
+    });
+    s = applyAgentEventToStatus(s, { type: 'web_usage', count: 1, max: 3 });
+    s = applyAgentEventToStatus(s, {
+      type: 'tool_end',
+      name: 'submit_result',
+      argsSummary: '{}',
+      callId: 'soft1',
+      ok: false,
+      kind: 'submit_reject',
+      nudge: 'web_soft',
+      detail: 'Soft check once',
+      stage: 'terminology',
+    });
+    s = applyAgentEventToStatus(s, {
+      type: 'terminology_issues',
+      issues: [
+        {
+          index: 3,
+          source: 'Acme',
+          canonicalTarget: '艾克米',
+          foundTarget: 'Acme here',
+        },
+      ],
+    });
+    render(<AgentProcessControl status={s} visible />);
+    fireEvent.click(screen.getByTestId('agent-brain-trigger'));
+    expect(screen.getByTestId('agent-progress-track')).toBeTruthy();
+    expect(screen.getByTestId('agent-briefing-chip').textContent).toMatch(/1/);
+    expect(screen.getByTestId('agent-web-chip').textContent).toMatch(/搜索 1\/3/);
+    expect(screen.getByTestId('agent-term-issues').textContent).toMatch(/艾克米/);
+    fireEvent.click(screen.getByTestId('agent-tab-tools'));
+    expect(screen.getByTestId('agent-tools-tab').textContent).toMatch(/软提示/);
+  });
+
+  it('shows stage token breakdown and QA skip chips after run_stats', () => {
+    let s = runningStatus();
+    s = applyAgentEventToStatus(s, {
+      type: 'run_stats',
+      tokensTerminology: 12,
+      tokensTranslate: 34,
+      tokensQa: 5,
+      tokensTotal: 51,
+      qaWindowsRun: 1,
+      qaWindowsSkipped: 2,
+      totalWindows: 3,
+    });
+    render(<AgentProcessControl status={s} visible />);
+    fireEvent.click(screen.getByTestId('agent-brain-trigger'));
+    expect(screen.getByTestId('agent-token-breakdown-chip').textContent).toMatch(
+      /12\/34\/5/
+    );
+    expect(screen.getByTestId('agent-qa-skip-chip').textContent).toMatch(
+      /1跑\/2跳/
+    );
+  });
 });

@@ -125,6 +125,30 @@ html.dark {
   min-width: 0;
 }
 
+.wb-brand-logo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 6px;
+  line-height: 0;
+  transform-origin: 50% 70%;
+  outline: none;
+}
+
+.wb-brand-logo-btn:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--wb-brand) 45%, transparent);
+}
+
+.wb-brand-logo-btn:active {
+  transform: scale(0.92);
+}
+
 .wb-brand-logo {
   width: 20px;
   height: 20px;
@@ -132,6 +156,37 @@ html.dark {
   flex-shrink: 0;
   object-fit: contain;
   display: block;
+  pointer-events: none;
+  user-select: none;
+}
+
+.wb-brand-logo-btn.is-shake {
+  animation: wb-logo-shake 0.6s ease-in-out both;
+}
+
+@keyframes wb-logo-shake {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+  10% {
+    transform: translate3d(-4px, 0, 0) rotate(-18deg) scale(1.18);
+  }
+  25% {
+    transform: translate3d(5px, -1px, 0) rotate(16deg) scale(1.14);
+  }
+  40% {
+    transform: translate3d(-4px, 1px, 0) rotate(-12deg) scale(1.1);
+  }
+  55% {
+    transform: translate3d(3px, 0, 0) rotate(9deg) scale(1.06);
+  }
+  70% {
+    transform: translate3d(-2px, 0, 0) rotate(-5deg) scale(1.03);
+  }
+  85% {
+    transform: translate3d(1px, 0, 0) rotate(2deg) scale(1.01);
+  }
 }
 
 .wb-brand-title {
@@ -221,6 +276,27 @@ html.dark {
   color: var(--apple-warning, #ff9500);
 }
 
+/* 设置等图标钮右上角状态点 */
+.wb-nav-btn-icon .wb-nav-status-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--wb-bg);
+  pointer-events: none;
+}
+
+.wb-nav-status-dot.is-ok {
+  background: var(--apple-success, #34c759);
+}
+
+.wb-nav-status-dot.is-warn {
+  background: var(--apple-warning, #ff9500);
+}
+
+/* 遗留：文案钮旁的小圆点（若仍有引用） */
 .wb-nav-dot {
   width: 5px;
   height: 5px;
@@ -230,7 +306,7 @@ html.dark {
 }
 
 .wb-nav-btn.warn .wb-nav-dot {
-  background: var(--apple-danger, #ff3b30);
+  background: var(--apple-warning, #ff9500);
 }
 
 .wb-nav-badge {
@@ -306,7 +382,7 @@ html.dark {
   flex-shrink: 0;
 }
 
-/* 右侧操作组：+ → 全部开始 → 导出 → 清空 */
+/* 右侧操作组：+ → 开始 → 导出 → 清空（统一图标钮） */
 .wb-tasks-actions {
   display: flex;
   align-items: center;
@@ -334,35 +410,67 @@ html.dark {
   font-variant-numeric: tabular-nums;
 }
 
-/* 侧栏导入 / 导出图标：与列表按钮同高 */
+/*
+ * 侧栏 / 任务行图标钮（26×26）
+ * 中性态对齐顶栏主题/音效（.wb-nav-btn）：透明底 → hover --wb-panel-2
+ * .is-danger：删除/清空保持浅红 hover（不变）
+ */
+.wb-icon-btn,
 .wb-tasks-import,
-.wb-tasks-export-btn {
+.wb-tasks-export-btn,
+.wb-proj-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 26px;
   height: 26px;
   flex-shrink: 0;
-  border: 1px solid var(--wb-border);
+  border: 1px solid transparent;
   border-radius: 6px;
-  background: var(--wb-panel-2);
+  background: transparent;
   color: var(--wb-text-2);
   cursor: pointer;
   padding: 0;
+  box-shadow: none;
   transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
+    background-color 0.12s ease,
+    color 0.12s ease;
 }
 
-.wb-tasks-import:hover,
-.wb-tasks-export-btn:hover:not(:disabled) {
-  background: var(--wb-brand-soft);
-  border-color: var(--wb-brand);
-  color: var(--wb-brand);
+/* 中性 hover = 右上角主题/音效同一套 */
+.wb-icon-btn:hover:not(:disabled),
+.wb-tasks-import:hover:not(:disabled),
+.wb-tasks-export-btn:hover:not(:disabled),
+.wb-proj-icon-btn:hover:not(:disabled) {
+  background: var(--wb-panel-2);
+  color: var(--wb-text);
 }
 
-.wb-tasks-export-btn:disabled {
+/* 任务行幽灵：图标略淡，hover 仍走上方中性规则 */
+.wb-icon-btn.is-ghost,
+.wb-proj-icon-btn {
+  color: var(--wb-text-3);
+}
+
+.wb-icon-btn.is-ghost:hover:not(:disabled),
+.wb-proj-icon-btn:hover:not(:disabled) {
+  color: var(--wb-text);
+}
+
+/* 删除 / 清空：危险 hover 保留 */
+.wb-icon-btn.is-danger:hover:not(:disabled),
+.wb-tasks-export-btn.is-danger:hover:not(:disabled),
+.wb-icon-btn.is-ghost.is-danger:hover:not(:disabled),
+.wb-proj-icon-btn.danger:hover:not(:disabled),
+.wb-proj-icon-btn.is-danger:hover:not(:disabled) {
+  background: var(--apple-danger-soft, rgba(255, 59, 48, 0.1));
+  color: var(--apple-danger, #ff3b30);
+}
+
+.wb-icon-btn:disabled,
+.wb-tasks-import:disabled,
+.wb-tasks-export-btn:disabled,
+.wb-proj-icon-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
@@ -730,7 +838,7 @@ html.dark .wb-proj-tool.primary:disabled,
 .wb-proj-hover-acts {
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
   opacity: 0;
   transform: translateX(3px);
   transition:
@@ -744,29 +852,6 @@ html.dark .wb-proj-tool.primary:disabled,
   opacity: 1;
   transform: translateX(0);
   pointer-events: auto;
-}
-
-.wb-proj-icon-btn {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--wb-text-3);
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
-}
-
-.wb-proj-icon-btn:hover {
-  background: var(--wb-panel);
-  color: var(--wb-text);
-}
-
-.wb-proj-icon-btn.danger:hover {
-  background: var(--apple-danger-soft, #fff5f5);
-  color: var(--apple-danger, #ff3b30);
 }
 
 .wb-proj-rail {
@@ -3230,6 +3315,22 @@ html.dark .wb-chip-btn.is-active,
   background: color-mix(in srgb, var(--apple-danger, #ef4444) 12%, transparent);
 }
 
+.agent-progress-track {
+  height: 3px;
+  margin: 0 14px 8px;
+  border-radius: 99px;
+  background: var(--wb-panel-2);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.agent-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--wb-brand, var(--apple-blue));
+  transition: width 0.35s ease;
+}
+
 .agent-drawer-stats {
   display: flex;
   flex-wrap: wrap;
@@ -3481,8 +3582,76 @@ html.dark .wb-chip-btn.is-active,
   border-color: color-mix(in srgb, var(--apple-danger, #ef4444) 35%, var(--wb-border));
 }
 
+.agent-tool-item.is-soft {
+  border-color: color-mix(in srgb, var(--apple-warning, #ff9500) 40%, var(--wb-border));
+  background: color-mix(in srgb, var(--apple-warning, #ff9500) 6%, var(--wb-panel));
+}
+
 .agent-tool-item.is-pending {
   opacity: 0.85;
+  border-style: dashed;
+}
+
+.agent-stat-chip.is-muted {
+  opacity: 0.7;
+}
+
+.agent-term-issue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.agent-term-issue-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  align-items: baseline;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--wb-panel-2);
+}
+
+.agent-term-issue-idx {
+  font-family: var(--wb-font-mono);
+  color: var(--wb-text-3);
+  font-size: 11px;
+}
+
+.agent-term-issue-src {
+  font-weight: 600;
+  color: var(--wb-text);
+}
+
+.agent-term-issue-arrow {
+  color: var(--wb-text-3);
+}
+
+.agent-term-issue-tgt {
+  color: var(--wb-text-2);
+}
+
+.agent-term-issue-hint {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--wb-text-3);
+}
+
+/* 移动端顶栏：过程控件可略宽 */
+@media (max-width: 899px) {
+  .agent-proc-trigger {
+    max-width: min(200px, 56vw);
+  }
+  .agent-drawer {
+    width: 100vw;
+  }
 }
 
 .agent-tool-row,
@@ -3691,16 +3860,6 @@ html.dark .wb-chip-btn.is-active,
   line-height: 1.4;
   color: var(--apple-danger, #ef4444);
   word-break: break-word;
-}
-
-.wb-proj-agent-badge,
-.m-task-agent-badge,
-.wb-proj-state.is-agent,
-.m-task-state.is-agent {
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--wb-brand);
-  white-space: nowrap;
 }
 
 html.dark .agent-drawer,

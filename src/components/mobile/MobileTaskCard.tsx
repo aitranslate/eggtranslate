@@ -7,11 +7,10 @@ import toast from 'react-hot-toast';
 import { ChevronRight, Copy, FileText, Music, Video, Loader2 } from 'lucide-react';
 import type { SubtitleFileMetadata } from '@/types';
 import { ALL_PHASES } from '@/types';
-import { getCardBadge, resolveTaskCardStateText } from '@/utils/badgeHelper';
+import { getCardBadge } from '@/utils/badgeHelper';
 import { getFailedPhaseError, shouldShowTaskErrorDetail } from '@/utils/uxHelpers';
 import { copyToClipboard } from '@/utils/appToast';
 import { formatFileSize, formatDuration } from '@/components/SubtitleFileList/utils/fileHelpers';
-import { useAgentRunStore } from '@/stores/agentRunStore';
 
 interface MobileTaskCardProps {
   file: SubtitleFileMetadata;
@@ -41,12 +40,6 @@ export const MobileTaskCard = memo(function MobileTaskCard({
   }, [file.fileType]);
 
   const badge = getCardBadge(file.phases, displayPhases, isQueued, queuePosition);
-  const agentBadge = useAgentRunStore((s) => s.byFileId[file.id]?.compactBadge ?? '');
-  const stateText = resolveTaskCardStateText({
-    badgeText: badge.text,
-    agentBadge,
-    phases: file.phases,
-  });
   const pct =
     (file.entryCount ?? 0) > 0
       ? Math.round(((file.translatedCount ?? 0) / (file.entryCount ?? 1)) * 100)
@@ -117,27 +110,9 @@ export const MobileTaskCard = memo(function MobileTaskCard({
       <div className="m-task-body">
         <div className="m-task-title">{file.name}</div>
         <div className="m-task-sub">
+          {/* 状态交给阶段 chip / 进度条，副标题只放元信息 */}
           <span className={`m-task-dot tone-${tone}`} aria-hidden />
-          {stateText ? (
-            <span
-              className={`m-task-state tone-${tone}${
-                agentBadge && stateText === agentBadge ? ' is-agent' : ''
-              }`}
-              data-testid={
-                agentBadge && stateText === agentBadge
-                  ? 'task-agent-badge'
-                  : undefined
-              }
-            >
-              {stateText}
-            </span>
-          ) : null}
-          {meta ? (
-            <span className="m-task-meta">
-              {stateText ? ' · ' : ''}
-              {meta}
-            </span>
-          ) : null}
+          {meta ? <span className="m-task-meta">{meta}</span> : null}
         </div>
         {isFailed && shouldShowTaskErrorDetail(failedInfo) && failedInfo && (
           <div

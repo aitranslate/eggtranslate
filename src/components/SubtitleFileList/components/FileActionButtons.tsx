@@ -88,14 +88,14 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
         ? true
         : !canTranscribeAndTranslate && !canTranslate;
 
-  // 主按钮文案：忙时不写「处理中」（阶段 stepper 已转圈）
+  // 主按钮文案：与侧栏一致（转译 / 翻译），忙时不写「处理中」
   const primaryLabel = isQueued
     ? '取消排队'
     : allPhasesDone
-      ? '一键转译'
+      ? '已完成'
       : isAudioVideo && !isTranscriptionDone
-        ? '一键转译'
-        : '开始翻译';
+        ? '转译'
+        : '翻译';
 
   const padY = 'pt-3 md:pt-4';
   const btnPad = 'px-4 py-2 text-sm';
@@ -119,6 +119,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
         </button>
         <ExportButton
           variant="icon"
+          className={`flex items-center justify-center ${iconBtn} rounded-md transition-all duration-200 hover:bg-gray-100 text-gray-500 hover:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed`}
           disabled={(file.entryCount ?? 0) === 0 || isBusy}
           hasTranslation={(file.translatedCount ?? 0) > 0}
           onSelect={onExportFormat}

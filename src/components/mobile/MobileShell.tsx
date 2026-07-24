@@ -83,6 +83,14 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
     if (next) playAppSound('confirm');
   }, [setSoundEnabled]);
 
+  const [logoShake, setLogoShake] = useState(false);
+  const shakeBrandLogo = useCallback(() => {
+    setLogoShake(false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setLogoShake(true));
+    });
+  }, []);
+
   useEffect(() => {
     if (settingsOpen) setSettingsMounted(true);
   }, [settingsOpen]);
@@ -167,14 +175,23 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
               <ArrowLeft className="h-5 w-5" />
             </button>
           ) : (
-            <img
-              src="/favicon.svg"
-              alt=""
-              width={28}
-              height={28}
-              className="m-logo"
-              draggable={false}
-            />
+            <button
+              type="button"
+              className={`m-logo-btn${logoShake ? ' is-shake' : ''}`}
+              title="点我晃一晃"
+              aria-label="蛋蛋"
+              onClick={shakeBrandLogo}
+              onAnimationEnd={() => setLogoShake(false)}
+            >
+              <img
+                src="/favicon.svg"
+                alt=""
+                width={28}
+                height={28}
+                className="m-logo"
+                draggable={false}
+              />
+            </button>
           )}
           <div className="m-top-titles">
             <h1 className="m-top-title">{title}</h1>

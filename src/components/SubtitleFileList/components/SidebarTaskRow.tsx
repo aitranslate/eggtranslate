@@ -23,7 +23,7 @@ import { useFilesStore } from '@/stores/filesStore';
 import {
   getCardBadge,
   resolveBusyPrimaryLabel,
-  resolveTaskCardStateText,
+  resolveTranslatePhaseLabel,
 } from '@/utils/badgeHelper';
 import {
   calcDisplayTranslationProgress,
@@ -37,6 +37,7 @@ import { ExportButton } from '@/components/common/ExportButton';
 import { copyToClipboard } from '@/utils/appToast';
 import { getFailedPhaseError, shouldShowTaskErrorDetail } from '@/utils/uxHelpers';
 import { formatFileSize, formatDuration } from '../utils/fileHelpers';
+import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { useAgentRunStore } from '@/stores/agentRunStore';
 
 interface SidebarTaskRowProps {
@@ -76,6 +77,17 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
 }) => {
   const keytermGroups = useTranscriptionStore((s) => s.keytermGroups);
   const setSelectedKeytermGroupId = useFilesStore((s) => s.setSelectedKeytermGroupId);
+  const agentTranslationEnabled = useTranslationConfigStore(
+    (s) => Boolean(s.config.agentTranslationEnabled)
+  );
+  const agentRunActive = useAgentRunStore((s) => Boolean(s.byFileId[file.id]?.active));
+  /** 阶段 chip 按任务路径/运行态；主按钮仍固定「翻译 / 转译」 */
+  const phaseTranslateLabel = resolveTranslatePhaseLabel({
+    translationPath: file.translationPath,
+    agentRunActive,
+    agentEnabled: agentTranslationEnabled,
+    translatingStatus: file.phases.translating?.status,
+  });
 
   const displayPhases = useMemo(() => {
     return file.fileType === 'srt'
@@ -89,12 +101,6 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
   );
 
   const badge = getCardBadge(file.phases, displayPhases, isQueued, queuePosition);
-  const agentBadge = useAgentRunStore((s) => s.byFileId[file.id]?.compactBadge ?? '');
-  const stateText = resolveTaskCardStateText({
-    badgeText: badge.text,
-    agentBadge,
-    phases: file.phases,
-  });
   // 侧栏进度轨与流式可见行同步（不写 filesStore）
   const streamOverlay = useStreamingOverlayStore(
     (s) => s.overlays[file.id] ?? EMPTY_STREAMING_OVERLAY
@@ -251,32 +257,9 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
             {file.name}
           </div>
           <div className="wb-proj-sub">
+            {/* 状态交给下方阶段 chip / 进度条，副标题只放元信息 */}
             <span className={`wb-proj-dot tone-${statusTone}`} aria-hidden />
-            {stateText ? (
-              <span
-                className={`wb-proj-state tone-${statusTone}${
-                  agentBadge && stateText === agentBadge ? ' is-agent' : ''
-                }`}
-                data-testid={
-                  agentBadge && stateText === agentBadge
-                    ? 'task-agent-badge'
-                    : undefined
-                }
-                title={
-                  agentBadge && stateText === agentBadge
-                    ? 'Agent 翻译阶段'
-                    : undefined
-                }
-              >
-                {stateText}
-              </span>
-            ) : null}
-            {metaLine ? (
-              <span className="wb-proj-meta">
-                {stateText ? ' · ' : ''}
-                {metaLine}
-              </span>
-            ) : null}
+            {metaLine ? <span className="wb-proj-meta">{metaLine}</span> : null}
           </div>
         </div>
 
@@ -285,13 +268,14 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
           <div className="wb-proj-hover-acts">
             <ExportButton
               variant="icon"
+              className="wb-icon-btn is-ghost"
               disabled={(file.entryCount ?? 0) === 0 || isBusy}
               hasTranslation={(file.translatedCount ?? 0) > 0}
               onSelect={(fmt) => onExportFormat(file, fmt)}
             />
             <button
               type="button"
-              className="wb-proj-icon-btn danger"
+              className="wb-icon-btn is-ghost is-danger"
               title="删除"
               onClick={() => void onDelete(file)}
             >
@@ -334,14 +318,14 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
         </div>
       )}
 
-      {/* 选中展开：客户端工具条，非 Web 大按钮区 */}
-      <div className="wb-proj-panel" onClick={(e) => e.stopPropagation()}>
+      {/* 选中展开：阶段 chip / 空白可点选整卡；仅表单控件拦截冒泡 */}
+      <div className="wb-proj-panel">
         <div className="wb-proj-panel-inner">
           <div className="wb-proj-phases">
             {displayPhases.map((phase) => {
               const st = file.phases[phase]?.status;
               const err = file.phases[phase]?.errorMessage;
-              const label = phase === 'transcribing' ? '识别' : '翻译';
+              const label = phase === 'transcribing' ? '识别' : phaseTranslateLabel;
               return (
                 <span
                   key={phase}
@@ -377,7 +361,10 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
 
           <div className="wb-proj-toolbar">
             {isAudioVideo && keytermGroups.length > 0 && (
-              <label className="wb-proj-keyterm">
+              <label
+                className="wb-proj-keyterm"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <span>热词</span>
                 <select
                   value={file.selectedKeytermGroupId ?? ''}
@@ -404,7 +391,10 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
                 className="wb-proj-tool"
                 disabled={!canTranscribe}
                 title={isTranscribeFailed ? '重新转录' : '仅转录'}
-                onClick={() => void onTranscribe(file.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void onTranscribe(file.id);
+                }}
               >
                 <Mic className="w-3.5 h-3.5 shrink-0" />
                 <span>{transcribeLabel}</span>
@@ -444,6 +434,8 @@ export const SidebarTaskRowMemo = memo(SidebarTaskRow, (prev, next) => {
     'tokensUsed',
     'selectedKeytermGroupId',
     'fileType',
+    // phase chip label: agent vs batch
+    'translationPath',
   ];
   for (const k of keys) {
     if (prev.file[k] !== next.file[k]) return false;

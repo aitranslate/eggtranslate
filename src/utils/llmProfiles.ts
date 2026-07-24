@@ -107,5 +107,10 @@ export function ensureProfiles(config: TranslationConfig): TranslationConfig {
     agentTranslationEnabled: config.agentTranslationEnabled ?? false,
     agentWindowSize: config.agentWindowSize ?? 30,
     agentMaxConcurrency: config.agentMaxConcurrency ?? 3,
+    agentForceAllUserTerms: config.agentForceAllUserTerms ?? false,
+    agentMaxWebSearches: config.agentMaxWebSearches ?? 3,
+    agentSoftWebNudge: config.agentSoftWebNudge ?? true,
+    agentExpandUserTerms: config.agentExpandUserTerms ?? true,
+    agentGlobalTermCheck: config.agentGlobalTermCheck ?? true,
   };
 }

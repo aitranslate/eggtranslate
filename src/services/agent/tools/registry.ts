@@ -6,11 +6,16 @@ import type { LLMToolSchema } from '@/utils/llmApi';
 import {
   asGlossary,
   coerceToolInt,
+  inferToolOutcome,
+  normalizeTranslationRows,
   parseToolArgs,
+  toolDone,
   toolErr,
   toolOk,
+  toolReject,
   type AgentToolContext,
   type ToolHandler,
+  type ToolOutcome,
   type ToolResult,
 } from '../toolTypes';
 import { DEFAULT_MAX_SEARCHES, parallelWebSearch } from './parallelSearch';
@@ -198,50 +203,63 @@ const submitResult: ToolHandler = (params, ctx) => {
     return toolErr('Provide non-empty style_guide and/or glossary entries.');
   }
 
+  // Soft web nudge (AsrAgent): once when glossary non-empty, search usable, 0 searches.
+  const maxWeb = ctx.maxWebSearches ?? DEFAULT_MAX_SEARCHES;
+  const softOn = ctx.softWebNudge !== false;
+  const usedWeb = ctx.webSearchCount ?? 0;
+  if (
+    softOn &&
+    maxWeb > 0 &&
+    glossary.length > 0 &&
+    usedWeb < 1 &&
+    !ctx.softWebNudgeFired
+  ) {
+    ctx.softWebNudgeFired = true;
+    return toolReject(
+      'Soft check (once): glossary has entries but web_search was not used. ' +
+        'If any proper name/abbreviation still has an uncertain conventional target, ' +
+        'call web_search (short query), fold findings into target/note, then submit_result. ' +
+        'If every target is already certain, call submit_result again to accept.',
+      'web_soft'
+    );
+  }
+
   ctx.finalResult = {
     glossary,
     style_guide:
       styleGuide ||
       'Translate naturally and keep terminology consistent throughout the video.',
   };
-  return {
-    content: `Accepted submit_result: glossary=${glossary.length}, style_guide_len=${styleGuide.length}`,
-    terminate: true,
-  };
+  return toolDone(
+    `Accepted submit_result: glossary=${glossary.length}, style_guide_len=${styleGuide.length}`
+  );
 };
 
 const submitTranslation: ToolHandler = (params, ctx) => {
-  let raw = params.translations;
-  if (raw === undefined && Array.isArray(params.items)) raw = params.items;
-  if (!Array.isArray(raw)) {
-    return toolErr(
-      'translations must be a JSON array of {index, text}.',
-      '{"translations":[{"index":1,"text":"..."}]}'
-    );
+  // Prefer explicit fields; also accept the whole params object as a map form.
+  let raw: unknown = params.translations;
+  if (raw === undefined) raw = params.items;
+  if (raw === undefined) raw = params.segments;
+  if (raw === undefined && (params.index != null || params.text != null)) {
+    raw = [params];
+  }
+  // If model put rows at top-level numeric keys only
+  if (raw === undefined) {
+    const keys = Object.keys(params);
+    if (keys.length && keys.every((k) => /^-?\d+$/.test(k))) {
+      raw = params;
+    }
   }
 
   const expected = ctx.expectedIndices ?? new Set<number>();
-  const cleaned: Array<{ index: number; text: string }> = [];
-  const seen = new Set<number>();
-  const duplicates: number[] = [];
+  const cleaned = normalizeTranslationRows(raw, { expectedIndices: expected });
 
-  for (const item of raw) {
-    if (!item || typeof item !== 'object') continue;
-    const o = item as Record<string, unknown>;
-    const idx = coerceInt(o.index);
-    if (idx === null) continue;
-    const text = String(o.text ?? '').trim();
-    if (seen.has(idx)) {
-      duplicates.push(idx);
-      continue;
-    }
-    seen.add(idx);
-    cleaned.push({ index: idx, text });
-  }
-
-  if (duplicates.length) {
+  if (!cleaned.length) {
     return toolErr(
-      `duplicate indices: ${duplicates.join(', ')}. Resubmit FULL set with one row per index.`
+      'Could not recover any translations from submit payload. ' +
+        'Include every required index with non-empty text ' +
+        '(array of {index,text}, JSON-stringified array, or index→text map are all OK).',
+      '{"translations":[{"index":1,"text":"..."},{"index":2,"text":"..."}]}'
     );
   }
 
@@ -256,18 +274,26 @@ const submitTranslation: ToolHandler = (params, ctx) => {
   const missing = [...expected].filter((i) => !submitted.has(i)).sort((a, b) => a - b);
   const unexpected = [...submitted].filter((i) => !expected.has(i)).sort((a, b) => a - b);
 
+  // Gate on coverage (content), not packaging form.
   if (missing.length || unexpected.length) {
     const src = ctx.indexToSource || {};
     const missLines = missing
-      .slice(0, 12)
-      .map((i) => `  [${i}] ${src[i] || '(no source)'}`)
+      .slice(0, 20)
+      .map((i) => {
+        const line = (src[i] || '').trim() || '(no source)';
+        const preview = line.length > 80 ? `${line.slice(0, 77)}…` : line;
+        return `  [${i}] ${preview}`;
+      })
       .join('\n');
+    const more =
+      missing.length > 20 ? `\n  … +${missing.length - 20} more missing` : '';
     return toolErr(
       [
+        'Coverage incomplete — resubmit FULL translations for every required index.',
         unexpected.length ? `Unexpected indices: ${unexpected.join(', ')}` : '',
-        missing.length ? `Missing indices: ${missing.join(', ')}` : '',
-        missLines ? `Missing sources:\n${missLines}` : '',
-        'Resubmit the COMPLETE translations array for this window only.',
+        missing.length ? `Missing indices (${missing.length}): ${missing.join(', ')}` : '',
+        missLines ? `Missing source lines:\n${missLines}${more}` : '',
+        `Recovered ${cleaned.length} row(s) from payload.`,
       ]
         .filter(Boolean)
         .join('\n')
@@ -275,10 +301,7 @@ const submitTranslation: ToolHandler = (params, ctx) => {
   }
 
   ctx.finalResult = { translations: cleaned };
-  return {
-    content: `Accepted submit_translation: ${cleaned.length} segments.`,
-    terminate: true,
-  };
+  return toolDone(`Accepted submit_translation: ${cleaned.length} segments.`);
 };
 
 const VALID_SEVERITIES = new Set(['critical', 'warning', 'info']);
@@ -328,10 +351,7 @@ const submitQaReport: ToolHandler = (params, ctx) => {
     );
   }
   ctx.finalResult = { issues: cleaned };
-  return {
-    content: `Accepted submit_qa_report: ${cleaned.length} issue(s).`,
-    terminate: true,
-  };
+  return toolDone(`Accepted submit_qa_report: ${cleaned.length} issue(s).`);
 };
 
 const HANDLERS: Record<string, ToolHandler> = {
@@ -434,20 +454,29 @@ export const BRIEFING_TOOL_SCHEMAS: LLMToolSchema[] = [
 export const TRANSLATION_TOOL_SCHEMAS: LLMToolSchema[] = [
   schema(
     'submit_translation',
-    'Submit FINAL translation for this window. translations: full list of {index,text} for EVERY required index.',
+    'Submit FINAL translation for this window. Cover EVERY required index. Prefer array of {index,text}; harness also recovers stringified JSON arrays and index→text maps.',
     {
       type: 'object',
       properties: {
         translations: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              index: { type: 'integer' },
-              text: { type: 'string' },
+          description:
+            'Preferred: [{index, text}, ...]. Stringified JSON array or index→text object also accepted by harness.',
+          // array | string | object — providers that only honor "array" still work;
+          // double-encoded string is recovered in normalizeTranslationRows.
+          anyOf: [
+            {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  index: { type: 'integer' },
+                  text: { type: 'string' },
+                },
+              },
             },
-            required: ['index', 'text'],
-          },
+            { type: 'string' },
+            { type: 'object' },
+          ],
         },
       },
       required: ['translations'],
@@ -497,16 +526,43 @@ export async function dispatchTool(
   argsJson: string,
   ctx: AgentToolContext
 ): Promise<ToolResult> {
+  ctx.lastToolOutcome = undefined;
   const handler = HANDLERS[name];
   if (!handler) {
-    return toolErr(
+    const r = toolErr(
       `Unknown tool '${name}'. Available: ${Object.keys(HANDLERS).join(', ')}`
     );
+    ctx.lastToolOutcome = {
+      ok: false,
+      terminate: false,
+      kind: 'tool_error',
+      repairable: true,
+    };
+    return r;
   }
   const args = parseToolArgs(argsJson);
   try {
-    return await handler(args, ctx);
+    const result = await handler(args, ctx);
+    const inferred = inferToolOutcome(result.content, result.terminate);
+    const outcome: ToolOutcome = {
+      ...inferred,
+      ...(result.outcome || {}),
+      ok: result.outcome?.ok ?? inferred.ok,
+      terminate: result.terminate,
+      kind: result.outcome?.kind ?? inferred.kind,
+      repairable: result.outcome?.repairable ?? inferred.repairable,
+      nudge: result.outcome?.nudge ?? inferred.nudge ?? null,
+    };
+    ctx.lastToolOutcome = outcome;
+    return result;
   } catch (e) {
-    return toolErr(e instanceof Error ? e.message : String(e));
+    const r = toolErr(e instanceof Error ? e.message : String(e));
+    ctx.lastToolOutcome = {
+      ok: false,
+      terminate: false,
+      kind: 'tool_error',
+      repairable: true,
+    };
+    return r;
   }
 }

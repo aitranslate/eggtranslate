@@ -26,6 +26,11 @@ interface ExportButtonProps {
   onSelect: (format: ExportFormat) => void;
   /** 图标按钮 hover 提示（默认「导出」） */
   title?: string;
+  /**
+   * 图标变体 class。
+   * 默认顶栏框钮；任务行用 `wb-icon-btn is-ghost`（透明，hover 有底+边）。
+   */
+  className?: string;
 }
 
 export const ExportButton: React.FC<ExportButtonProps> = ({
@@ -34,6 +39,7 @@ export const ExportButton: React.FC<ExportButtonProps> = ({
   hasTranslation = true,
   onSelect,
   title = '导出',
+  className,
 }) => {
   const [open, setOpen] = useState(false);
   const [currentFormat, setCurrentFormat] = useState<ExportFormat>(() => readLastExportFormat());
@@ -60,7 +66,7 @@ export const ExportButton: React.FC<ExportButtonProps> = ({
     setOpen((prev) => !prev);
   };
 
-  // 图标变体：导出按钮（侧栏工具条 / 任务行）
+  // 图标变体：导出按钮（顶栏工具条默认灰底；任务行可传 ghost 类）
   if (variant === 'icon') {
     return (
       <div className="relative inline-flex" onClick={(e) => e.stopPropagation()}>
@@ -68,7 +74,7 @@ export const ExportButton: React.FC<ExportButtonProps> = ({
           ref={buttonRef}
           onClick={toggleMenu}
           disabled={disabled}
-          className="wb-tasks-export-btn"
+          className={className || 'wb-icon-btn'}
           title={title}
           aria-label={title}
         >

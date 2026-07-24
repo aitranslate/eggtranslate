@@ -245,17 +245,11 @@ async function main() {
   else if (summary.length > 40) fail(`stage summary too long: ${summary.length}`);
   else ok(`stage summary short: ${summary}`);
 
-  const badgeCount = countSel('[data-testid="task-agent-badge"]');
-  if (badgeCount < 1) {
-    log('WARN: task-agent-badge not found (layout may hide list)');
+  // 任务栏故意不展示 Agent 徽章（保留文件大小/时长）；过程在工作区面板
+  if (countSel('[data-testid="task-agent-badge"]') > 0) {
+    fail('task-agent-badge should not appear on task list');
   } else {
-    const badgeText = ab(['get', 'text', '[data-testid="task-agent-badge"]'], {
-      timeout: 10000,
-    });
-    const bt = (badgeText.stdout || '').trim();
-    log(`task badge: "${bt}"`);
-    if (bt.replace(/^[·\s]+/, '').length > 28) fail(`task badge too long: ${bt}`);
-    else ok(`task badge short: ${bt}`);
+    ok('task list has no agent badge (by design)');
   }
 
   ab(['find', 'testid', 'agent-brain-trigger', 'click'], { timeout: 10000 });

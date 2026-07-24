@@ -363,9 +363,16 @@ async function runAgentTranslationPath(opts: {
   const persistAgentSnapshot = (outcome: 'success' | 'error', errorMessage?: string) => {
     const st = useAgentRunStore.getState().byFileId[fileId];
     if (!st) return;
+    // tokens 以任务 phase 为准（与右下角一致），避免 process 状态机历史双计写进快照
+    const phaseTokens =
+      deps.getFile(fileId)?.phases?.translating?.tokens ?? st.tokensTotal;
+    const stForSnap =
+      phaseTokens !== st.tokensTotal
+        ? { ...st, tokensTotal: phaseTokens }
+        : st;
     useFilesStore.getState().setTranslationPathMeta(fileId, {
       translationPath: 'agent',
-      agentSnapshot: statusToAgentSnapshot(st, outcome, errorMessage),
+      agentSnapshot: statusToAgentSnapshot(stForSnap, outcome, errorMessage),
     });
   };
 

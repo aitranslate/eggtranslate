@@ -23,7 +23,12 @@ import {
   BookOpen,
   LayoutGrid,
 } from 'lucide-react';
-import type { AgentRunStatus } from '@/services/agent/agentRunStatus';
+import {
+  agentProgressPercent,
+  type AgentRunStatus,
+} from '@/services/agent/agentRunStatus';
+import type { AgentToolLogEntry } from '@/services/agent/types';
+import { useFilesStore } from '@/stores/filesStore';
 
 export interface AgentProcessControlProps {
   status: AgentRunStatus;
@@ -61,6 +66,31 @@ function stageLabel(s?: string | null) {
 
 function toolLabel(name: string) {
   return TOOL_LABEL[name] || name;
+}
+
+/**
+ * 工具行态：只认结构化 kind / nudge（loop 写入），不解析 detail 文案。
+ */
+function toolOutcomeMeta(t: AgentToolLogEntry): {
+  className: string;
+  label: string;
+} {
+  if (t.kind === 'pending') {
+    return { className: 'is-pending', label: '进行中' };
+  }
+  if (t.nudge === 'web_soft') {
+    return { className: 'is-soft', label: '软提示' };
+  }
+  if (t.nudge === 'web_require' || t.nudge === 'todo') {
+    return { className: 'is-soft', label: '需处理' };
+  }
+  if (t.kind === 'submit_reject') {
+    return { className: 'is-err', label: '未接受' };
+  }
+  if (t.kind === 'tool_error' || t.ok === false) {
+    return { className: 'is-err', label: '失败' };
+  }
+  return { className: '', label: '' };
 }
 
 export const AgentProcessControl: React.FC<AgentProcessControlProps> = ({
@@ -104,6 +134,12 @@ export const AgentProcessControl: React.FC<AgentProcessControlProps> = ({
     }
   }, [status.recentEvents.length, status.toolLog.length, open, tab, status.active, reduceMotion]);
 
+  /** 与右下角同源：任务 translating.tokens（LLM usage 单路累加），避免过程状态机双计 */
+  const phaseTokens = useFilesStore(
+    (s) => s.getFile(status.fileId)?.phases?.translating?.tokens ?? 0
+  );
+  const displayTokens = phaseTokens > 0 ? phaseTokens : status.tokensTotal || 0;
+
   const filteredGlossary = useMemo(() => {
     const q = glossaryQ.trim().toLowerCase();
     if (!q) return status.glossary;
@@ -135,6 +171,7 @@ export const AgentProcessControl: React.FC<AgentProcessControlProps> = ({
   if (!visible) return null;
 
   const summary = status.compactSummary || status.compactBadge || 'Agent';
+  const progressPct = agentProgressPercent(status);
   // 测试环境 / 减弱动效：瞬间完成，避免 AnimatePresence 残留 DOM
   const dur =
     reduceMotion || import.meta.env.MODE === 'test' ? 0 : 0.22;
@@ -192,15 +229,82 @@ export const AgentProcessControl: React.FC<AgentProcessControlProps> = ({
               {status.actionLine || summary}
             </p>
 
+            <div
+              className="agent-progress-track"
+              data-testid="agent-progress-track"
+              role="progressbar"
+              aria-valuenow={progressPct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div
+                className="agent-progress-fill"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+
             <div className="agent-drawer-stats" data-testid="agent-drawer-stats">
               <span className="agent-stat-chip">术语 {status.glossaryCount}</span>
               <span className="agent-stat-chip">
                 进度 {status.completedEntries}/{status.totalEntries || '—'}
               </span>
               <span className="agent-stat-chip">
-                窗 {status.currentWindow ?? '—'}/{status.totalWindows || '—'}
+                译窗 {status.currentWindow ?? '—'}/{status.totalWindows || '—'}
               </span>
-              <span className="agent-stat-chip">tokens {status.tokensTotal || 0}</span>
+              {status.briefingWindowTotal > 1 ? (
+                <span className="agent-stat-chip" data-testid="agent-briefing-chip">
+                  术语段 {status.briefingWindowCurrent ?? '—'}/
+                  {status.briefingWindowTotal}
+                </span>
+              ) : null}
+              {status.webSearchMax > 0 || status.webSearchCount > 0 ? (
+                <span
+                  className="agent-stat-chip"
+                  data-testid="agent-web-chip"
+                  title={
+                    status.webSearchCount === 0
+                      ? `术语阶段还可联网搜索 ${status.webSearchMax} 次（模型按需调用，0 表示尚未搜索）`
+                      : `已联网搜索 ${status.webSearchCount} 次，预算 ${status.webSearchMax}`
+                  }
+                >
+                  搜索 {status.webSearchCount}/{status.webSearchMax || '—'}
+                </span>
+              ) : (
+                <span
+                  className="agent-stat-chip is-muted"
+                  title="本 run 已关闭联网搜索（agentMaxWebSearches=0）"
+                >
+                  搜索关
+                </span>
+              )}
+              <span
+                className="agent-stat-chip"
+                title="与右下角 Tokens 同源：每次 LLM 调用 usage 累加（任务 translating 阶段）"
+                data-testid="agent-tokens-chip"
+              >
+                tokens {displayTokens.toLocaleString()}
+              </span>
+              {(status.tokensTerminology > 0 ||
+                status.tokensTranslate > 0 ||
+                status.tokensQa > 0) && (
+                <span
+                  className="agent-stat-chip"
+                  data-testid="agent-token-breakdown-chip"
+                  title={`术语 ${status.tokensTerminology} · 翻译 ${status.tokensTranslate} · QA ${status.tokensQa}`}
+                >
+                  阶段 {status.tokensTerminology}/{status.tokensTranslate}/
+                  {status.tokensQa}
+                </span>
+              )}
+              {(status.qaWindowsRun > 0 || status.qaWindowsSkipped > 0) && (
+                <span
+                  className="agent-stat-chip"
+                  data-testid="agent-qa-skip-chip"
+                  title={`LLM QA：运行 ${status.qaWindowsRun} 窗，跳过 ${status.qaWindowsSkipped} 窗（风险策略）`}
+                >
+                  QA {status.qaWindowsRun}跑/{status.qaWindowsSkipped}跳
+                </span>
+              )}
             </div>
 
             <nav className="agent-drawer-tabs" role="tablist" aria-label="过程分区">
@@ -270,6 +374,36 @@ export const AgentProcessControl: React.FC<AgentProcessControlProps> = ({
                         <div className="agent-drawer-block">
                           <div className="agent-drawer-block-title">风格指南</div>
                           <pre className="agent-drawer-style">{status.styleGuide}</pre>
+                        </div>
+                      ) : null}
+
+                      {status.termIssues.length > 0 ? (
+                        <div
+                          className="agent-drawer-block"
+                          data-testid="agent-term-issues"
+                        >
+                          <div className="agent-drawer-block-title">
+                            术语一致性 · {status.termIssues.length}
+                          </div>
+                          <ul className="agent-term-issue-list">
+                            {status.termIssues.slice(0, 30).map((iss, i) => (
+                              <li key={`${iss.index}-${iss.source}-${i}`}>
+                                <span className="agent-term-issue-idx">
+                                  #{iss.index}
+                                </span>
+                                <span className="agent-term-issue-src">
+                                  {iss.source}
+                                </span>
+                                <span className="agent-term-issue-arrow">→</span>
+                                <span className="agent-term-issue-tgt">
+                                  应为「{iss.canonicalTarget}」
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                          <p className="agent-term-issue-hint">
+                            未强制重译；可在译文中人工核对。
+                          </p>
                         </div>
                       ) : null}
 
@@ -366,39 +500,46 @@ export const AgentProcessControl: React.FC<AgentProcessControlProps> = ({
                         </div>
                       ) : (
                         <ul className="agent-tool-list">
-                          {status.toolLog.map((t) => (
-                            <li
-                              key={t.id}
-                              className={`agent-tool-item${t.ok ? '' : ' is-err'}${
-                                t.detail === '进行中…' ? ' is-pending' : ''
-                              }`}
-                            >
-                              <div className="agent-tool-row">
-                                <span className="agent-tool-name" title={t.name}>
-                                  {toolLabel(t.name)}
-                                </span>
-                                <span className="agent-tool-meta">
-                                  {stageLabel(t.stage)}
-                                  {t.durationMs != null ? ` · ${t.durationMs}ms` : ''}
-                                  {t.detail === '进行中…'
-                                    ? ' · 进行中'
-                                    : t.ok
-                                      ? ''
-                                      : ' · 失败'}
-                                </span>
-                              </div>
-                              {t.argsSummary ? (
-                                <div className="agent-tool-args" title={t.argsSummary}>
-                                  {t.argsSummary}
+                          {status.toolLog.map((t) => {
+                            const om = toolOutcomeMeta(t);
+                            return (
+                              <li
+                                key={t.id}
+                                className={`agent-tool-item ${om.className}`.trim()}
+                                data-kind={t.kind || (t.ok ? 'tool_ok' : 'tool_error')}
+                                data-nudge={t.nudge || undefined}
+                              >
+                                <div className="agent-tool-row">
+                                  <span className="agent-tool-name" title={t.name}>
+                                    {toolLabel(t.name)}
+                                  </span>
+                                  <span className="agent-tool-meta">
+                                    {stageLabel(t.stage)}
+                                    {t.durationMs != null
+                                      ? ` · ${t.durationMs}ms`
+                                      : ''}
+                                    {om.label ? ` · ${om.label}` : ''}
+                                  </span>
                                 </div>
-                              ) : null}
-                              {t.detail && t.detail !== '进行中…' ? (
-                                <div className="agent-tool-detail" title={t.detail}>
-                                  {t.detail}
-                                </div>
-                              ) : null}
-                            </li>
-                          ))}
+                                {t.argsSummary ? (
+                                  <div
+                                    className="agent-tool-args"
+                                    title={t.argsSummary}
+                                  >
+                                    {t.argsSummary}
+                                  </div>
+                                ) : null}
+                                {t.detail && t.detail !== '进行中…' ? (
+                                  <div
+                                    className="agent-tool-detail"
+                                    title={t.detail}
+                                  >
+                                    {t.detail}
+                                  </div>
+                                ) : null}
+                              </li>
+                            );
+                          })}
                         </ul>
                       )}
                     </div>

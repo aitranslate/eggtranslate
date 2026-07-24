@@ -87,6 +87,15 @@ export const MainApp: React.FC = () => {
     if (next) playAppSound('confirm');
   }, [setSoundEnabled]);
 
+  /** 左上角蛋蛋 logo 点击抖动（用 state 驱动 class，避免 classList 被 React 冲掉） */
+  const [logoShake, setLogoShake] = useState(false);
+  const shakeBrandLogo = useCallback(() => {
+    setLogoShake(false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setLogoShake(true));
+    });
+  }, []);
+
   const {
     fileInputRef,
     isDragging,
@@ -104,7 +113,7 @@ export const MainApp: React.FC = () => {
   // 任务进行中拦截刷新/关页
   useActiveJobBeforeUnload(true);
 
-  // 默认进入工作区（不自动弹设置；未配置时顶栏仍有「必须」提示）
+  // 默认进入工作区（不自动弹设置；未配置时顶栏设置钮显示橙点）
   useEffect(() => {
     openEditor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -216,14 +225,23 @@ export const MainApp: React.FC = () => {
 
       <header className="wb-topbar">
         <div className="wb-brand">
-          <img
-            className="wb-brand-logo"
-            src="/favicon.svg"
-            alt=""
-            width={20}
-            height={20}
-            draggable={false}
-          />
+          <button
+            type="button"
+            className={`wb-brand-logo-btn${logoShake ? ' is-shake' : ''}`}
+            title="点我晃一晃"
+            aria-label="蛋蛋"
+            onClick={shakeBrandLogo}
+            onAnimationEnd={() => setLogoShake(false)}
+          >
+            <img
+              className="wb-brand-logo"
+              src="/favicon.svg"
+              alt=""
+              width={20}
+              height={20}
+              draggable={false}
+            />
+          </button>
           <span className="wb-brand-title">蛋蛋字幕翻译</span>
           <span className="wb-brand-ver">v2.1</span>
         </div>
@@ -302,14 +320,17 @@ export const MainApp: React.FC = () => {
 
             <button
               type="button"
-              className={`wb-nav-btn ${settingsOpen ? 'active' : ''} ${!isConfigured ? 'warn' : ''}`}
+              className={`wb-nav-btn wb-nav-btn-icon ${settingsOpen ? 'active' : ''} ${!isConfigured ? 'warn' : ''}`}
               onClick={() => openSettings()}
-              title="设置"
+              title={isConfigured ? '设置' : '设置（尚未配置 LLM，点击完成）'}
+              aria-label={isConfigured ? '设置' : '设置，尚未配置'}
             >
-              <span className="wb-nav-dot" aria-hidden />
               <Settings className="h-3.5 w-3.5" />
-              <span className="wb-nav-label">设置</span>
-              {!isConfigured && <span className="wb-nav-badge">必须</span>}
+              {/* 角标：绿=已配置 / 橙点=未配置（替代原文案「设置」「必须」） */}
+              <span
+                className={`wb-nav-status-dot ${isConfigured ? 'is-ok' : 'is-warn'}`}
+                aria-hidden
+              />
             </button>
           </div>
         </div>
@@ -317,7 +338,7 @@ export const MainApp: React.FC = () => {
 
       <aside className="wb-sidebar">
         <div className="wb-tasks" onClick={handleTasksAreaClick}>
-          {/* 侧栏头+列表由 SubtitleFileList 统一：项目 | [+] [全部开始] [导出] [清空] */}
+          {/* 侧栏头+列表由 SubtitleFileList 统一：项目 | [+] [▶] [导出] [清空] */}
           <SubtitleFileList
             variant="sidebar"
             selectedFileId={selectedFileId}

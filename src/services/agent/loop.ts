@@ -4,8 +4,14 @@
  */
 
 import type { LLMConfig } from '@/types';
-import { callLLM, type LLMMessage, type LLMToolSchema } from '@/utils/llmApi';
+import {
+  callLLM,
+  type LLMMessage,
+  type LLMToolChoice,
+  type LLMToolSchema,
+} from '@/utils/llmApi';
 import { logger } from '@/utils/logger';
+import { projectContext } from './projectContext';
 import { dispatchTool } from './tools/registry';
 import type { AgentToolContext } from './toolTypes';
 
@@ -31,8 +37,13 @@ export type AgentLoopToolHook = (event: {
   /** 同一 tool_call 的 start/end 关联 id（并发窗安全） */
   callId: string;
   ok?: boolean;
+  kind?: import('./types').AgentToolKind;
+  nudge?: import('./types').AgentToolNudge;
   detail?: string;
   durationMs?: number;
+  /** After tool runs: current web_search budget used (for live UI) */
+  webSearchCount?: number;
+  maxWebSearches?: number;
 }) => void | Promise<void>;
 
 function summarizeToolArgs(raw: string): string {
@@ -58,6 +69,11 @@ export async function runAgentLoop(options: {
   temperature?: number;
   submitToolName?: string;
   submitInstruction?: string;
+  /**
+   * tool_choice for each LLM call. Translation passes a forced submit tool
+   * when supported; providers that reject it fall back to auto inside callLLM.
+   */
+  toolChoice?: LLMToolChoice;
   /** 工具调用可观测钩子（过程面板「工具」Tab） */
   onTool?: AgentLoopToolHook;
 }): Promise<AgentLoopResult> {
@@ -72,6 +88,7 @@ export async function runAgentLoop(options: {
     temperature = 0.3,
     submitToolName = 'submit_result',
     submitInstruction = 'with the required payload',
+    toolChoice = 'auto',
     onTool,
   } = options;
 
@@ -94,12 +111,18 @@ export async function runAgentLoop(options: {
       throw err;
     }
 
-    const result = await callLLM(llm, messages, {
+    // Project context for this call only; authoritative history stays full.
+    const llmMessages = projectContext(messages, {
+      keepRecentTurns: 3,
+      webKeepChars: 500,
+    });
+
+    const result = await callLLM(llm, llmMessages, {
       signal,
       temperature,
       maxRetries: 2,
       tools,
-      tool_choice: 'auto',
+      tool_choice: toolChoice,
     });
 
     ctx.tokensUsed = (ctx.tokensUsed || 0) + (result.tokensUsed || 0);
@@ -134,10 +157,10 @@ export async function runAgentLoop(options: {
       const durationMs = Math.round(
         (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0
       );
-      const ok = !(
-        tr.content.startsWith('Error:') || tr.content.startsWith('[HARNESS]')
-      );
-      if (!ok) hadError = true;
+      // Structured outcome is the control plane (never English substring matching).
+      const outcome = ctx.lastToolOutcome;
+      const ok = outcome ? outcome.ok : true;
+      if (outcome?.repairable) hadError = true;
       if (onTool) {
         await onTool({
           phase: 'end',
@@ -145,8 +168,12 @@ export async function runAgentLoop(options: {
           argsSummary,
           callId,
           ok,
+          kind: outcome?.kind,
+          nudge: outcome?.nudge ?? null,
           detail: tr.content.slice(0, 240).replace(/\s+/g, ' '),
           durationMs,
+          webSearchCount: ctx.webSearchCount ?? 0,
+          maxWebSearches: ctx.maxWebSearches,
         });
       }
       messages.push({
@@ -154,7 +181,7 @@ export async function runAgentLoop(options: {
         tool_call_id: tc.id,
         content: tr.content.slice(0, 12000),
       });
-      if (tr.terminate) {
+      if (tr.terminate && ok) {
         terminate = true;
       }
     }
@@ -164,6 +191,7 @@ export async function runAgentLoop(options: {
       break;
     }
 
+    // Only repairable tool_error invites generic repair (not submit_reject soft gates).
     if (hadError && !toolErrorNudge) {
       toolErrorNudge = true;
       messages.push({

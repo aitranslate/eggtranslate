@@ -68,6 +68,19 @@ export interface TranslationConfig {
   agentWindowSize?: number;
   /** Agent 窗并发，默认 3 */
   agentMaxConcurrency?: number;
+  /**
+   * Agent 路径：是否强制并入全部用户术语（含字幕未出现的）。
+   * 默认 false — 用户术语为候选，须 grounding；不影响批译路径。
+   */
+  agentForceAllUserTerms?: boolean;
+  /** Agent 术语阶段 web_search 预算；0=关网。默认 3。不影响批译。 */
+  agentMaxWebSearches?: number;
+  /** Agent 术语 submit 软 nudge（有 glossary 且 0 搜时拦一次）。默认 true。 */
+  agentSoftWebNudge?: boolean;
+  /** Agent：LLM 扩展用户术语表面（默认 true）。不影响批译。 */
+  agentExpandUserTerms?: boolean;
+  /** Agent：全窗合并后术语一致性检查（默认 true）。 */
+  agentGlobalTermCheck?: boolean;
 }
 
 // 翻译进度类型
@@ -107,6 +120,8 @@ export interface AgentRunSnapshot {
     name: string;
     argsSummary: string;
     ok: boolean;
+    kind?: string;
+    nudge?: string | null;
     detail?: string;
     durationMs?: number;
     at: number;
@@ -123,6 +138,22 @@ export interface AgentRunSnapshot {
     qaNote?: string;
   }>;
   tokensTotal?: number;
+  /** 阶段 token 分解（过程面板） */
+  tokensTerminology?: number;
+  tokensTranslate?: number;
+  tokensQa?: number;
+  tokensExpand?: number;
+  qaWindowsRun?: number;
+  qaWindowsSkipped?: number;
+  webSearchCount?: number;
+  webSearchMax?: number;
+  briefingWindowTotal?: number;
+  termIssues?: Array<{
+    index: number;
+    source: string;
+    canonicalTarget: string;
+    foundTarget: string;
+  }>;
   lastActionLine: string;
   completedAt: number;
   error?: string | null;

@@ -1,12 +1,14 @@
 /**
  * Agent 运行状态 UI 读模型：纯函数，从 pipeline AgentEvent 归约。
- * 任务卡只用 compactBadge；过程面板读 glossary / tools / windows 全量。
+ * 过程面板用 compactSummary / compactBadge 与 glossary / tools / windows；
+ * 侧栏任务卡不展示 Agent 徽章（避免挤掉文件大小/时长）。
  */
 
 import type { AgentRunSnapshot } from '@/types';
 import type {
   AgentEvent,
   AgentStage,
+  AgentTermIssueUi,
   AgentToolLogEntry,
   AgentWindowUi,
   GlossaryEntry,
@@ -33,7 +35,7 @@ export type AgentRunStatus = {
   stage: AgentStage | null;
   /** 编辑器顶栏短摘要，例如「术语 · 分析中」/「Agent 已完成」 */
   compactSummary: string;
-  /** 任务卡短徽章，例如「Agent·译 2/4」——禁止长句 */
+  /** 过程面板备用短徽章，例如「Agent·译 2/4」——禁止长句 */
   compactBadge: string;
   /** 大脑面板主句（可稍长，仍应单行可读） */
   actionLine: string;
@@ -53,11 +55,67 @@ export type AgentRunStatus = {
   windows: AgentWindowUi[];
   /** 累计 tokens */
   tokensTotal: number;
+  /** 阶段 token 分解（run_stats） */
+  tokensTerminology: number;
+  tokensTranslate: number;
+  tokensQa: number;
+  tokensExpand: number;
+  /** LLM QA 窗计数 */
+  qaWindowsRun: number;
+  qaWindowsSkipped: number;
+  /** 术语阶段 web_search 用量 */
+  webSearchCount: number;
+  webSearchMax: number;
+  /** 术语 briefing 分窗进度（长片） */
+  briefingWindowCurrent: number | null;
+  briefingWindowTotal: number;
+  /** 全局术语一致性问题 */
+  termIssues: AgentTermIssueUi[];
   steps: AgentStageStep[];
   recentEvents: AgentRunEventLine[];
   error: string | null;
   updatedAt: number;
 };
+
+/**
+ * 过程条进度：按**阶段模型**映射，不用 entry 计数抢先盖掉术语阶段。
+ *
+ * | stage        | 区间   | 信号 |
+ * |--------------|--------|------|
+ * | terminology  | 0–25%  | briefing 窗 / glossary |
+ * | translate/qa | 25–99% | completedEntries（单调）|
+ * | finalize/done| 100%   | 终态 |
+ */
+export function agentProgressPercent(st: AgentRunStatus): number {
+  const allStepsDone = st.steps.length > 0 && st.steps.every((s) => s.status === 'done');
+  if (!st.active && (st.stage === 'finalize' || allStepsDone) && !st.error) {
+    return 100;
+  }
+
+  // 术语阶段：即使 pipeline_start 已写入 totalEntries，仍用 briefing 窗进度
+  if (st.stage === 'terminology' || (st.active && st.stage === null)) {
+    if (st.briefingWindowTotal > 0 && st.briefingWindowCurrent != null) {
+      const ratio = Math.min(
+        1,
+        Math.max(0, st.briefingWindowCurrent / st.briefingWindowTotal)
+      );
+      return Math.min(25, Math.max(5, Math.round(ratio * 25)));
+    }
+    return st.glossaryCount > 0 ? 18 : 8;
+  }
+
+  if (st.totalEntries > 0) {
+    const ratio = Math.min(1, Math.max(0, st.completedEntries / st.totalEntries));
+    // 译/QA 落在 25–99，避免与术语带重叠、终态留给 finalize
+    const mapped = Math.round(25 + ratio * 74);
+    if (st.stage === 'qa') return Math.min(99, Math.max(40, mapped));
+    if (st.stage === 'finalize') return st.active ? Math.min(99, Math.max(mapped, 95)) : 100;
+    return Math.min(99, Math.max(25, mapped));
+  }
+
+  if (st.error && !st.active) return 0;
+  return st.active ? 10 : 0;
+}
 
 const STAGE_LABEL: Record<AgentStage, string> = {
   terminology: '术语',
@@ -92,6 +150,17 @@ export function createIdleAgentRunStatus(
     toolLog: [],
     windows: [],
     tokensTotal: 0,
+    tokensTerminology: 0,
+    tokensTranslate: 0,
+    tokensQa: 0,
+    tokensExpand: 0,
+    qaWindowsRun: 0,
+    qaWindowsSkipped: 0,
+    webSearchCount: 0,
+    webSearchMax: 3,
+    briefingWindowCurrent: null,
+    briefingWindowTotal: 0,
+    termIssues: [],
     steps: [
       { id: 'terminology', label: STAGE_LABEL.terminology, status: 'pending' },
       { id: 'translate', label: STAGE_LABEL.translate, status: 'pending' },
@@ -166,7 +235,7 @@ function upsertWindow(
   return next;
 }
 
-/** 任务卡徽章：短 token，禁止多子句长句 */
+/** 过程面板短徽章：短 token，禁止多子句长句 */
 export function formatAgentCompactBadge(s: Pick<
   AgentRunStatus,
   'active' | 'stage' | 'currentWindow' | 'totalWindows' | 'error'
@@ -242,6 +311,8 @@ export function applyAgentEventToStatus(
         stage: 'terminology',
         totalEntries: event.totalEntries,
         totalWindows: event.totalWindows,
+        briefingWindowTotal: event.briefingWindows ?? 0,
+        briefingWindowCurrent: event.briefingWindows ? 1 : null,
         steps: markSteps(createIdleAgentRunStatus().steps, 'terminology'),
         recentEvents: [],
         toolLog: [],
@@ -253,11 +324,50 @@ export function applyAgentEventToStatus(
         })),
         updatedAt: Date.now(),
       };
-      next.recentEvents = pushEvent(
-        next,
-        `开始：${event.totalEntries} 条 · ${event.totalWindows} 窗`
-      );
+      {
+        const bw = event.briefingWindows ?? 0;
+        next.recentEvents = pushEvent(
+          next,
+          bw > 1
+            ? `开始：${event.totalEntries} 条 · 译 ${event.totalWindows} 窗 · 术语分析 ${bw} 段`
+            : `开始：${event.totalEntries} 条 · ${event.totalWindows} 窗`
+        );
+      }
       next.actionLine = '术语 Agent：准备分析字幕…';
+      break;
+
+    case 'briefing_progress':
+      next.active = true;
+      next.stage = 'terminology';
+      next.steps = markSteps(next.steps, 'terminology');
+      next.briefingWindowCurrent = event.current;
+      next.briefingWindowTotal = event.total;
+      next.actionLine =
+        event.detail ||
+        (event.total > 1
+          ? `术语分析 ${event.current}/${event.total}…`
+          : '术语分析中…');
+      if (event.total > 1) {
+        next.recentEvents = pushEvent(
+          next,
+          event.detail || `术语窗 ${event.current}/${event.total}`
+        );
+      }
+      break;
+
+    case 'web_usage':
+      next.webSearchCount = event.count;
+      next.webSearchMax = event.max;
+      break;
+
+    case 'terminology_issues':
+      next.termIssues = event.issues || [];
+      if (next.termIssues.length) {
+        next.recentEvents = pushEvent(
+          next,
+          `术语一致性：${next.termIssues.length} 处待关注`
+        );
+      }
       break;
 
     case 'stage':
@@ -282,7 +392,7 @@ export function applyAgentEventToStatus(
       next.glossaryCount = glossary.length;
       next.styleGuide = event.styleGuide || '';
       next.styleGuidePreview = (event.styleGuide || '').slice(0, 200);
-      next.tokensTotal += event.tokensUsed || 0;
+      // tokens 只在 progress.tokensDelta 累加（与 window_done 同批会重复，勿在此加）
       next.steps = markSteps(next.steps, 'translate', { doneUpTo: 'terminology' });
       next.stage = 'translate';
       next.actionLine = `术语完成：${next.glossaryCount} 条 · 开始分窗翻译`;
@@ -316,11 +426,11 @@ export function applyAgentEventToStatus(
           windowIndex: event.windowIndex,
           entryCount: event.translations.length,
           status: 'done',
+          // 窗级明细；全量 tokensTotal 只信 progress.tokensDelta，避免与 progress 双计
           tokensUsed:
             (next.windows.find((w) => w.windowIndex === event.windowIndex)?.tokensUsed ||
               0) + (event.tokensUsed || 0),
         });
-        next.tokensTotal += event.tokensUsed || 0;
         // 无 progress 事件时，用已完成窗的 entryCount 累加进度
         const doneCount = next.windows
           .filter((w) => w.status === 'done' || w.status === 'error')
@@ -364,6 +474,7 @@ export function applyAgentEventToStatus(
         name: event.name,
         argsSummary: event.argsSummary,
         ok: true,
+        kind: 'pending',
         at: Date.now(),
         stage: event.stage ?? next.stage ?? undefined,
         detail: '进行中…',
@@ -376,14 +487,19 @@ export function applyAgentEventToStatus(
       let pendingIdx = tools.findIndex((t) => t.id === event.callId);
       if (pendingIdx < 0) {
         pendingIdx = tools.findIndex(
-          (t) => t.name === event.name && t.detail === '进行中…'
+          (t) => t.name === event.name && t.kind === 'pending'
         );
       }
+      const kind =
+        event.kind ||
+        (event.ok ? 'tool_ok' : event.nudge ? 'submit_reject' : 'tool_error');
       const entry: AgentToolLogEntry = {
         id: event.callId || (pendingIdx >= 0 ? tools[pendingIdx].id : `te-${Date.now()}`),
         name: event.name,
         argsSummary: event.argsSummary,
         ok: event.ok,
+        kind,
+        nudge: event.nudge ?? null,
         detail: event.detail,
         durationMs: event.durationMs,
         at: Date.now(),
@@ -392,46 +508,61 @@ export function applyAgentEventToStatus(
       if (pendingIdx >= 0) tools[pendingIdx] = entry;
       else tools.unshift(entry);
       next.toolLog = tools.slice(0, MAX_TOOLS);
-      // 概览事件：一条可读摘要；submit_* 更醒目
+      // 概览：结构化文案（软提示 ≠ 失败）
       const isSubmit = event.name.startsWith('submit_');
       if (isSubmit || !event.ok) {
-        next.recentEvents = pushEvent(
-          next,
-          isSubmit
-            ? `${event.ok ? '提交成功' : '提交失败'} · ${event.name}`
-            : `工具失败 · ${event.name}`
-        );
+        let line: string;
+        if (event.nudge === 'web_soft') {
+          line = '软提示 · 可再提交或先联网搜索';
+        } else if (event.nudge === 'web_require') {
+          line = '需联网搜索后再提交术语';
+        } else if (event.nudge === 'todo') {
+          line = '待办未清 · 请更新 todo 后再提交';
+        } else if (isSubmit) {
+          line = event.ok ? `提交成功 · ${event.name}` : `提交未接受 · ${event.name}`;
+        } else {
+          line = `工具失败 · ${event.name}`;
+        }
+        next.recentEvents = pushEvent(next, line);
       }
       break;
     }
 
     case 'progress':
-      next.completedEntries = event.completedEntries;
-      next.totalEntries = event.totalEntries || next.totalEntries;
+      // 并发分窗 progress 可能乱序到达：完成数只升不降（与 window_done 一致）
+      next.completedEntries = Math.max(
+        next.completedEntries,
+        Math.max(0, event.completedEntries || 0)
+      );
+      if (event.totalEntries > 0) {
+        next.totalEntries = Math.max(next.totalEntries, event.totalEntries);
+      }
       if (typeof event.tokensDelta === 'number' && event.tokensDelta > 0) {
         next.tokensTotal += event.tokensDelta;
       }
+      // statusText = display only. Stage / window from structured fields only.
       if (event.statusText) {
         next.actionLine = event.statusText;
-        const wm = event.statusText.match(/窗\s*(\d+)\s*\/\s*(\d+)/);
-        if (wm) {
-          next.currentWindow = Number(wm[1]);
-          next.totalWindows = Number(wm[2]) || next.totalWindows;
-        }
-        if (event.statusText.includes('QA') || event.statusText.includes('审校')) {
-          next.stage = 'qa';
-          next.steps = markSteps(next.steps, 'qa', { doneUpTo: 'translate' });
-        } else if (event.statusText.includes('术语')) {
-          next.stage = 'terminology';
-          next.steps = markSteps(next.steps, 'terminology');
-        } else if (event.statusText.includes('完成') && !event.statusText.includes('术语完成')) {
-          /* keep */
-        } else {
-          next.stage = next.stage === 'qa' ? 'qa' : 'translate';
-          next.steps = markSteps(next.steps, next.stage ?? 'translate', {
-            doneUpTo: next.stage === 'qa' ? 'translate' : 'terminology',
-          });
-        }
+      }
+      if (typeof event.currentWindow === 'number' && event.currentWindow > 0) {
+        next.currentWindow = event.currentWindow;
+      }
+      if (typeof event.totalWindows === 'number' && event.totalWindows > 0) {
+        next.totalWindows = Math.max(next.totalWindows, event.totalWindows);
+      }
+      if (event.stage) {
+        next.stage = event.stage;
+        const doneUpTo: AgentStage | undefined =
+          event.stage === 'translate'
+            ? 'terminology'
+            : event.stage === 'qa'
+              ? 'translate'
+              : event.stage === 'finalize'
+                ? 'qa'
+                : undefined;
+        next.steps = markSteps(next.steps, event.stage, {
+          doneUpTo,
+        });
       }
       break;
 
@@ -444,6 +575,30 @@ export function applyAgentEventToStatus(
         next.stage = 'finalize';
         next.steps = markSteps(next.steps, 'finalize', { doneUpTo: 'qa' });
       }
+      break;
+
+    case 'run_stats':
+      next.tokensTerminology = event.tokensTerminology ?? 0;
+      next.tokensTranslate = event.tokensTranslate ?? 0;
+      next.tokensQa = event.tokensQa ?? 0;
+      next.tokensExpand = event.tokensExpand ?? 0;
+      next.qaWindowsRun = event.qaWindowsRun ?? 0;
+      next.qaWindowsSkipped = event.qaWindowsSkipped ?? 0;
+      if (typeof event.tokensTotal === 'number' && event.tokensTotal > 0) {
+        // Prefer structured total when larger (progress may already have summed)
+        next.tokensTotal = Math.max(next.tokensTotal, event.tokensTotal);
+      }
+      if (event.totalWindows > 0) {
+        next.totalWindows = Math.max(next.totalWindows, event.totalWindows);
+      }
+      next.recentEvents = pushEvent(
+        next,
+        `统计：术语 ${next.tokensTerminology} · 译 ${next.tokensTranslate} · QA ${next.tokensQa} token · QA窗 ${next.qaWindowsRun}跑/${next.qaWindowsSkipped}跳`
+      );
+      next.actionLine =
+        next.qaWindowsSkipped > 0
+          ? `完成统计：QA 跳过 ${next.qaWindowsSkipped} 窗 · 共 ${next.tokensTotal} tokens`
+          : next.actionLine;
       break;
 
     case 'pipeline_end':
@@ -484,7 +639,7 @@ export function applyAgentEventToStatus(
   return next;
 }
 
-/** 长句检测：任务卡禁止出现的多子句模式 */
+/** 长句检测：短徽章禁止出现的多子句模式 */
 export function isLongAgentNarrative(text: string): boolean {
   if (!text) return false;
   if (text.length > 28) return true;
@@ -525,6 +680,8 @@ export function agentSnapshotToStatus(
     toolLog: (snap.toolLog || []).map((t) => ({
       ...t,
       stage: t.stage as AgentStage | undefined,
+      kind: t.kind as AgentToolLogEntry['kind'],
+      nudge: (t.nudge as AgentToolLogEntry['nudge']) ?? null,
     })),
     windows: (snap.windows || []).map((w) => ({
       windowIndex: w.windowIndex,
@@ -536,6 +693,17 @@ export function agentSnapshotToStatus(
       qaNote: w.qaNote,
     })),
     tokensTotal: snap.tokensTotal ?? 0,
+    tokensTerminology: snap.tokensTerminology ?? 0,
+    tokensTranslate: snap.tokensTranslate ?? 0,
+    tokensQa: snap.tokensQa ?? 0,
+    tokensExpand: snap.tokensExpand ?? 0,
+    qaWindowsRun: snap.qaWindowsRun ?? 0,
+    qaWindowsSkipped: snap.qaWindowsSkipped ?? 0,
+    webSearchCount: snap.webSearchCount ?? 0,
+    webSearchMax: snap.webSearchMax ?? 3,
+    briefingWindowTotal: snap.briefingWindowTotal ?? 0,
+    briefingWindowCurrent: null,
+    termIssues: snap.termIssues ?? [],
     totalEntries,
     completedEntries,
     totalWindows,
@@ -577,6 +745,8 @@ export function statusToAgentSnapshot(
       name: t.name,
       argsSummary: t.argsSummary.slice(0, 200),
       ok: t.ok,
+      kind: t.kind,
+      nudge: t.nudge ?? undefined,
       detail: t.detail?.slice(0, 300),
       durationMs: t.durationMs,
       at: t.at,
@@ -592,6 +762,16 @@ export function statusToAgentSnapshot(
       qaNote: w.qaNote?.slice(0, 200),
     })),
     tokensTotal: st.tokensTotal,
+    tokensTerminology: st.tokensTerminology,
+    tokensTranslate: st.tokensTranslate,
+    tokensQa: st.tokensQa,
+    tokensExpand: st.tokensExpand,
+    qaWindowsRun: st.qaWindowsRun,
+    qaWindowsSkipped: st.qaWindowsSkipped,
+    webSearchCount: st.webSearchCount,
+    webSearchMax: st.webSearchMax,
+    briefingWindowTotal: st.briefingWindowTotal,
+    termIssues: st.termIssues.slice(0, 40),
     lastActionLine:
       st.actionLine || (error ? `失败：${error}` : 'Agent 流程完成'),
     completedAt: Date.now(),

@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   parseTerminologyContent,
   mergeGlossaryWithUserTerms,
+  groundGlossaryForTranslation,
+  sourceGroundedInText,
+  alignStyleGuideToGlossary,
+  finalizeAgentGlossary,
   formatAgentTermsBlock,
 } from '../terminology';
 import { splitAgentWindows } from '../windows';
@@ -32,14 +36,117 @@ describe('parseTerminologyContent', () => {
   });
 });
 
+describe('sourceGroundedInText', () => {
+  it('matches word boundaries not substrings', () => {
+    expect(sourceGroundedInText('POI', 'the POI is here')).toBe(true);
+    expect(sourceGroundedInText('POI', 'the point is here')).toBe(false);
+    expect(sourceGroundedInText('scale', 'upscale filter')).toBe(false);
+    expect(sourceGroundedInText('scale', 'the scale works')).toBe(true);
+  });
+
+  it('allows compact multi-word ASR forms', () => {
+    expect(sourceGroundedInText('fair value', 'the fairvalue gap')).toBe(true);
+  });
+
+  it('grounds Latin term next to CJK (ASCII boundaries)', () => {
+    expect(sourceGroundedInText('Acme', '欢迎来到Acme公司')).toBe(true);
+    expect(sourceGroundedInText('Nasdaq', '我只做Nasdaq')).toBe(true);
+  });
+
+  it('grounds pure CJK terms by literal include', () => {
+    expect(sourceGroundedInText('基础命中', '我在讲基础命中策略')).toBe(true);
+    expect(sourceGroundedInText('情绪失控', '避免情绪失控很重要')).toBe(true);
+    expect(sourceGroundedInText('不存在词', '我在讲基础命中策略')).toBe(false);
+  });
+});
+
+describe('groundGlossaryForTranslation', () => {
+  it('drops ungrounded agent invention', () => {
+    const g = groundGlossaryForTranslation(
+      [
+        { source: 'Acme', target: '艾克米' },
+        { source: 'NotInText', target: '不在' },
+      ],
+      'Welcome to Acme Corp.'
+    );
+    expect(g.map((x) => x.source)).toEqual(['Acme']);
+  });
+
+  it('expands A (B) only when parts appear', () => {
+    const g = groundGlossaryForTranslation(
+      [{ source: 'Acme (AC)', target: '艾克米' }],
+      'We use AC daily. No full brand.'
+    );
+    expect(g).toHaveLength(1);
+    expect(g[0].source).toBe('AC');
+    expect(g[0].target).toBe('艾克米');
+  });
+});
+
 describe('mergeGlossaryWithUserTerms', () => {
-  it('user target wins on same source', () => {
+  const transcript = 'Hello world. Hello again. FOO bar.';
+
+  it('user target wins on same grounded source', () => {
     const merged = mergeGlossaryWithUserTerms(
       [{ source: 'Hello', target: '你好' }],
-      [{ original: 'Hello', translation: '哈喽', notes: 'user' }]
+      [{ original: 'Hello', translation: '哈喽', notes: 'user' }],
+      { transcriptText: transcript }
     );
-    expect(merged).toHaveLength(1);
-    expect(merged[0].target).toBe('哈喽');
+    expect(merged.some((g) => g.source === 'Hello' && g.target === '哈喽')).toBe(
+      true
+    );
+  });
+
+  it('does not dump ungrounded user terms by default', () => {
+    const merged = mergeGlossaryWithUserTerms(
+      [{ source: 'Hello', target: '你好' }],
+      [{ original: 'NotPresent', translation: '不存在' }],
+      { transcriptText: transcript }
+    );
+    expect(merged.every((g) => g.source !== 'NotPresent')).toBe(true);
+  });
+
+  it('forceAllUserTerms includes ungrounded user sources', () => {
+    const merged = mergeGlossaryWithUserTerms(
+      [],
+      [{ original: 'NotPresent', translation: '不存在' }],
+      { transcriptText: transcript, forceAllUserTerms: true }
+    );
+    expect(merged.some((g) => g.source === 'NotPresent')).toBe(true);
+  });
+
+  it('drops ungrounded agent rows when transcript provided', () => {
+    const merged = mergeGlossaryWithUserTerms(
+      [{ source: 'Invented', target: '发明' }],
+      [],
+      { transcriptText: transcript }
+    );
+    expect(merged).toHaveLength(0);
+  });
+});
+
+describe('alignStyleGuideToGlossary', () => {
+  it('rewrites conflicting quoted targets', () => {
+    const style =
+      '核心概念"base hits"译为"垒打"。核心概念"base hits"译为"基础安打"。';
+    const fixed = alignStyleGuideToGlossary(style, [
+      { source: 'base hits', target: '基础安打' },
+    ]);
+    expect(fixed).not.toMatch(/垒打/);
+    expect(fixed.match(/基础安打/g)?.length).toBe(2);
+  });
+});
+
+describe('finalizeAgentGlossary', () => {
+  it('grounds and aligns style', () => {
+    const r = finalizeAgentGlossary(
+      [{ source: 'Hello', target: '你好' }],
+      [{ original: 'Hello', translation: '哈喽' }],
+      '"Hello"译为"你好"',
+      { transcriptText: 'Hello world' }
+    );
+    expect(r.glossary.some((g) => g.target === '哈喽')).toBe(true);
+    expect(r.styleGuide).toMatch(/哈喽|Hello/);
   });
 });
 

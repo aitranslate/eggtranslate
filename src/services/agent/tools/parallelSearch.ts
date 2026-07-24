@@ -10,7 +10,8 @@
 const MAX_QUERY = 200;
 const MIN_QUERY = 3;
 const MAX_RESULT_CHARS = 4000;
-const DEFAULT_MAX_SEARCHES = 5;
+/** Align AsrAgent DEFAULT_MAX_WEB_SEARCHES */
+const DEFAULT_MAX_SEARCHES = 3;
 
 /** 同源代理路径（dev Vite + prod CF Pages Function） */
 export function parallelSearchEndpoint(): string {

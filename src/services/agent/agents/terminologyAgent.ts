@@ -1,14 +1,26 @@
 /**
  * Terminology Agent：tool loop + submit_result（对齐 AsrAgent briefing）。
+ * 长片：字符预算分窗 → union glossary + merge style → expand → finalize。
  */
 
 import type { Term, TranslationConfig } from '@/types';
 import { getActiveLlmConfig } from '@/utils/llmProfiles';
+import { expandUserTerms } from '../expandUserTerms';
 import { runAgentLoop, type AgentLoopToolHook } from '../loop';
 import { BRIEFING_TOOL_SCHEMAS } from '../tools/registry';
 import type { AgentToolContext, TranscriptEntry } from '../toolTypes';
 import type { GlossaryEntry } from '../types';
-import { mergeGlossaryWithUserTerms, parseTerminologyContent } from '../terminology';
+import {
+  finalizeAgentGlossary,
+  parseTerminologyContent,
+  transcriptPlainFromEntries,
+} from '../terminology';
+import {
+  BRIEFING_WINDOW_CHARS,
+  mergeStyleGuides,
+  splitBriefingEntryWindows,
+  unionGlossaries,
+} from '../windows';
 
 function formatUserTermsBlock(userTerms: Term[]): string {
   if (!userTerms.length) return '(none)';
@@ -52,35 +64,70 @@ When done: submit_result with glossary + style_guide only.
 `;
 }
 
-function sampleUserMessage(entries: TranscriptEntry[], sourceLang: string, targetLang: string): string {
-  const plain = entries
-    .map((e) => `[${e.index}] ${e.text}`)
-    .join('\n')
-    .slice(0, 14000);
+function sampleUserMessage(
+  entries: TranscriptEntry[],
+  sourceLang: string,
+  targetLang: string,
+  windowLabel?: string
+): string {
+  const plain = entries.map((e) => `[${e.index}] ${e.text}`).join('\n');
+  const winNote = windowLabel ? ` (${windowLabel})` : '';
   return (
-    `Analyze this ${sourceLang} transcript (${entries.length} segments). ` +
+    `Analyze this ${sourceLang} transcript${winNote} (${entries.length} segments). ` +
     `Extract glossary + style_guide for ${targetLang} translation. ` +
     `Do not translate the full transcript.\n\n` +
     `=== TRANSCRIPT ===\n${plain}\n=== END TRANSCRIPT ===`
   );
 }
 
-export async function runTerminologyToolAgent(options: {
+async function runOneBriefingWindow(options: {
   entries: TranscriptEntry[];
+  fullTranscriptForTools: TranscriptEntry[];
   config: TranslationConfig;
   userTerms: Term[];
   title: string;
   signal: AbortSignal;
-  maxRounds?: number;
+  maxRounds: number;
   onTool?: AgentLoopToolHook;
-}): Promise<{ glossary: GlossaryEntry[]; styleGuide: string; tokensUsed: number }> {
-  const { entries, config, userTerms, title, signal, maxRounds = 30, onTool } = options;
+  windowLabel?: string;
+  /** Share soft-nudge / web budget across multi-window briefing */
+  sharedCtx?: Pick<
+    AgentToolContext,
+    'webSearchCount' | 'softWebNudgeFired' | 'maxWebSearches' | 'softWebNudge'
+  >;
+  onWebSearchCount?: (n: number) => void;
+}): Promise<{
+  glossary: GlossaryEntry[];
+  styleGuide: string;
+  tokensUsed: number;
+  webSearchCount: number;
+}> {
+  const {
+    entries,
+    fullTranscriptForTools,
+    config,
+    userTerms,
+    title,
+    signal,
+    maxRounds,
+    onTool,
+    windowLabel,
+    sharedCtx,
+    onWebSearchCount,
+  } = options;
   const llm = getActiveLlmConfig(config);
   const ctx: AgentToolContext = {
-    transcriptEntries: entries,
+    // Tools search the full transcript; the prompt only shows this window.
+    transcriptEntries: fullTranscriptForTools,
     todos: [],
-    webSearchCount: 0,
-    maxWebSearches: 5,
+    webSearchCount: sharedCtx?.webSearchCount ?? 0,
+    maxWebSearches:
+      sharedCtx?.maxWebSearches ??
+      (typeof config.agentMaxWebSearches === 'number'
+        ? Math.max(0, config.agentMaxWebSearches)
+        : 3),
+    softWebNudge: sharedCtx?.softWebNudge ?? config.agentSoftWebNudge !== false,
+    softWebNudgeFired: sharedCtx?.softWebNudgeFired ?? false,
     title,
   };
 
@@ -90,7 +137,12 @@ export async function runTerminologyToolAgent(options: {
     config.targetLanguage,
     formatUserTermsBlock(userTerms)
   );
-  const user = sampleUserMessage(entries, config.sourceLanguage, config.targetLanguage);
+  const user = sampleUserMessage(
+    entries,
+    config.sourceLanguage,
+    config.targetLanguage,
+    windowLabel
+  );
 
   const loop = await runAgentLoop({
     llm,
@@ -103,12 +155,25 @@ export async function runTerminologyToolAgent(options: {
     temperature: 0.3,
     submitToolName: 'submit_result',
     submitInstruction: 'with glossary + style_guide',
-    onTool,
+    onTool: async (e) => {
+      await onTool?.(e);
+      if (sharedCtx) {
+        sharedCtx.webSearchCount = ctx.webSearchCount ?? 0;
+        sharedCtx.softWebNudgeFired = Boolean(ctx.softWebNudgeFired);
+      }
+      if (e.phase === 'end' && e.name === 'web_search') {
+        onWebSearchCount?.(ctx.webSearchCount ?? 0);
+      }
+    },
   });
+
+  if (sharedCtx) {
+    sharedCtx.webSearchCount = ctx.webSearchCount ?? 0;
+    sharedCtx.softWebNudgeFired = ctx.softWebNudgeFired ?? false;
+  }
 
   let glossary: GlossaryEntry[] = [];
   let styleGuide = '';
-
   const fr = loop.finalResult as
     | { glossary?: GlossaryEntry[]; style_guide?: string }
     | undefined;
@@ -117,14 +182,134 @@ export async function runTerminologyToolAgent(options: {
     styleGuide = fr.style_guide || '';
   }
 
-  // 未 submit 时不抛死：留给 pipeline 用单次 LLM 兜底（可选）
-  glossary = mergeGlossaryWithUserTerms(glossary, userTerms);
-  if (!styleGuide.trim()) {
-    styleGuide = `Translate ${config.sourceLanguage} subtitles into natural ${config.targetLanguage}. Keep names and recurring terms consistent.`;
-  }
-
-  return { glossary, styleGuide, tokensUsed: loop.tokensUsed };
+  return {
+    glossary,
+    styleGuide,
+    tokensUsed: loop.tokensUsed,
+    webSearchCount: ctx.webSearchCount ?? 0,
+  };
 }
 
-/** 无 tool 的单次抽取（tool loop 失败时的兜底，仍合并用户术语） */
-export { parseTerminologyContent, mergeGlossaryWithUserTerms };
+export async function runTerminologyToolAgent(options: {
+  entries: TranscriptEntry[];
+  config: TranslationConfig;
+  userTerms: Term[];
+  title: string;
+  signal: AbortSignal;
+  maxRounds?: number;
+  onTool?: AgentLoopToolHook;
+  onBriefingProgress?: (p: {
+    current: number;
+    total: number;
+    detail?: string;
+  }) => void | Promise<void>;
+  onWebSearchCount?: (n: number) => void;
+}): Promise<{
+  glossary: GlossaryEntry[];
+  styleGuide: string;
+  tokensUsed: number;
+  webSearchCount: number;
+}> {
+  const {
+    entries,
+    config,
+    userTerms,
+    title,
+    signal,
+    maxRounds = 30,
+    onTool,
+    onBriefingProgress,
+    onWebSearchCount,
+  } = options;
+
+  const windows = splitBriefingEntryWindows(entries, BRIEFING_WINDOW_CHARS, 2);
+  const multi = windows.length > 1;
+  const sharedCtx = {
+    webSearchCount: 0,
+    softWebNudgeFired: false,
+    maxWebSearches:
+      typeof config.agentMaxWebSearches === 'number'
+        ? Math.max(0, config.agentMaxWebSearches)
+        : 3,
+    softWebNudge: config.agentSoftWebNudge !== false,
+  };
+
+  const gloParts: GlossaryEntry[][] = [];
+  const styles: string[] = [];
+  let tokensUsed = 0;
+  const perWindowRounds = multi ? Math.min(maxRounds, 24) : maxRounds;
+
+  for (let wi = 0; wi < windows.length; wi++) {
+    if (onBriefingProgress) {
+      await onBriefingProgress({
+        current: wi + 1,
+        total: windows.length,
+        detail: multi
+          ? `术语分析 ${wi + 1}/${windows.length} 窗…`
+          : '术语分析中…',
+      });
+    }
+    const win = windows[wi];
+    const r = await runOneBriefingWindow({
+      entries: win,
+      fullTranscriptForTools: entries,
+      config,
+      userTerms,
+      title,
+      signal,
+      maxRounds: perWindowRounds,
+      onTool,
+      onWebSearchCount,
+      windowLabel: multi ? `window ${wi + 1}/${windows.length}` : undefined,
+      sharedCtx,
+    });
+    onWebSearchCount?.(sharedCtx.webSearchCount);
+    gloParts.push(r.glossary);
+    if (r.styleGuide.trim()) styles.push(r.styleGuide.trim());
+    tokensUsed += r.tokensUsed;
+  }
+
+  let glossary = unionGlossaries(gloParts);
+  let styleGuide = mergeStyleGuides(styles);
+
+  const plain = transcriptPlainFromEntries(entries);
+  const defaultStyle = `Translate ${config.sourceLanguage} subtitles into natural ${config.targetLanguage}. Keep names and recurring terms consistent.`;
+
+  // User-term expand (literal + optional LLM) then finalize ground/align
+  const expandOn = config.agentExpandUserTerms !== false;
+  let expandedUserRows: GlossaryEntry[] | undefined;
+  if (expandOn && userTerms.length && plain) {
+    const llm = getActiveLlmConfig(config);
+    const exp = await expandUserTerms({
+      userTerms,
+      transcriptText: plain,
+      llm,
+      signal,
+      useLlm: true,
+    });
+    expandedUserRows = exp.rows;
+    tokensUsed += exp.tokensUsed;
+  }
+
+  const finalized = finalizeAgentGlossary(
+    glossary,
+    userTerms,
+    styleGuide || defaultStyle,
+    {
+      transcriptText: plain,
+      forceAllUserTerms: Boolean(config.agentForceAllUserTerms),
+      expandedUserRows,
+      defaultStyle,
+    }
+  );
+
+  return {
+    glossary: finalized.glossary,
+    styleGuide: finalized.styleGuide || defaultStyle,
+    tokensUsed,
+    webSearchCount: sharedCtx.webSearchCount,
+  };
+}
+
+/** 无 tool 的单次抽取（tool loop 失败时的兜底） */
+export { parseTerminologyContent, finalizeAgentGlossary };

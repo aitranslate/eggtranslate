@@ -64,7 +64,7 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
       : ALL_PHASES.filter(p => p !== 'converting');
   }, [file.fileType]);
 
-  // 所有需要展示的阶段都完成了（用于 FileActionButtons 的 "一键转译置灰" 终态判断）
+  // 所有需要展示的阶段都完成了（用于 FileActionButtons 主按钮置灰终态判断）
   const allPhasesDone = useMemo(
     () => displayPhases.every(p => file.phases[p]?.status === 'completed'),
     [displayPhases, file.phases]

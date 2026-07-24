@@ -10,6 +10,16 @@ import { TRANSLATION_TOOL_SCHEMAS } from '../tools/registry';
 import type { AgentToolContext, TranscriptEntry } from '../toolTypes';
 import type { GlossaryEntry } from '../types';
 
+/** Default max tool-loop rounds for translation (coverage retries are outer). */
+export const DEFAULT_TRANSLATE_MAX_ROUNDS = 8;
+
+/** Prefer forcing the only submit tool when the provider supports it. */
+export function translateToolChoice(
+  submitName = 'submit_translation'
+): { type: 'function'; function: { name: string } } {
+  return { type: 'function', function: { name: submitName } };
+}
+
 function formatEnforcement(glossary: GlossaryEntry[]): string {
   const lines = glossary
     .filter((g) => g.source && g.target)
@@ -53,10 +63,10 @@ ${formatEnforcement(glossary)}${notesBlock}
 ${style}
 
 Output rules:
-- Return one translation per segment index.
-- Do not combine or split segments.
-- Do not include explanations, notes, or markdown.
-- When done, call submit_translation with the complete list of {index, text} for this window.
+- One translation per required segment index; do not combine or split segments.
+- No explanations or markdown outside the tool call.
+- Call submit_translation covering EVERY required index.
+- Prefer translations: [{index, text}, ...]. If the runtime double-encodes args, still put every index+text in the payload — the harness recovers common packaging forms; incomplete coverage is what fails.
 `;
 }
 
@@ -123,7 +133,7 @@ export async function runTranslateWindowAgent(options: {
     config,
     signal,
     qaFeedback,
-    maxRounds = 24,
+    maxRounds = DEFAULT_TRANSLATE_MAX_ROUNDS,
     onTool,
   } = options;
 
@@ -163,6 +173,7 @@ export async function runTranslateWindowAgent(options: {
     temperature: 0.25,
     submitToolName: 'submit_translation',
     submitInstruction: 'with complete {index,text} list for every required index',
+    toolChoice: translateToolChoice('submit_translation'),
     onTool,
   });
 

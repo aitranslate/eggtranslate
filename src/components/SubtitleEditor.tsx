@@ -790,10 +790,10 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
                 {translationStats.translated}/{translationStats.total} 已译 · {translationStats.percentage}%
               </span>
               {agentUiVisible && agentRun ? (
-                // 分隔符与控件同在 Suspense 内：chunk 未就绪时不出现孤立「·」
+                // 桌面 + 移动均可打开过程面板（chunk 未就绪时不出现孤立「·」）
                 <LazySurface fallback={null}>
                   <>
-                    <span className="hidden sm:inline">·</span>
+                    <span aria-hidden>·</span>
                     <LazyAgentProcessControl status={agentRun} visible />
                   </>
                 </LazySurface>
