@@ -308,15 +308,16 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
                   <div className="relative">
                     <Input
                       ref={inputRef}
-                      value={pickerOpen ? filter : activeProfile.model}
+                      value={activeProfile.model}
                       onChange={(e) => {
-                        if (pickerOpen) setFilter(e.target.value);
-                        else onUpdateActiveProfile({ model: e.target.value });
+                        const val = e.target.value;
+                        onUpdateActiveProfile({ model: val });
+                        if (pickerOpen) setFilter(val);
                       }}
                       onFocus={() => {
                         if (chatModels.length > 0) {
                           setPickerOpen(true);
-                          setFilter('');
+                          setFilter(activeProfile.model || '');
                         }
                       }}
                       placeholder={
@@ -329,8 +330,9 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          setPickerOpen((v) => !v);
-                          setFilter('');
+                          const willOpen = !pickerOpen;
+                          setPickerOpen(willOpen);
+                          setFilter(willOpen ? (activeProfile.model || '') : '');
                         }}
                         className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
                         aria-label="打开模型列表"
