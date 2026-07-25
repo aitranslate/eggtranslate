@@ -124,12 +124,7 @@ const Shell: React.FC<{
 /** 全部完成：紧凑摘要，避免大步进重复占位 */
 const CompletedSummary: React.FC<{
   phases: ProgressPhase[];
-  phaseMap: Record<ProgressPhase, PhaseProgress>;
-}> = ({ phases, phaseMap }) => {
-  const totalEntries = phases.reduce((max, k) => {
-    const n = phaseMap[k]?.totalEntries ?? phaseMap[k]?.entryCount ?? 0;
-    return Math.max(max, n);
-  }, 0);
+}> = ({ phases }) => {
 
   return (
     <motion.div
@@ -163,15 +158,6 @@ const CompletedSummary: React.FC<{
               </span>
             ))}
           </div>
-
-          {totalEntries > 0 && (
-            <span
-              className="text-[11px] tabular-nums font-medium shrink-0"
-              style={{ color: 'color-mix(in srgb, var(--apple-success) 80%, black)' }}
-            >
-              {totalEntries} 条
-            </span>
-          )}
         </div>
       </Shell>
     </motion.div>
@@ -540,7 +526,7 @@ export const StepperProgress: React.FC<StepperProgressProps> = ({
 
   // 全部成功完成 → 摘要行（失败仍走详细 UI）
   if (allDone && !anyFailed) {
-    return <CompletedSummary phases={displayPhases} phaseMap={phases} />;
+    return <CompletedSummary phases={displayPhases} />;
   }
 
   if (displayPhases.length === 1) {
