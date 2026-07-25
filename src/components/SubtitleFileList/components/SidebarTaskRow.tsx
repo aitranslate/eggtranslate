@@ -197,9 +197,6 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
       if (file.duration != null && file.duration > 0) {
         parts.push(formatDuration(file.duration));
       }
-      if ((file.entryCount ?? 0) > 0) {
-        parts.push(`${file.entryCount} 条`);
-      }
     }
     if (pct > 0 && pct < 100) parts.push(`${pct}%`);
     return parts.join(' · ');
