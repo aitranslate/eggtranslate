@@ -180,6 +180,9 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
       : isAudioVideo && !isTranscriptionDone && !isTranscribeFailed
         ? '转译'
         : '翻译';
+  const primaryTitle = isAudioVideo && !isTranscriptionDone && !isTranscribeFailed && !isFailed && !allPhasesDone
+    ? '转录翻译'
+    : idlePrimary;
   const primaryLabel = resolveBusyPrimaryLabel({
     isQueued,
     isBusy,
@@ -402,7 +405,7 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
               type="button"
               className={`wb-proj-tool primary ${isQueued ? 'muted' : ''}`}
               disabled={!canRun && !isQueued}
-              title={primaryLabel}
+              title={primaryTitle}
               onClick={handlePrimary}
             >
               {/* 忙时不再转圈：阶段 chip 上已有唯一 spinner */}

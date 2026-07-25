@@ -551,15 +551,16 @@ html.dark {
 /* 暗色：主 CTA 用 soft，避免侧栏大蓝块 */
 .workbench[data-theme='dark'] .wb-proj-list-btn.primary,
 .workbench[data-theme='dark'] .wb-proj-tool.primary:not(:disabled) {
-  background: color-mix(in srgb, var(--wb-brand) 18%, transparent);
-  color: color-mix(in srgb, var(--wb-brand) 55%, #fff);
-  border: 1px solid color-mix(in srgb, var(--wb-brand) 42%, transparent);
+  background: var(--wb-panel);
+  color: var(--wb-text-2);
+  border: 1px solid var(--wb-border);
 }
 
 .workbench[data-theme='dark'] .wb-proj-list-btn.primary:hover,
 .workbench[data-theme='dark'] .wb-proj-tool.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--wb-brand) 32%, transparent);
-  color: #fff;
+  background: var(--wb-panel-2);
+  color: var(--wb-text);
+  border-color: var(--wb-border-strong);
 }
 
 .wb-proj {
@@ -609,9 +610,9 @@ html.dark .wb-proj-list-btn.primary,
 .workbench[data-theme='dark'] .wb-proj-list-btn.primary,
 html.dark .wb-proj-tool.primary,
 .workbench[data-theme='dark'] .wb-proj-tool.primary {
-  background: color-mix(in srgb, var(--wb-brand) 16%, transparent) !important;
-  color: color-mix(in srgb, var(--wb-brand) 55%, #fff) !important;
-  border: 1px solid color-mix(in srgb, var(--wb-brand) 42%, transparent) !important;
+  background: var(--wb-panel) !important;
+  color: var(--wb-text-2) !important;
+  border: 1px solid var(--wb-border) !important;
   box-shadow: none !important;
 }
 
@@ -619,16 +620,17 @@ html.dark .wb-proj-list-btn.primary:hover,
 .workbench[data-theme='dark'] .wb-proj-list-btn.primary:hover,
 html.dark .wb-proj-tool.primary:hover:not(:disabled),
 .workbench[data-theme='dark'] .wb-proj-tool.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--wb-brand) 30%, transparent) !important;
-  color: #fff !important;
+  background: var(--wb-panel-2) !important;
+  color: var(--wb-text) !important;
+  border-color: var(--wb-border-strong) !important;
 }
 
 html.dark .wb-proj-tool.primary:disabled,
 .workbench[data-theme='dark'] .wb-proj-tool.primary:disabled {
-  background: rgba(255, 255, 255, 0.06) !important;
+  background: var(--wb-panel) !important;
   color: var(--wb-text-3) !important;
-  border-color: var(--wb-border) !important;
-  opacity: 0.7;
+  border: 1px solid var(--wb-border) !important;
+  opacity: 0.55;
 }
 
 .wb-proj-row {
@@ -909,7 +911,7 @@ html.dark .wb-proj-tool.primary:disabled,
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  padding: 2px 0 6px 30px;
+  padding: 2px 0 6px 36px;
 }
 
 .wb-proj-phase {
@@ -969,7 +971,7 @@ html.dark .wb-proj-tool.primary:disabled,
   justify-content: flex-start;
   gap: 4px;
   min-width: 0;
-  padding: 6px 2px 2px 8px;
+  padding: 6px 0 2px 0;
   border-top: 1px solid var(--wb-border);
   margin-top: 2px;
 }
@@ -1047,23 +1049,27 @@ html.dark .wb-proj-tool.primary:disabled,
 }
 
 .wb-proj-tool.primary {
-  background: var(--wb-brand);
-  border-color: transparent;
-  color: #fff;
+  background: var(--wb-panel);
+  border: 1px solid var(--wb-border);
+  color: var(--wb-text-2);
 }
 
 .wb-proj-tool.primary:hover:not(:disabled) {
-  background: var(--apple-blue-hover, #0077ed);
-  color: #fff;
+  background: var(--wb-panel-2);
+  color: var(--wb-text);
+  border-color: var(--wb-border-strong);
 }
 
 .wb-proj-tool.primary.muted {
   background: var(--wb-text-3);
+  color: #fff;
+  border-color: transparent;
 }
 
 .wb-proj-tool.primary:disabled {
-  background: var(--wb-border-strong);
-  color: #fff;
+  background: var(--wb-panel);
+  color: var(--wb-text-3);
+  border: 1px solid var(--wb-border);
   opacity: 0.55;
 }
 
