@@ -32,6 +32,8 @@ export interface LLMConfig {
   apiKey: string;
   model: string;
   rpm?: number;
+  /** 是否必须填写 API Key */
+  requiresKey?: boolean;
 }
 
 /** 一套可切换的 LLM 接口档案 */

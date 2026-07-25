@@ -43,6 +43,7 @@ export function getActiveLlmConfig(config: TranslationConfig): LLMConfig {
     apiKey: p.apiKey,
     model: p.model,
     rpm: config.rpm,
+    requiresKey: p.requiresKey,
   };
 }
 
