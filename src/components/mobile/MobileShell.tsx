@@ -148,8 +148,16 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
     if (stage === 'terms') return '术语';
     if (stage === 'history') return '历史';
     if (inDetail) return selectedFile?.name || '任务';
-    return '项目';
+    // 列表首页与桌面一致：产品名 + 版本（勿用「项目」占位）
+    return '蛋蛋字幕翻译';
   }, [stage, inDetail, selectedFile?.name]);
+
+  const titleSub = useMemo(() => {
+    if (!inList) return null;
+    const ver = `v${__APP_VERSION__}`;
+    if (files.length > 0) return `${ver} · ${files.length} 个任务`;
+    return ver;
+  }, [inList, files.length]);
 
   /**
    * 布局契约：`.m-shell` 只放壳层槽位（顶栏 / 主区 / 底栏）。
@@ -178,8 +186,8 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
             <button
               type="button"
               className={`m-logo-btn${logoShake ? ' is-shake' : ''}`}
-              title="点我晃一晃"
-              aria-label="蛋蛋"
+              title={`蛋蛋字幕翻译 v${__APP_VERSION__}`}
+              aria-label={`蛋蛋字幕翻译 v${__APP_VERSION__}`}
               onClick={shakeBrandLogo}
               onAnimationEnd={() => setLogoShake(false)}
             >
@@ -195,9 +203,7 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
           )}
           <div className="m-top-titles">
             <h1 className="m-top-title">{title}</h1>
-            {inList && files.length > 0 && (
-              <span className="m-top-sub">{files.length} 个任务</span>
-            )}
+            {titleSub ? <span className="m-top-sub">{titleSub}</span> : null}
           </div>
         </div>
         <div className="m-top-right">

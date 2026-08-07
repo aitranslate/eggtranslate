@@ -33,4 +33,10 @@ describe('MobileShell navigation contracts', () => {
     expect(src).not.toContain('radix');
     expect(src).not.toContain('@radix-ui');
   });
+
+  it('shows product name and app version on list home (not bare 项目)', () => {
+    expect(src).toContain('蛋蛋字幕翻译');
+    expect(src).toContain('__APP_VERSION__');
+    expect(src).toMatch(/titleSub|v\$\{__APP_VERSION__\}|v\{__APP_VERSION__\}/);
+  });
 });

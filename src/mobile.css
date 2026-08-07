@@ -162,7 +162,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 46vw;
+  max-width: min(58vw, 12.5rem);
 }
 
 .m-top-sub {
@@ -170,6 +170,7 @@
   font-size: 11.5px;
   color: var(--wb-text-3);
   margin-top: 1px;
+  font-variant-numeric: tabular-nums;
 }
 
 .m-icon-btn {
