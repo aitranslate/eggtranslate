@@ -1,5 +1,5 @@
 // DP 断句模块总入口 —— Layer1 硬切分 + Layer2 DP 软切分。
-// Layer2：设置长度为 target；略超且无好切点可 +grace 整句保留；远超必切。
+// Layer2：词/字 + 拉丁字符(×5.5) 双目标；略超无好切点可 grace；远超必切。
 
 import { getProfile, joinTokenTexts, tokenize } from './profiles';
 import { splitTextToSentences, mapSentencesToWordRanges } from './hardSplit';
@@ -8,7 +8,14 @@ import { mergeWatchabilitySegments } from './watchabilityMerge';
 import type { DpSegment, Preset, Segment, SilenceQuery, WordToken, WordWithTime } from './types';
 
 export { mergeWatchabilitySegments } from './watchabilityMerge';
-export { WORD_LIMITS, CJK_CHAR_LIMITS, getProfile, joinTokenTexts } from './profiles';
+export {
+  WORD_LIMITS,
+  CJK_CHAR_LIMITS,
+  LATIN_CHAR_LIMITS,
+  CHARS_PER_WORD_BUDGET,
+  getProfile,
+  joinTokenTexts,
+} from './profiles';
 
 /**
  * 纯文本断句（复刻 / 离线测试用，不带 VAD 静音信息）。
@@ -16,13 +23,14 @@ export { WORD_LIMITS, CJK_CHAR_LIMITS, getProfile, joinTokenTexts } from './prof
 export function segmentText(text: string, lang: string, preset: Preset = 'standard'): Segment[] {
   const profile = getProfile(lang);
   const limit = profile.sourceLimit(preset);
+  const charLimit = profile.sourceCharLimit(preset);
   const sentences = splitTextToSentences(text, lang);
   const out: Segment[] = [];
 
   for (const sentence of sentences) {
     const tokens = tokenize(sentence, profile);
     if (tokens.length === 0) continue;
-    const ranges = splitSpanByDp(tokens, profile, limit);
+    const ranges = splitSpanByDp(tokens, profile, limit, 1.0, undefined, undefined, charLimit);
     const split = ranges.length > 1;
     for (const [a, b] of ranges) {
       out.push({
@@ -41,7 +49,7 @@ export function segmentText(text: string, lang: string, preset: Preset = 'standa
  * 音频流转录（带单词级时间戳）断句。
  * words 的 start/end 单位为秒；产出 startTime/endTime 为毫秒。
  * 切分仅在 ASR token 边界。
- * Layer2：≤limit 不切；略超仅好切点切，否则 +grace 可整句；远超必切。
+ * Layer2：词/字与拉丁字符双约束；略超仅好切点；远超必切。
  */
 export function segmentWords(
   words: WordWithTime[],
@@ -52,6 +60,7 @@ export function segmentWords(
   if (words.length === 0) return [];
   const profile = getProfile(lang);
   const limit = profile.sourceLimit(preset);
+  const charLimit = profile.sourceCharLimit(preset);
 
   // Layer1：硬切分用空格拼接（与 mapSentencesToWordRanges 对齐）
   const text = words.map((w) => w.text).join(' ');
@@ -73,7 +82,15 @@ export function segmentWords(
       return gap > 0 ? gap : null;
     };
 
-    const dpRanges = splitSpanByDp(tokens, profile, limit, 1.0, silence);
+    const dpRanges = splitSpanByDp(
+      tokens,
+      profile,
+      limit,
+      1.0,
+      silence,
+      undefined,
+      charLimit,
+    );
     for (const [a, b] of dpRanges) {
       const segWords = slice.slice(a, b + 1);
       out.push({

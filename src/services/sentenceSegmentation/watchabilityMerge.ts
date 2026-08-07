@@ -150,9 +150,27 @@ function segmentUnits(seg: DpSegment, tokenUnits: (t: string) => number): number
   return parts.reduce((s, t) => s + tokenUnits(t), 0);
 }
 
+function pairExceedsCaps(
+  l: DpSegment,
+  r: DpSegment,
+  profile: ReturnType<typeof getProfile>,
+  unitCap: number,
+  charCap: number,
+): boolean {
+  const pairUnits =
+    segmentUnits(l, profile.tokenUnits) + segmentUnits(r, profile.tokenUnits);
+  const tokenCount = (l.words?.length ?? 1) + (r.words?.length ?? 1);
+  if (tokenCount > 1 && pairUnits > unitCap) return true;
+  if (Number.isFinite(charCap)) {
+    const merged = mergeText(l.text, r.text);
+    if (merged.length > charCap) return true;
+  }
+  return false;
+}
+
 /**
  * 对 DP 断句产物做 watchability 合并。纯函数，返回新数组。
- * 合并后长度不得超过 sourceLimit（硬上限，与设置一致）。
+ * 合并后不得超过词/字与字符上限（拉丁双约束）。
  */
 export function mergeWatchabilitySegments(
   segments: DpSegment[],
@@ -162,6 +180,7 @@ export function mergeWatchabilitySegments(
   if (segments.length < 2) return segments;
   const profile = getProfile(lang);
   const hardLimit = profile.sourceLimit(preset);
+  const charLimit = profile.sourceCharLimit(preset);
   const maxUnits = hardLimit;
 
   const pass1: DpSegment[] = [];
@@ -173,12 +192,7 @@ export function mergeWatchabilitySegments(
     }
     const l = segments[i];
     const r = segments[i + 1];
-    // 先用 profile 计量合并后是否超 cap，再走语义 canMerge
-    const pairUnits =
-      segmentUnits(l, profile.tokenUnits) + segmentUnits(r, profile.tokenUnits);
-    // 合并至少 2 token → 必须 ≤ hardLimit
-    const tokenCount = (l.words?.length ?? 1) + (r.words?.length ?? 1);
-    if (tokenCount > 1 && pairUnits > maxUnits) {
+    if (pairExceedsCaps(l, r, profile, maxUnits, charLimit)) {
       pass1.push(l);
       i += 1;
       continue;
@@ -192,16 +206,29 @@ export function mergeWatchabilitySegments(
     }
   }
 
-  // 第二遍：在硬上限内吸收「一闪而过」的极短段（时长 < 800ms）
-  return absorbFlashSegments(pass1, profile, hardLimit);
+  return absorbFlashSegments(pass1, profile, hardLimit, charLimit);
 }
 
 const FLASH_MS = 800;
+
+function canFlashMerge(
+  l: DpSegment,
+  r: DpSegment,
+  profile: ReturnType<typeof getProfile>,
+  hardLimit: number,
+  charLimit: number,
+): boolean {
+  const gap = r.startTime - l.endTime;
+  if (gap > MERGE_GAP_MS) return false;
+  if (r.endTime - l.startTime > MERGE_BUDGET_MS) return false;
+  return !pairExceedsCaps(l, r, profile, hardLimit, charLimit);
+}
 
 function absorbFlashSegments(
   segments: DpSegment[],
   profile: ReturnType<typeof getProfile>,
   hardLimit: number,
+  charLimit: number,
 ): DpSegment[] {
   if (segments.length < 2) return segments;
   const out: DpSegment[] = [];
@@ -210,20 +237,9 @@ function absorbFlashSegments(
     const cur = segments[i];
     const dur = cur.endTime - cur.startTime;
     if (dur >= FLASH_MS || i === segments.length - 1) {
-      // 尝试并入前一段
       if (dur < FLASH_MS && out.length > 0) {
         const prev = out[out.length - 1];
-        const gap = cur.startTime - prev.endTime;
-        const pairU =
-          segmentUnits(prev, profile.tokenUnits) +
-          segmentUnits(cur, profile.tokenUnits);
-        const tok =
-          (prev.words?.length ?? 1) + (cur.words?.length ?? 1);
-        if (
-          gap <= MERGE_GAP_MS &&
-          cur.endTime - prev.startTime <= MERGE_BUDGET_MS &&
-          (tok <= 1 || pairU <= hardLimit)
-        ) {
+        if (canFlashMerge(prev, cur, profile, hardLimit, charLimit)) {
           out[out.length - 1] = mergePair(prev, cur);
           i += 1;
           continue;
@@ -233,37 +249,12 @@ function absorbFlashSegments(
       i += 1;
       continue;
     }
-    // 短段：优先并右侧，否则并左侧
     const next = segments[i + 1];
-    const gapR = next.startTime - cur.endTime;
-    const pairR =
-      segmentUnits(cur, profile.tokenUnits) +
-      segmentUnits(next, profile.tokenUnits);
-    const tokR = (cur.words?.length ?? 1) + (next.words?.length ?? 1);
-    if (
-      gapR <= MERGE_GAP_MS &&
-      next.endTime - cur.startTime <= MERGE_BUDGET_MS &&
-      (tokR <= 1 || pairR <= hardLimit)
-    ) {
-      // 与 next 合并后作为新 cur 再判断（简化：直接 push 合并体）
+    if (canFlashMerge(cur, next, profile, hardLimit, charLimit)) {
       const m = mergePair(cur, next);
-      // 若仍 flash 且有前段，再并前
-      if (
-        m.endTime - m.startTime < FLASH_MS &&
-        out.length > 0
-      ) {
+      if (m.endTime - m.startTime < FLASH_MS && out.length > 0) {
         const prev = out[out.length - 1];
-        const gap = m.startTime - prev.endTime;
-        const pairU =
-          segmentUnits(prev, profile.tokenUnits) +
-          segmentUnits(m, profile.tokenUnits);
-        const tok =
-          (prev.words?.length ?? 1) + (m.words?.length ?? 1);
-        if (
-          gap <= MERGE_GAP_MS &&
-          m.endTime - prev.startTime <= MERGE_BUDGET_MS &&
-          (tok <= 1 || pairU <= hardLimit)
-        ) {
+        if (canFlashMerge(prev, m, profile, hardLimit, charLimit)) {
           out[out.length - 1] = mergePair(prev, m);
           i += 2;
           continue;
@@ -275,17 +266,7 @@ function absorbFlashSegments(
     }
     if (out.length > 0) {
       const prev = out[out.length - 1];
-      const gap = cur.startTime - prev.endTime;
-      const pairU =
-        segmentUnits(prev, profile.tokenUnits) +
-        segmentUnits(cur, profile.tokenUnits);
-      const tok =
-        (prev.words?.length ?? 1) + (cur.words?.length ?? 1);
-      if (
-        gap <= MERGE_GAP_MS &&
-        cur.endTime - prev.startTime <= MERGE_BUDGET_MS &&
-        (tok <= 1 || pairU <= hardLimit)
-      ) {
+      if (canFlashMerge(prev, cur, profile, hardLimit, charLimit)) {
         out[out.length - 1] = mergePair(prev, cur);
         i += 1;
         continue;

@@ -79,14 +79,15 @@ describe('Layer1+Layer2 完整断句', () => {
     const text =
       'Today the local transcription pipeline keeps complete semantic sentences for accurate review, but it should split long subtitle lines near punctuation for comfortable offline viewing.';
     const segs = segmentWords(mkWords(text), 'en', 'short');
-    // 硬上限 short=12 词：长句可切多段，但首刀仍应落在 review, 语义边界
+    // 词 cap=12 + 字符 cap=66：长句必多段；逗号处仍应作为优质切点出现
     expect(segs.length).toBeGreaterThanOrEqual(2);
-    expect(segs[0].text).toBe(
-      'Today the local transcription pipeline keeps complete semantic sentences for accurate review,',
-    );
+    expect(segs.some((s) => s.text.includes('review,'))).toBe(true);
     for (const s of segs) {
       const words = s.text.split(/\s+/).filter(Boolean).length;
-      expect(words).toBeLessThanOrEqual(12);
+      if (s.words.length > 1) {
+        expect(words).toBeLessThanOrEqual(12);
+        expect(s.text.length).toBeLessThanOrEqual(66);
+      }
     }
   });
 
@@ -219,6 +220,39 @@ describe('splitSpanByDp 单元', () => {
       if (s.words.length > 1) {
         expect(chars).toBeLessThanOrEqual(16);
       }
+    }
+  });
+
+  it('latin_char_cap_splits_url_dense_line_under_word_limit', () => {
+    // 用户反馈：词数仅 11（≤ short=12）但含长 URL/邮箱，显示字符 ~90 ≫ 66
+    const text =
+      "Definitely buy it@sistersmacha.com that's sistersmacha.com and alrighty, back to the show.";
+    const segs = segmentWords(mkWords(text), 'en', 'short');
+    expect(segs.length).toBeGreaterThanOrEqual(2);
+    for (const s of segs) {
+      if (s.words.length > 1) {
+        expect(s.text.length).toBeLessThanOrEqual(66 + 11); // hard 目标 66；force 路径应 ≤66
+        expect(s.text.length).toBeLessThanOrEqual(66);
+      }
+    }
+  });
+
+  it('normal_prose_under_word_limit_not_cut_by_char_budget', () => {
+    // 普通 9 词短句，字符约 44 < 66，不应被字符 cap 误伤
+    const text = 'The quick brown fox jumps over the lazy dog.';
+    const segs = segmentWords(mkWords(text), 'en', 'short');
+    expect(segs).toHaveLength(1);
+  });
+
+  it('long_digit_token_counts_toward_char_budget', () => {
+    // 词数不多但超长数字/账号推高字符（>66）→ 应在 and 等好处切开
+    const text =
+      'Please dial 18005551234999887766 and also try 18005559876112233445 for support desk';
+    expect(text.length).toBeGreaterThan(66);
+    const segs = segmentWords(mkWords(text), 'en', 'short');
+    expect(segs.length).toBeGreaterThanOrEqual(2);
+    for (const s of segs) {
+      if (s.words.length > 1) expect(s.text.length).toBeLessThanOrEqual(66);
     }
   });
 

@@ -1,5 +1,7 @@
 // DP 软切分代价常量。
 
+import { CHARS_PER_WORD_BUDGET } from './profiles';
+
 /**
  * 过短碎片下限（单位与长度预算一致：拉丁=词，CJK=字）。
  * ≤ 此值的 DP 段在 **合并后仍 ≤ hard limit** 时才会被吸收。
@@ -7,10 +9,13 @@
 export const MIN_FRAGMENT_UNITS = 2.0;
 
 /**
- * 无「好切点」时允许略超设置长度的缓冲（词/字单位与 limit 一致）。
- * 例：短=12 → 最多整句保留 14；有好切点时仍按 limit 切开。
+ * 无「好切点」时允许略超设置长度的词/字缓冲。
+ * 例：短=12 → 词最多整句保留 14。
  */
 export const LENGTH_GRACE_UNITS = 2;
+
+/** 字符 grace ≈ 词 grace × 5.5 → 11 */
+export const LENGTH_GRACE_CHARS = Math.round(LENGTH_GRACE_UNITS * CHARS_PER_WORD_BUDGET);
 
 /**
  * 静音多久才算「好切点」（秒）。
