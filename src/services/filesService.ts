@@ -29,7 +29,7 @@ export async function addFile(file: File): Promise<string | null> {
   const { defaultKeytermGroupId } = useTranscriptionStore.getState();
   const langs = defaultTaskLanguages();
 
-  // 音视频：FFmpeg 抽音轨转 MP3 后再入库（不依赖浏览器解码白名单）
+  // 音视频：唯一转码点（FFmpeg 抽音轨 → 16k mono MP3）
   const isSrt = /\.srt$/i.test(file.name) || file.type === 'application/x-subrip';
   const isMedia =
     !isSrt &&
@@ -40,7 +40,6 @@ export async function addFile(file: File): Promise<string | null> {
     return addMediaFile(file, defaultKeytermGroupId, langs);
   }
 
-  // SRT 字幕：直接加载，无转码
   return addSubtitleFile(file, defaultKeytermGroupId, langs);
 }
 

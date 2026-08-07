@@ -8,7 +8,7 @@ import { logger } from '@/utils/logger'
 import { rehydrateAppStores } from '@/stores/bootstrap'
 import { initThemeFromStorage } from '@/stores/themeStore'
 import { initSoundFromStorage } from '@/stores/soundStore'
-import { warmupMp3Encoder } from '@/utils/convertToMP3'
+import { warmupFfmpeg } from '@/utils/convertToMP3'
 
 initThemeFromStorage()
 initSoundFromStorage()
@@ -51,8 +51,8 @@ initializeApp()
     renderApp()
     // 不阻塞首屏：后台卸掉历史 SW
     void unregisterLegacyServiceWorkers()
-    // 空闲时预热 FFmpeg.wasm：避免首次导入音视频才下载 core
-    const warm = () => warmupMp3Encoder()
+    // 空闲预热 FFmpeg core，避免首次导入才下载 WASM
+    const warm = () => warmupFfmpeg()
     if (typeof requestIdleCallback === 'function') {
       requestIdleCallback(warm, { timeout: 2500 })
     } else {

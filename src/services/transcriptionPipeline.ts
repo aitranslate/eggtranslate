@@ -1,17 +1,13 @@
 /**
- * 转录流程服务
- * 封装音视频 → AssemblyAI 转录 → 生成字幕条目
+ * 转录流程：已就绪 MP3 → AssemblyAI → 字幕条目
+ * 转码在 addFile 完成，这里不再做 FFmpeg。
  */
 
 import { SubtitleEntry } from '@/types';
 import { assemblyaiService } from './assemblyaiService';
 import { formatTime } from '@/utils/timeUtils';
 
-/**
- * 进度更新回调
- */
 export interface ProgressCallbacks {
-  onConverting?: () => void;
   onUploading?: () => void;
   onTranscribing?: () => void;
   onSegmenting?: () => void;
@@ -21,14 +17,12 @@ export interface ProgressCallbacks {
 }
 
 /**
- * 执行转录流程
- * @param fileRef - 音视频文件引用
- * @param keyterms - 热词列表
+ * @param audioFile - addFile 缓存的 16k mono MP3
+ * @param keyterms - 热词
  * @param callbacks - 进度回调
- * @returns 转录结果
  */
 export const runTranscriptionPipeline = async (
-  fileRef: File,
+  audioFile: File,
   keyterms: string[] = [],
   callbacks: ProgressCallbacks = {}
 ): Promise<{
@@ -36,30 +30,23 @@ export const runTranscriptionPipeline = async (
   language: string;
 }> => {
   try {
-    // 1. 上传并转录（使用智能断句）
-    const { sentences, language } = await assemblyaiService.transcribeWithSmartSegmentation(
-      fileRef,
-      { keyterms },
-      (status, percent) => {
-        // 关键：不要把 "converting" 阶段的 percent 透传给上层。
-        // converting 是内部 MP3 编码（addFile 阶段已经做完，这里是冗余再转一次），
-        // 但它的 5% 数字会被 transcribing 的 progress 误显，造成一闪而过的"5%"。
-        if (status === 'converting') {
-          callbacks.onConverting?.();
-        } else if (status === 'transcribing') {
-          callbacks.onProgress?.(percent);
-          callbacks.onTranscribing?.();
-        } else if (status === 'segmenting') {
-          callbacks.onSegmenting?.();
-        } else if (status === 'completed') {
-          callbacks.onCompleted?.();
+    const { sentences, language } =
+      await assemblyaiService.transcribeWithSmartSegmentation(
+        audioFile,
+        { keyterms },
+        (status, percent) => {
+          if (status === 'transcribing') {
+            callbacks.onProgress?.(percent);
+            callbacks.onTranscribing?.();
+            callbacks.onUploading?.();
+          } else if (status === 'segmenting') {
+            callbacks.onSegmenting?.();
+          } else if (status === 'completed') {
+            callbacks.onCompleted?.();
+          }
         }
-      }
-    );
+      );
 
-    // onCompleted callback will show toast
-
-    // 2. 生成字幕条目
     const entries: SubtitleEntry[] = [];
     let entryId = 1;
 
@@ -71,7 +58,7 @@ export const runTranscriptionPipeline = async (
         text: sentence.text,
         translatedText: '',
         translationStatus: 'pending',
-        words: sentence.words
+        words: sentence.words,
       });
     }
 
@@ -79,13 +66,11 @@ export const runTranscriptionPipeline = async (
 
     return {
       entries,
-      language
+      language,
     };
-
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : '转录失败';
-    callbacks.onError?.(errorMessage);
+    const message = error instanceof Error ? error.message : String(error);
+    callbacks.onError?.(message);
     throw error;
   }
 };
-

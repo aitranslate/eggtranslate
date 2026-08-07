@@ -1,9 +1,7 @@
 /**
  * 转录 Service
- * 编排音视频 → MP3 → AssemblyAI 转录 → 字幕条目
- *
- * 注意：转码（MP3）已在 addFile 阶段完成并持久化到 IndexedDB。
- * 这里只做"取 MP3 → 调 API → 写字幕"。
+ * 取 IndexedDB 中 addFile/FFmpeg 已就绪的 MP3 → AssemblyAI → 写字幕。
+ * 不再做转码。
  */
 
 import { useFilesStore } from '@/stores/filesStore';
@@ -69,28 +67,20 @@ export async function startTranscription(fileId: string): Promise<void> {
 
     const mp3File = new File([mp3Blob], 'audio.mp3', { type: 'audio/mpeg' });
 
-    const result = await runTranscriptionPipeline(
-      mp3File,
-      allKeyterms,
-      {
-        onConverting: () => {},
-        onUploading: () => {},
-        onTranscribing: () => {
-          useFilesStore.getState().updatePhase(fileId, 'transcribing', {
-            status: 'active',
-            progress: -1,
-            tokens: 0,
-          });
-        },
-        onProgress: (percent) => {
-          useFilesStore.getState().updatePhase(fileId, 'transcribing', { progress: percent });
-        },
-        onCompleted: () => {},
-        onError: () => {
-          // 状态由 catch 块统一处理
-        }
-      }
-    );
+    const result = await runTranscriptionPipeline(mp3File, allKeyterms, {
+      onTranscribing: () => {
+        useFilesStore.getState().updatePhase(fileId, 'transcribing', {
+          status: 'active',
+          progress: -1,
+          tokens: 0,
+        });
+      },
+      onProgress: (percent) => {
+        useFilesStore.getState().updatePhase(fileId, 'transcribing', {
+          progress: percent,
+        });
+      },
+    });
 
     useFilesStore.setState((state) => ({
       tasks: state.tasks.map((t) =>

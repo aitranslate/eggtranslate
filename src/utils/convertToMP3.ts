@@ -1,16 +1,13 @@
 /**
- * 音视频 → 16kHz 单声道 MP3（ffmpeg.wasm）
+ * FFmpeg.wasm：任意音视频 → 16kHz 单声道 MP3（只抽音轨）
  *
- * - 只抽取音频轨（-vn），不依赖浏览器 decodeAudioData 白名单
- * - 优先 WORKERFS/Blob 挂载，避免把整份巨型视频 write 进 WASM 内存
- * - 单例 + 队列：同时只跑一路转码（与串行导入一致）
- * - 用户无感：仍导出 convertToMP3 / warmupMp3Encoder 同名 API
+ * 唯一转码入口。调用方：filesService.addFile。
+ * 转录链路只消费 IndexedDB 里的结果，不再二次转码。
  */
 import { FFmpeg, FFFSType } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { logger } from '@/utils/logger';
 
-/** 与转录友好的规格：单声道 16kHz，体积远小于原视频 */
 const TARGET_SR = 16000;
 const TARGET_BITRATE = '64k';
 
@@ -20,7 +17,7 @@ const CORE_BASE =
 
 let ffmpegInstance: FFmpeg | null = null;
 let loadPromise: Promise<FFmpeg> | null = null;
-/** 串行化 exec，避免多文件抢同一 WASM 实例 */
+/** 串行 exec，避免多文件抢同一实例 */
 let queue: Promise<unknown> = Promise.resolve();
 
 function enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -37,10 +34,8 @@ function extOf(name: string): string {
   return m ? m[1].toLowerCase() : 'bin';
 }
 
-/** 虚拟盘文件名：避免用户文件名里的空格、&、中文等坑 */
 function safeInputName(file: File): string {
-  const ext = extOf(file.name);
-  return `input.${ext || 'bin'}`;
+  return `input.${extOf(file.name) || 'bin'}`;
 }
 
 async function getFFmpeg(): Promise<FFmpeg> {
@@ -74,10 +69,8 @@ async function getFFmpeg(): Promise<FFmpeg> {
   return loadPromise;
 }
 
-/**
- * 预热：空闲时拉取 ffmpeg-core，避免首次导入音视频卡在下载 WASM。
- */
-export function warmupMp3Encoder(): void {
+/** 空闲预热：拉取 ffmpeg-core，避免首次导入才下载 WASM */
+export function warmupFfmpeg(): void {
   if (typeof window === 'undefined') return;
   void getFFmpeg().catch((e) => {
     logger.warn('FFmpeg 预热失败（可忽略，首次转码时重试）', e);
@@ -85,8 +78,8 @@ export function warmupMp3Encoder(): void {
 }
 
 /**
- * 将任意常见音视频转为 16kHz mono MP3 Blob。
- * 已是较小 MP3 时仍统一重编码，保证采样率/声道与转录链路一致。
+ * 任意常见音视频 → 16kHz mono MP3 Blob。
+ * 统一重编码，保证采样率/声道与转录链路一致。
  */
 export async function convertToMP3(
   file: File,
@@ -108,13 +101,12 @@ export async function convertToMP3(
     ffmpeg.on('progress', onProg);
 
     try {
-      // 清理可能残留的上次文件
       await safeDelete(ffmpeg, outputName);
       await safeUnmount(ffmpeg, mountDir);
 
       let inputPath = inputName;
 
-      // 优先 WORKERFS + blobs：按安全名挂载，不把整文件拷进 MEMFS
+      // WORKERFS：按需读 File，避免整份大视频进 MEMFS
       try {
         await ffmpeg.createDir(mountDir).catch(() => undefined);
         await ffmpeg.mount(
@@ -125,11 +117,10 @@ export async function convertToMP3(
         inputPath = `${mountDir}/${inputName}`;
         mounted = true;
         logger.info(
-          `[ffmpeg] WORKERFS 挂载: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`
+          `[ffmpeg] WORKERFS: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`
         );
       } catch (mountErr) {
         logger.warn('[ffmpeg] WORKERFS 不可用，回退 writeFile', mountErr);
-        // 回退：整文件写入 MEMFS（大文件可能 OOM）
         await ffmpeg.writeFile(inputName, await fetchFile(file));
         inputPath = inputName;
         wroteInput = true;
@@ -140,7 +131,7 @@ export async function convertToMP3(
       const code = await ffmpeg.exec([
         '-i',
         inputPath,
-        '-vn', // 只要音频
+        '-vn',
         '-ac',
         '1',
         '-ar',
@@ -174,7 +165,6 @@ export async function convertToMP3(
         `[ffmpeg] 完成: ${(file.size / 1024 / 1024).toFixed(1)}MB → ${(bytes.byteLength / 1024 / 1024).toFixed(2)}MB MP3`
       );
 
-      // 拷贝脱离 WASM 堆，便于后续释放
       const copy = new Uint8Array(bytes.byteLength);
       copy.set(bytes);
       return new Blob([copy], { type: 'audio/mpeg' });
@@ -190,12 +180,8 @@ export async function convertToMP3(
     } finally {
       ffmpeg.off('progress', onProg);
       await safeDelete(ffmpeg, outputName);
-      if (wroteInput) {
-        await safeDelete(ffmpeg, inputName);
-      }
-      if (mounted) {
-        await safeUnmount(ffmpeg, mountDir);
-      }
+      if (wroteInput) await safeDelete(ffmpeg, inputName);
+      if (mounted) await safeUnmount(ffmpeg, mountDir);
     }
   });
 }

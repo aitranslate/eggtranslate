@@ -7,22 +7,7 @@ import type { ExportFormat } from '@/utils/fileExport';
 
 // ---------- 导入 ----------
 
-/** @deprecated 保留导出供旧测试；产品侧已改为「字幕 + 任意音视频」 */
-export const SUPPORTED_IMPORT_EXTS = [
-  'srt',
-  'mp3',
-  'wav',
-  'm4a',
-  'ogg',
-  'flac',
-  'mp4',
-  'webm',
-  'mkv',
-  'avi',
-  'mov',
-] as const;
-
-/** 不支持格式时的用户文案（不再罗列视频扩展名） */
+/** 不支持格式时的用户文案 */
 export function unsupportedImportMessage(): string {
   return '不支持的文件。请导入字幕（.srt）或任意音视频文件（将自动抽取音频）。';
 }
