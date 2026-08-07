@@ -1,6 +1,7 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { Trash2, Play, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { downloadZipFile, type ExportFormat } from '@/utils/fileExport';
 import { exportFile, exportAllPackage, exportAllFormat } from '@/services/SubtitleExporter';
 import { ExportButton } from '@/components/common/ExportButton';
@@ -19,6 +20,11 @@ import { SubtitleFileItemMemo as SubtitleFileItem } from './components/SubtitleF
 import { SidebarTaskRowMemo as SidebarTaskRow } from './components/SidebarTaskRow';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+
+/** 侧栏任务数超过此值启用虚拟列表 */
+const SIDEBAR_VIRTUAL_THRESHOLD = 12;
+/** 估算行高（含间距）；真实高度由 measureElement 校正 */
+const SIDEBAR_ROW_ESTIMATE = 88;
 
 interface SubtitleFileListProps {
   className?: string;
@@ -45,12 +51,23 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   const files = useFiles();
   const taskQueue = useQueueStore((state) => state.taskQueue);
   const activeTaskId = useQueueStore((state) => state.activeTaskId);
+  const listScrollRef = useRef<HTMLDivElement>(null);
 
   const queueMeta = useMemo(() => {
     const map = new Map<string, number>();
     taskQueue.forEach((id, i) => map.set(id, i + 1));
     return map;
   }, [taskQueue]);
+
+  const useSidebarVirtual =
+    variant === 'sidebar' && files.length > SIDEBAR_VIRTUAL_THRESHOLD;
+
+  const rowVirtualizer = useVirtualizer({
+    count: useSidebarVirtual ? files.length : 0,
+    getScrollElement: () => listScrollRef.current,
+    estimateSize: () => SIDEBAR_ROW_ESTIMATE,
+    overscan: 4,
+  });
 
   const { handleError } = useErrorHandler();
 
@@ -262,20 +279,102 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
       {isSidebar && !hasFiles ? (
         <div className="wb-task-list-empty">暂无项目</div>
       ) : (
-        <div className={isSidebar ? 'wb-task-list' : undefined}>
-          <div className={isSidebar ? 'wb-proj-list' : 'space-y-4'}>
-            {files.map((file) => {
-              const queuePosition = queueMeta.get(file.id) ?? 0;
-              const isActive = activeTaskId === file.id;
-              const isQueued = queuePosition > 0 && !isActive;
-
-              if (isSidebar) {
+        <div
+          className={isSidebar ? 'wb-task-list' : undefined}
+          ref={isSidebar ? listScrollRef : undefined}
+        >
+          {useSidebarVirtual ? (
+            <div
+              className="wb-proj-list"
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                width: '100%',
+                position: 'relative',
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((vItem) => {
+                const file = files[vItem.index];
+                if (!file) return null;
+                const queuePosition = queueMeta.get(file.id) ?? 0;
+                const isActive = activeTaskId === file.id;
+                const isQueued = queuePosition > 0 && !isActive;
                 return (
-                  <SidebarTaskRow
+                  <div
+                    key={file.id}
+                    data-index={vItem.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${vItem.start}px)`,
+                    }}
+                  >
+                    <SidebarTaskRow
+                      file={file}
+                      selected={selectedFileId === file.id}
+                      onSelect={handleOpen}
+                      onStartTranslation={async () => {
+                        startTranslateTask(file.id);
+                      }}
+                      onExportFormat={handleExportFile}
+                      onDelete={handleDeleteFile}
+                      onTranscribeAndTranslate={async () => {
+                        startFullTask(file.id);
+                      }}
+                      onTranscribe={async () => {
+                        startTranscribeTask(file.id);
+                      }}
+                      onDequeue={() => dequeueTask(file.id)}
+                      isQueued={isQueued}
+                      queuePosition={queuePosition}
+                      isActive={isActive}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className={isSidebar ? 'wb-proj-list' : 'space-y-4'}>
+              {files.map((file) => {
+                const queuePosition = queueMeta.get(file.id) ?? 0;
+                const isActive = activeTaskId === file.id;
+                const isQueued = queuePosition > 0 && !isActive;
+
+                if (isSidebar) {
+                  return (
+                    <SidebarTaskRow
+                      key={file.id}
+                      file={file}
+                      selected={selectedFileId === file.id}
+                      onSelect={handleOpen}
+                      onStartTranslation={async () => {
+                        startTranslateTask(file.id);
+                      }}
+                      onExportFormat={handleExportFile}
+                      onDelete={handleDeleteFile}
+                      onTranscribeAndTranslate={async () => {
+                        startFullTask(file.id);
+                      }}
+                      onTranscribe={async () => {
+                        startTranscribeTask(file.id);
+                      }}
+                      onDequeue={() => dequeueTask(file.id)}
+                      isQueued={isQueued}
+                      queuePosition={queuePosition}
+                      isActive={isActive}
+                    />
+                  );
+                }
+
+                return (
+                  <SubtitleFileItem
                     key={file.id}
                     file={file}
                     selected={selectedFileId === file.id}
                     onSelect={handleOpen}
+                    onEdit={handleOpen}
                     onStartTranslation={async () => {
                       startTranslateTask(file.id);
                     }}
@@ -293,34 +392,9 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
                     isActive={isActive}
                   />
                 );
-              }
-
-              return (
-                <SubtitleFileItem
-                  key={file.id}
-                  file={file}
-                  selected={selectedFileId === file.id}
-                  onSelect={handleOpen}
-                  onEdit={handleOpen}
-                  onStartTranslation={async () => {
-                    startTranslateTask(file.id);
-                  }}
-                  onExportFormat={handleExportFile}
-                  onDelete={handleDeleteFile}
-                  onTranscribeAndTranslate={async () => {
-                    startFullTask(file.id);
-                  }}
-                  onTranscribe={async () => {
-                    startTranscribeTask(file.id);
-                  }}
-                  onDequeue={() => dequeueTask(file.id)}
-                  isQueued={isQueued}
-                  queuePosition={queuePosition}
-                  isActive={isActive}
-                />
-              );
-            })}
-          </div>
+              })}
+            </div>
+          )}
         </div>
       )}
 

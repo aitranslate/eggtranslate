@@ -3,6 +3,7 @@
  *
  * 唯一转码入口。调用方：filesService.addFile。
  * 转录链路只消费 IndexedDB 里的结果，不再二次转码。
+ * core/wasm 经 Cache API 缓存，二次访问少下 ~30MB。
  */
 import { FFmpeg, FFFSType } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
@@ -15,9 +16,11 @@ const TARGET_BITRATE = '64k';
 const CORE_BASE =
   'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm';
 
+const CACHE_NAME = 'egg-ffmpeg-core-v1';
+
 let ffmpegInstance: FFmpeg | null = null;
 let loadPromise: Promise<FFmpeg> | null = null;
-/** 串行 exec，避免多文件抢同一实例 */
+/** 串行 exec，避免多文件抢同一 WASM 实例 */
 let queue: Promise<unknown> = Promise.resolve();
 
 function enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -38,21 +41,48 @@ function safeInputName(file: File): string {
   return `input.${extOf(file.name) || 'bin'}`;
 }
 
+/**
+ * 优先 Cache Storage，失败再网络；供 toBlobURL 使用的同源 blob。
+ */
+async function cachedBlobURL(url: string, mime: string): Promise<string> {
+  try {
+    if (typeof caches !== 'undefined') {
+      const cache = await caches.open(CACHE_NAME);
+      let res = await cache.match(url);
+      if (!res) {
+        res = await fetch(url);
+        if (res.ok) {
+          await cache.put(url, res.clone());
+        }
+      }
+      if (res.ok) {
+        const buf = await res.arrayBuffer();
+        const blob = new Blob([buf], { type: mime });
+        return URL.createObjectURL(blob);
+      }
+    }
+  } catch (e) {
+    logger.warn('[ffmpeg] Cache API 不可用，直连 CDN', e);
+  }
+  return toBlobURL(url, mime);
+}
+
 async function getFFmpeg(): Promise<FFmpeg> {
   if (ffmpegInstance?.loaded) return ffmpegInstance;
   if (loadPromise) return loadPromise;
 
   loadPromise = (async () => {
     const ffmpeg = new FFmpeg();
-    ffmpeg.on('log', ({ message }) => {
-      if (import.meta.env.DEV) {
+    // 转码热路径不打 log 到 React；仅 DEV 且可选
+    if (import.meta.env.DEV) {
+      ffmpeg.on('log', ({ message }) => {
         logger.info('[ffmpeg]', message);
-      }
-    });
+      });
+    }
 
     await ffmpeg.load({
-      coreURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(
+      coreURL: await cachedBlobURL(`${CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
+      wasmURL: await cachedBlobURL(
         `${CORE_BASE}/ffmpeg-core.wasm`,
         'application/wasm'
       ),
@@ -69,7 +99,7 @@ async function getFFmpeg(): Promise<FFmpeg> {
   return loadPromise;
 }
 
-/** 空闲预热：拉取 ffmpeg-core，避免首次导入才下载 WASM */
+/** 空闲预热：拉取/命中缓存 ffmpeg-core */
 export function warmupFfmpeg(): void {
   if (typeof window === 'undefined') return;
   void getFFmpeg().catch((e) => {
@@ -106,7 +136,6 @@ export async function convertToMP3(
 
       let inputPath = inputName;
 
-      // WORKERFS：按需读 File，避免整份大视频进 MEMFS
       try {
         await ffmpeg.createDir(mountDir).catch(() => undefined);
         await ffmpeg.mount(

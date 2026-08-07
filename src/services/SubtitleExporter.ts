@@ -95,6 +95,8 @@ export async function buildEntriesZip(entries: SubtitleEntry[], baseName: string
  * 从 filesStore 取 task 数据。
  */
 export async function exportTaskZip(taskId: string): Promise<Blob> {
+  const { ensureTaskEntriesLoaded } = await import('@/stores/filesStore');
+  await ensureTaskEntriesLoaded(taskId);
   const task = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
   if (!task || !task.subtitle_entries) throw new Error('任务数据不存在');
 
@@ -108,6 +110,9 @@ export async function exportTaskZip(taskId: string): Promise<Blob> {
  * - 其他   → exportEntries + downloadSubtitleFile
  */
 export async function exportFile(taskId: string, fileName: string, format: ExportFormat): Promise<void> {
+  const { ensureTaskEntriesLoaded } = await import('@/stores/filesStore');
+  await ensureTaskEntriesLoaded(taskId);
+
   if (format === 'package') {
     const blob = await exportTaskZip(taskId);
     downloadZipFile(blob, `${getBaseName(fileName)}.zip`);
@@ -131,6 +136,8 @@ export async function exportFile(taskId: string, fileName: string, format: Expor
  * 每个 task 用其源文件名作为前缀区分
  */
 export async function exportAllPackage(taskIds: string[]): Promise<Blob> {
+  const { ensureTaskEntriesLoaded } = await import('@/stores/filesStore');
+  await Promise.all(taskIds.map((id) => ensureTaskEntriesLoaded(id)));
   const tasks = taskIds
     .map((id) => useFilesStore.getState().tasks.find((t) => t.taskId === id))
     .filter((t): t is SingleTask => Boolean(t));
@@ -155,8 +162,10 @@ export async function exportAllPackage(taskIds: string[]): Promise<Blob> {
  */
 export async function exportAllFormat(taskIds: string[], format: Exclude<ExportFormat, 'package'>): Promise<number> {
   let skippedCount = 0;
+  const { ensureTaskEntriesLoaded } = await import('@/stores/filesStore');
 
   for (const id of taskIds) {
+    await ensureTaskEntriesLoaded(id);
     const task = useFilesStore.getState().tasks.find((t) => t.taskId === id);
     if (!task || !task.subtitle_entries) continue;
 

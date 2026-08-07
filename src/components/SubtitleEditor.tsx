@@ -5,7 +5,7 @@ import { Search, FileText, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { SubtitleEntry } from '@/types';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-import { useFilesStore, useFile } from '@/stores/filesStore';
+import { useFilesStore, useFile, ensureFileEntriesLoaded } from '@/stores/filesStore';
 import {
   EMPTY_STREAMING_OVERLAY,
   calcDisplayTranslationProgress,
@@ -387,6 +387,12 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const updateEntry = useFilesStore((state) => state.updateEntry);
   const setTaskLanguages = useFilesStore((state) => state.setTaskLanguages);
   const config = useTranslationConfig();
+
+  // 懒加载条目：主表 rehydrate 不含大数组
+  useEffect(() => {
+    if (!fileId) return;
+    void ensureFileEntriesLoaded(fileId);
+  }, [fileId]);
 
   const taskId = file?.taskId;
   const fileEntries = useFilesStore(

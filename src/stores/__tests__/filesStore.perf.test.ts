@@ -337,9 +337,9 @@ describe('filesStore persist coalescing', () => {
 
   it('flush after settle includes latest entry content', async () => {
     const fileId = generateStableFileId('t1');
-    const captured: string[] = [];
-    vi.mocked(localforage.setItem).mockImplementation(async (_name, value) => {
-      captured.push(String(value));
+    const captured: Array<{ name: string; value: unknown }> = [];
+    vi.mocked(localforage.setItem).mockImplementation(async (name, value) => {
+      captured.push({ name: String(name), value });
       return value as never;
     });
 
@@ -358,7 +358,15 @@ describe('filesStore persist coalescing', () => {
     await Promise.resolve();
     await flushFilesStorePersist();
 
-    expect(captured.some((v) => v.includes('最终译文'))).toBe(true);
+    // v4：entries 写在 egg_task_entries:*
+    const hasInEntriesKey = captured.some((c) => {
+      if (!c.name.includes('egg_task_entries')) return false;
+      return JSON.stringify(c.value).includes('最终译文');
+    });
+    expect(hasInEntriesKey).toBe(true);
+    // 内存中也有最新译文
+    const task = useFilesStore.getState().tasks[0];
+    expect(task.subtitle_entries[0]?.translatedText).toBe('最终译文');
   });
 });
 

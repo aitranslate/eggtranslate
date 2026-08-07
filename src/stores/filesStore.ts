@@ -23,9 +23,18 @@ import { generateStableFileId } from "@/utils/taskIdGenerator";
 import localforage from "localforage";
 import type { SingleTask } from "@/types";
 import { useAgentRunStore } from "@/stores/agentRunStore";
+import {
+  clearAllTaskEntries,
+  loadTaskEntries,
+  persistEntriesFromTasks,
+  removeTaskEntries,
+} from "@/stores/taskEntriesStorage";
 
 /** 快速连续写入时合并 IDB persist（翻译热路径） */
 export const FILES_PERSIST_DEBOUNCE_MS = 800;
+
+/** active 阶段仅 progress 变化时的 store 写入节流（流畅性） */
+export const PHASE_PROGRESS_THROTTLE_MS = 250;
 
 export type BatchEntryUpdate = {
   id: number;
@@ -76,6 +85,51 @@ function isSamePhaseProgress(a: PhaseProgress, b: PhaseProgress): boolean {
     if (!Object.is(a[k], b[k])) return false;
   }
   return true;
+}
+
+/** taskId:phase → 上次 progress 写入时刻 */
+const phaseProgressThrottle = new Map<string, number>();
+/** 节流窗口内合并的 progress patch */
+const phaseProgressPending = new Map<
+  string,
+  { timer: ReturnType<typeof setTimeout>; patch: Partial<PhaseProgress> }
+>();
+
+function applyPhasePatch(
+  get: () => FilesState,
+  set: (partial: Partial<FilesState> | ((s: FilesState) => Partial<FilesState>)) => void,
+  taskId: string,
+  phase: keyof Omit<FilePhases, "workflow">,
+  patch: Partial<PhaseProgress>,
+  tokensDelta: number | undefined
+): void {
+  const { tasks } = get();
+  let changed = false;
+  const newTasks = tasks.map((t) => {
+    if (t.taskId !== taskId) return t;
+    const prev = t.phases[phase];
+    const next: PhaseProgress = { ...prev, ...patch };
+    if (typeof tokensDelta === "number" && tokensDelta !== 0) {
+      next.tokens = Math.max(0, (prev.tokens || 0) + tokensDelta);
+    }
+    if (
+      typeof patch.progress === "number" &&
+      typeof prev.progress === "number" &&
+      patch.progress < prev.progress &&
+      patch.status !== "failed" &&
+      patch.status !== "completed"
+    ) {
+      next.progress = prev.progress;
+    }
+    if (prev && isSamePhaseProgress(prev, next)) return t;
+    changed = true;
+    return { ...t, phases: { ...t.phases, [phase]: next } };
+  });
+  if (!changed) return;
+  set({ tasks: newTasks });
+  if (patch.status === "completed" || patch.status === "failed") {
+    void flushFilesStorePersist();
+  }
 }
 
 interface FilesState {
@@ -153,11 +207,63 @@ export async function flushFilesStorePersist(): Promise<void> {
     clearTimeout(persistTimer);
     persistTimer = null;
   }
+  // 先落独立 entries，再写主表（主表 partialize 后不含 entries）
+  try {
+    await persistEntriesFromTasks(useFilesStore.getState().tasks);
+  } catch {
+    /* best-effort */
+  }
   if (!pendingPersist) return;
   const { name, value } = pendingPersist;
   pendingPersist = null;
   underlyingWriteCount += 1;
   await localforage.setItem(name, value);
+}
+
+/** 打开任务 / 导出 / 开译前：确保 entries 已从 IDB 载入内存 */
+const entriesLoadInflight = new Map<string, Promise<void>>();
+
+export async function ensureTaskEntriesLoaded(taskId: string): Promise<void> {
+  const existing = useFilesStore
+    .getState()
+    .tasks.find((t) => t.taskId === taskId);
+  if (!existing) return;
+  if ((existing.subtitle_entries?.length ?? 0) > 0) return;
+  if ((existing.entryCount ?? 0) <= 0) return;
+
+  let p = entriesLoadInflight.get(taskId);
+  if (!p) {
+    p = (async () => {
+      try {
+        const entries = (await loadTaskEntries(taskId)) ?? [];
+        useFilesStore.setState((state) => ({
+          tasks: state.tasks.map((t) =>
+            t.taskId === taskId
+              ? {
+                  ...t,
+                  subtitle_entries: entries,
+                  entryCount: entries.length || t.entryCount,
+                  translatedCount:
+                    entries.filter((e) => e.translatedText?.trim()).length ||
+                    t.translatedCount,
+                }
+              : t
+          ),
+        }));
+      } finally {
+        entriesLoadInflight.delete(taskId);
+      }
+    })();
+    entriesLoadInflight.set(taskId, p);
+  }
+  await p;
+}
+
+/** 按稳定 fileId 加载 entries */
+export async function ensureFileEntriesLoaded(fileId: string): Promise<void> {
+  const file = useFilesStore.getState().getFile(fileId);
+  if (!file) return;
+  await ensureTaskEntriesLoaded(file.taskId);
 }
 
 const debouncedStateStorage: StateStorage = {
@@ -221,6 +327,7 @@ export const useFilesStore = create<FilesState>()(
       removeTask: (taskId) => {
         const fileId = generateStableFileId(taskId);
         useAgentRunStore.getState().clearFile(fileId);
+        void removeTaskEntries(taskId);
         set((state) => ({
           tasks: state.tasks.filter((t) => t.taskId !== taskId),
           // selectedFileId 存的是 fileId（稳定 id），兼容旧数据里可能写过 taskId
@@ -234,6 +341,7 @@ export const useFilesStore = create<FilesState>()(
 
       clearAllTasks: () => {
         useAgentRunStore.setState({ byFileId: {} });
+        void clearAllTaskEntries();
         set({ tasks: [], selectedFileId: null });
         void flushFilesStorePersist();
       },
@@ -355,37 +463,53 @@ export const useFilesStore = create<FilesState>()(
         if (patch.status === "completed") {
           patch = { ...patch, errorMessage: undefined };
         }
-        // 先算再 set：无变化时不调用 set（订阅者 + persist 一并跳过）
-        const { tasks } = get();
-        let changed = false;
-        const newTasks = tasks.map((t) => {
-          if (t.taskId !== file.taskId) return t;
-          const prev = t.phases[phase];
-          const next: PhaseProgress = { ...prev, ...patch };
-          // 并发 batch：tokens 在单次更新内累加
-          if (typeof tokensDelta === "number" && tokensDelta !== 0) {
-            next.tokens = Math.max(0, (prev.tokens || 0) + tokensDelta);
+
+        // 仅 progress 抖动且仍 active：节流写 store，减少侧栏/编辑器重渲
+        const prevPhase = get().tasks.find((t) => t.taskId === file.taskId)?.phases[
+          phase
+        ];
+        const statusAfter = patch.status ?? prevPhase?.status;
+        const progressOnly =
+          typeof patch.progress === "number" &&
+          patch.status === undefined &&
+          tokensDelta === undefined &&
+          patch.errorMessage === undefined &&
+          patch.language === undefined &&
+          patch.entryCount === undefined &&
+          patch.totalEntries === undefined &&
+          patch.keytermGroupName === undefined &&
+          (statusAfter === "active" || prevPhase?.status === "active");
+
+        if (progressOnly) {
+          const throttleKey = `${file.taskId}:${phase}`;
+          const now = Date.now();
+          const last = phaseProgressThrottle.get(throttleKey) ?? 0;
+          if (now - last < PHASE_PROGRESS_THROTTLE_MS) {
+            const pending = phaseProgressPending.get(throttleKey);
+            if (pending?.timer) clearTimeout(pending.timer);
+            const wait = PHASE_PROGRESS_THROTTLE_MS - (now - last);
+            const timer = setTimeout(() => {
+              phaseProgressPending.delete(throttleKey);
+              phaseProgressThrottle.set(throttleKey, Date.now());
+              // 直接应用合并后的 progress，避免再次进入节流
+              applyPhasePatch(get, set, file.taskId, phase, patch, undefined);
+            }, wait);
+            phaseProgressPending.set(throttleKey, { timer, patch });
+            return;
           }
-          // 进度只前进不回退（并发回调乱序时）
-          if (
-            typeof patch.progress === "number" &&
-            typeof prev.progress === "number" &&
-            patch.progress < prev.progress &&
-            patch.status !== "failed" &&
-            patch.status !== "completed"
-          ) {
-            next.progress = prev.progress;
-          }
-          if (prev && isSamePhaseProgress(prev, next)) return t;
-          changed = true;
-          return { ...t, phases: { ...t.phases, [phase]: next } };
-        });
-        if (!changed) return;
-        set({ tasks: newTasks });
-        // terminal phase transitions: flush coalesced persist promptly
-        if (patch.status === "completed" || patch.status === "failed") {
-          void flushFilesStorePersist();
+          phaseProgressThrottle.set(throttleKey, now);
+          const pending = phaseProgressPending.get(throttleKey);
+          if (pending?.timer) clearTimeout(pending.timer);
+          phaseProgressPending.delete(throttleKey);
+        } else {
+          // 终态/非进度：取消该 phase 未发出的 progress 节流
+          const throttleKey = `${file.taskId}:${phase}`;
+          const pending = phaseProgressPending.get(throttleKey);
+          if (pending?.timer) clearTimeout(pending.timer);
+          phaseProgressPending.delete(throttleKey);
         }
+
+        applyPhasePatch(get, set, file.taskId, phase, patch, tokensDelta);
       },
 
       setWorkflow: (fileId, workflow) => {
@@ -469,35 +593,57 @@ export const useFilesStore = create<FilesState>()(
     {
       name: "subtitle_tasks",
       storage: createJSONStorage(() => debouncedStateStorage),
-      partialize: (state) => ({ tasks: state.tasks, selectedFileId: state.selectedFileId }),
-      version: 3,
+      // 主表不落大 entries / agentSnapshot，减轻启动 parse；entries 见 taskEntriesStorage
+      partialize: (state) => ({
+        selectedFileId: state.selectedFileId,
+        tasks: state.tasks.map((t) => ({
+          ...t,
+          subtitle_entries: [],
+          agentSnapshot: undefined,
+        })),
+      }),
+      version: 4,
       // 不在 mount 时自动 rehydrate；由 bootstrap.rehydrateAppStores() 在 render 前完成
       skipHydration: true,
       migrate: (persistedState: unknown, version: number) => {
         // 注意：migrate 只在 version 变化时调用，不能依赖它做「每次刷新的中断恢复」
         if (persistedState && typeof persistedState === "object" && "tasks" in persistedState) {
           const state = persistedState as { tasks: SingleTask[]; selectedFileId: string | null };
+          let tasks = state.tasks;
           if (version < 3) {
-            return {
-              ...state,
-              tasks: state.tasks.map((t) => ({ ...t, selectedKeytermGroupId: null })),
-            };
+            tasks = tasks.map((t) => ({ ...t, selectedKeytermGroupId: null }));
           }
-          return state;
+          if (version < 4) {
+            // 旧版 entries 嵌在主表：异步拆到独立 key，内存本会话仍保留
+            void persistEntriesFromTasks(tasks);
+          }
+          return { ...state, tasks };
         }
         return { tasks: [], selectedFileId: null };
       },
       /**
        * merge 在每一次 rehydrate 都会执行（与 version 无关）。
        * 在写入内存前把 active phase → failed，刷新后可重新处理，而不是卡死在「处理中」。
-       * 这是与 bootstrap「先 rehydrate 再 mount」配套的正确位置，不是事后 setState 补丁。
+       * v4+：主表 entries 为空，点开任务时 ensureTaskEntriesLoaded。
        */
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<{
           tasks: SingleTask[];
           selectedFileId: string | null;
         }>;
-        const tasks = (persisted.tasks ?? currentState.tasks ?? []).map(recoverInterruptedPhases);
+        const raw = persisted.tasks ?? currentState.tasks ?? [];
+        // 若 rehydrate 仍带嵌套 entries（旧数据未 migrate 完），先拆 key 再清空内存以统一懒加载
+        const hasInline = raw.some((t) => (t.subtitle_entries?.length ?? 0) > 0);
+        if (hasInline) {
+          void persistEntriesFromTasks(raw);
+        }
+        const tasks = raw
+          .map((t) =>
+            hasInline
+              ? { ...t, subtitle_entries: [] as SubtitleEntry[], agentSnapshot: undefined }
+              : { ...t, agentSnapshot: t.agentSnapshot }
+          )
+          .map(recoverInterruptedPhases);
         return {
           ...currentState,
           ...persisted,

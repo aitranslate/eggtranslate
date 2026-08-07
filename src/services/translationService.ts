@@ -133,6 +133,10 @@ export async function startTranslation(
   const usedAgent = Boolean(config.agentTranslationEnabled);
 
   try {
+    // 懒加载条目（主表 rehydrate 不含 subtitle_entries）
+    const { ensureTaskEntriesLoaded } = await import('@/stores/filesStore');
+    await ensureTaskEntriesLoaded(file.taskId);
+
     controller = await deps.beginSession(file.taskId);
 
     const entries = deps.getTaskEntries(file.taskId);
