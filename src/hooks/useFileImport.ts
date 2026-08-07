@@ -26,26 +26,22 @@ import {
   isTranscriptionApiConfigured,
 } from '@/utils/taskGuards';
 
+/**
+ * 字幕 + 任意音视频。
+ * accept 用 MIME 通配 + 常见扩展（仅影响系统文件选择器过滤，UI 不罗列格式）。
+ * 媒体一律走 FFmpeg 抽音轨，用户无需关心容器格式。
+ */
 export const IMPORT_ACCEPT =
-  '.srt,.mp3,.wav,.m4a,.ogg,.flac,.mp4,.webm,.mkv,.avi,.mov,audio/*,video/*';
-
-const SUPPORTED_EXTS = new Set([
-  'srt',
-  'mp3',
-  'wav',
-  'm4a',
-  'ogg',
-  'flac',
-  'mp4',
-  'webm',
-  'mkv',
-  'avi',
-  'mov',
-]);
+  '.srt,audio/*,video/*,.mkv,.avi,.mov,.wmv,.flv,.ts,.m4v,.webm,.ogg,.flac,.aac,.opus,.wma,.3gp,.mpeg,.mpg,.m4a,.wav,.mp3,.mp4';
 
 export function isSupportedImportFile(file: File): boolean {
-  const ext = file.name.toLowerCase().split('.').pop();
-  return Boolean(ext && SUPPORTED_EXTS.has(ext));
+  const name = (file.name || '').toLowerCase();
+  if (name.endsWith('.srt')) return true;
+  const type = (file.type || '').toLowerCase();
+  if (type.startsWith('audio/') || type.startsWith('video/')) return true;
+  // type 为空时：常见媒体扩展仍放行
+  if (isMediaImportFileName(file.name)) return true;
+  return false;
 }
 
 /** 修饰键展示：macOS 用 ⌘，其它用 Ctrl */

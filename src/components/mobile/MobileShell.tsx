@@ -312,7 +312,7 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
               )}
               <p className="m-hero-hint">
                 {files.length === 0
-                  ? '导入 SRT 或音视频开始'
+                  ? '导入字幕或音视频开始'
                   : '点选项目打开详情'}
               </p>
             </div>

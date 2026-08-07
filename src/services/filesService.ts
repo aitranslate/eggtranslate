@@ -15,6 +15,7 @@ import { convertToMP3 } from '@/utils/convertToMP3';
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { playAppSound } from '@/utils/appSound';
+import { isMediaImportFileName } from '@/utils/taskGuards';
 import localforage from 'localforage';
 import toast from 'react-hot-toast';
 
@@ -28,8 +29,14 @@ export async function addFile(file: File): Promise<string | null> {
   const { defaultKeytermGroupId } = useTranscriptionStore.getState();
   const langs = defaultTaskLanguages();
 
-  // 音视频文件：转码 + 持久化 + 上传完成才加入 store（用 toast 持续提示）
-  if (file.type.startsWith('audio/') || file.type.startsWith('video/') || /\.(mp3|m4a|wav|mp4|mov|webm|mkv)$/i.test(file.name)) {
+  // 音视频：FFmpeg 抽音轨转 MP3 后再入库（不依赖浏览器解码白名单）
+  const isSrt = /\.srt$/i.test(file.name) || file.type === 'application/x-subrip';
+  const isMedia =
+    !isSrt &&
+    (file.type.startsWith('audio/') ||
+      file.type.startsWith('video/') ||
+      isMediaImportFileName(file.name));
+  if (isMedia) {
     return addMediaFile(file, defaultKeytermGroupId, langs);
   }
 
@@ -65,8 +72,8 @@ async function addMediaFile(
   defaultKeytermGroupId: string | null,
   langs: { sourceLanguage: string; targetLanguage: string }
 ): Promise<string | null> {
-  // 上传中 toast（持续显示，转码完成或失败才更新）
-  const toastId = toast.loading(`正在上传 ${file.name}…`, { duration: Infinity });
+  // 处理中 toast（持续显示；内部 FFmpeg 抽音轨，用户无感）
+  const toastId = toast.loading(`正在处理 ${file.name}…`, { duration: Infinity });
 
   try {
     // 1) 解析元数据
@@ -77,9 +84,15 @@ async function addMediaFile(
       defaultTargetLanguage: langs.targetLanguage,
     });
 
-    // 2) 转码为 MP3 并持久化
+    // 2) FFmpeg 抽音轨 → 16k mono MP3 并持久化
     logger.info(`[addFile] 转码开始: ${file.name}`);
-    const mp3Blob = await convertToMP3(file);
+    toast.loading(`正在抽取音频 ${file.name}…`, { id: toastId });
+    const mp3Blob = await convertToMP3(file, (p) => {
+      const pct = Math.round(Math.min(1, Math.max(0, p)) * 100);
+      if (pct >= 2) {
+        toast.loading(`正在抽取音频 ${file.name}… ${pct}%`, { id: toastId });
+      }
+    });
     await localforage.setItem(`mp3_data:${result.task.taskId}`, mp3Blob);
     logger.info(`[addFile] 转码完成: ${file.name}, ${(mp3Blob.size / 1024 / 1024).toFixed(2)}MB`);
 
@@ -96,13 +109,12 @@ async function addMediaFile(
     // 双保险：addTask 已 flush，这里再 await 确保 MP3 key 与任务列表一致落盘
     await flushFilesStorePersist();
 
-    // 4) 上传成功 toast（覆盖 loading；时长走全局 success 配置）
-    toast.success(`上传成功：${file.name}`, { id: toastId });
+    toast.success(`已添加：${file.name}`, { id: toastId });
     return result.metadata.id;
   } catch (error) {
-    const appError = toAppError(error, '上传失败');
+    const appError = toAppError(error, '导入失败');
     logger.error(appError.message, appError);
-    toast.error(`上传失败：${file.name}（${appError.message}）`, { id: toastId });
+    toast.error(`导入失败：${file.name}（${appError.message}）`, { id: toastId });
     return null;
   }
 }

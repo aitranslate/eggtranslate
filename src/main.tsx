@@ -51,7 +51,7 @@ initializeApp()
     renderApp()
     // 不阻塞首屏：后台卸掉历史 SW
     void unregisterLegacyServiceWorkers()
-    // 空闲时预热 MP3 Worker：避免「首次上传视频」撞上 Vite 依赖预构建整页刷新
+    // 空闲时预热 FFmpeg.wasm：避免首次导入音视频才下载 core
     const warm = () => warmupMp3Encoder()
     if (typeof requestIdleCallback === 'function') {
       requestIdleCallback(warm, { timeout: 2500 })

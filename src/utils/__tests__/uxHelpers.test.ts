@@ -29,10 +29,10 @@ function emptyPhases(overrides?: Partial<FilePhases>): FilePhases {
 
 describe('uxHelpers', () => {
   describe('import messages', () => {
-    it('lists supported extensions in unsupported message', () => {
+    it('mentions srt and media without listing every extension', () => {
       const msg = unsupportedImportMessage();
-      expect(msg).toContain('.srt');
-      expect(msg).toContain('.mp4');
+      expect(msg).toMatch(/\.srt|字幕/);
+      expect(msg).toMatch(/音视频|音频/);
       expect(msg).toMatch(/不支持/);
     });
 

@@ -43,9 +43,13 @@ export function resolveFullPathGuard(input: {
   return null;
 }
 
-const MEDIA_EXT = /\.(mp3|wav|m4a|ogg|flac|mp4|webm|mkv|avi|mov)$/i;
+/** 常见媒体扩展（辅助识别；真正转码不依赖白名单） */
+const MEDIA_EXT =
+  /\.(mp3|wav|m4a|aac|ogg|flac|opus|wma|mp4|m4v|webm|mkv|avi|mov|wmv|flv|ts|mts|m2ts|3gp|mpeg|mpg|vob|rmvb|rm)$/i;
 
 /** 是否为音视频导入（非 SRT） */
 export function isMediaImportFileName(name: string): boolean {
-  return MEDIA_EXT.test(name || '');
+  const n = name || '';
+  if (/\.srt$/i.test(n)) return false;
+  return MEDIA_EXT.test(n);
 }

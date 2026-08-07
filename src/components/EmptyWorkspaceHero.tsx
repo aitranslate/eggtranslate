@@ -41,12 +41,12 @@ export const EmptyWorkspaceHero: React.FC<EmptyWorkspaceHeroProps> = ({
         : '字幕翻译 · 音视频转录';
 
   const description = isDragging
-    ? '支持 SRT 字幕，或 MP4 / MP3 等音视频'
+    ? '支持字幕（.srt）或任意音视频（自动抽取音频）'
     : fileCount > 0
       ? '在侧栏点选文件以编辑字幕'
       : isConfigured
-        ? 'SRT 直接翻译；音视频可转录后翻译'
-        : '导入 SRT / 音视频，或试用示例字幕';
+        ? '字幕直接翻译；音视频自动抽取音频后可转录、翻译'
+        : '导入字幕或任意音视频，或试用示例字幕';
 
   return (
     <div

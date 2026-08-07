@@ -7,6 +7,7 @@ import type { ExportFormat } from '@/utils/fileExport';
 
 // ---------- 导入 ----------
 
+/** @deprecated 保留导出供旧测试；产品侧已改为「字幕 + 任意音视频」 */
 export const SUPPORTED_IMPORT_EXTS = [
   'srt',
   'mp3',
@@ -21,9 +22,9 @@ export const SUPPORTED_IMPORT_EXTS = [
   'mov',
 ] as const;
 
-/** 不支持格式时的用户文案（与 SUPPORTED_IMPORT_EXTS 对齐） */
+/** 不支持格式时的用户文案（不再罗列视频扩展名） */
 export function unsupportedImportMessage(): string {
-  return `不支持的文件格式。支持：.${SUPPORTED_IMPORT_EXTS.join(' / .')}`;
+  return '不支持的文件。请导入字幕（.srt）或任意音视频文件（将自动抽取音频）。';
 }
 
 /** 多文件导入进度文案，如「导入中 2/5…」 */

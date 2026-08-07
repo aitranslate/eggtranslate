@@ -242,7 +242,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {!isTranscriptionConfigured && (
                   <div className="wb-prefs-block ob-settings-hint-block">
                     <SettingsHint>
-                      音视频路径：填入 AssemblyAI API Key → 导入 MP4/MP3 等 → 点「转录 / 转译」。可配置多个 Key（用 | 分隔）轮询。
+                      音视频路径：填入 AssemblyAI API Key → 导入任意音视频（自动抽音频）→ 点「转录 / 转译」。可配置多个 Key（用 | 分隔）轮询。
                     </SettingsHint>
                   </div>
                 )}

@@ -23,12 +23,11 @@ export default defineConfig(({ command }) => ({
     }),
   ],
   /**
-   * 避免「服务刚起来第一次上传音视频 → 整页刷新丢上传」：
-   * mp3Worker 首次 import @breezystack/lamejs 时，Vite 会现场 optimizeDeps 并 full reload。
-   * 启动时预构建 + warmup，把重载挪到空闲冷启动，不打断用户上传。
+   * FFmpeg 核心从 CDN 按需加载；localforage 预构建避免冷启动 reload。
    */
   optimizeDeps: {
-    include: ['@breezystack/lamejs', 'localforage'],
+    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util', '@ffmpeg/core'],
+    include: ['localforage'],
   },
   worker: {
     format: 'es',
@@ -39,7 +38,6 @@ export default defineConfig(({ command }) => ({
     warmup: {
       clientFiles: [
         './src/utils/convertToMP3.ts',
-        './src/utils/mp3Worker.ts',
         './src/services/filesService.ts',
       ],
     },
@@ -90,8 +88,7 @@ export default defineConfig(({ command }) => ({
               norm.includes('/jszip/') ||
               norm.endsWith('/jszip') ||
               norm.includes('sentence-splitter') ||
-              norm.includes('@breezystack') ||
-              norm.includes('lamejs')
+              norm.includes('@ffmpeg')
             ) {
               return undefined;
             }

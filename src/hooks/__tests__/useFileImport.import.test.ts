@@ -26,6 +26,6 @@ describe('useFileImport support surface', () => {
   it('multi-file progress helpers used by importFiles', () => {
     expect(formatImportProgress(1, 2)).toContain('1/2');
     expect(formatImportSummary(2, 0)).toContain('2');
-    expect(unsupportedImportMessage()).toContain('srt');
+    expect(unsupportedImportMessage().toLowerCase()).toMatch(/srt|字幕/);
   });
 });
