@@ -79,13 +79,21 @@ class AssemblyAIService {
       const transcript = await client.transcripts.transcribe({
         audio: audioFile,
         language_detection: true,
-        keyterms_prompt: options.keyterms || ASSEMBLYAI_CONFIG.defaultKeyterms
+        speech_models: [...ASSEMBLYAI_CONFIG.speechModels],
+        keyterms_prompt: options.keyterms || ASSEMBLYAI_CONFIG.defaultKeyterms,
       });
 
       // 3. 检查错误
       if (transcript.status === 'error') {
         throw new Error(`Transcription failed: ${transcript.error}`);
       }
+
+      logger.info(
+        '转录完成:',
+        transcript.language_code,
+        'model:',
+        transcript.speech_model_used ?? '(unknown)'
+      );
 
       // 4. 转换为 TranscriptionWord 格式
       return transcript.words.map(w => ({
@@ -139,17 +147,24 @@ class AssemblyAIService {
       onProgress?.('transcribing', 10);
 
       // SDK 的 transcribe() 内部已轮询至完成，返回即终态
+      // speech_models：U3.5 Pro 优先，不支持语种回落 U2；语言仍自动检测
       const transcript = await client.transcripts.transcribe({
         audio: audioFile,
         language_detection: true,
-        keyterms_prompt: options.keyterms || ASSEMBLYAI_CONFIG.defaultKeyterms
+        speech_models: [...ASSEMBLYAI_CONFIG.speechModels],
+        keyterms_prompt: options.keyterms || ASSEMBLYAI_CONFIG.defaultKeyterms,
       });
-
-      logger.info('转录完成，语言代码:', transcript.language_code);
 
       if (transcript.status === 'error') {
         throw new Error(`Transcription failed: ${transcript.error}`);
       }
+
+      logger.info(
+        '转录完成，语言代码:',
+        transcript.language_code,
+        'model:',
+        transcript.speech_model_used ?? '(unknown)'
+      );
 
       logger.info('转录完成，开始智能断句...');
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useSubtitleLengthPreset, useSetSubtitleLengthPreset } from '@/stores/transcriptionStore';
-import { PRESET_LABELS } from '@/utils/subtitleLengthPresets';
+import { PRESET_LABELS, presetLimitHint } from '@/utils/subtitleLengthPresets';
 import type { SubtitleLengthPreset } from '@/types/transcription';
 
 const PRESETS: SubtitleLengthPreset[] = ['short', 'standard', 'loose'];
@@ -38,9 +38,7 @@ export const SrtCharsSettings: React.FC<SrtCharsSettingsProps> = ({ compact = fa
           ))}
         </div>
         <p className="text-[10.5px] text-[var(--wb-text-3)]">
-          {preset === 'short' && '英文≤12词 / 中文≤16字'}
-          {preset === 'standard' && '英文≤16词 / 中文≤22字'}
-          {preset === 'loose' && '英文≤20词 / 中文≤28字'}
+          {presetLimitHint(preset)}（多词硬上限；单识别词不可拆时可略超）
         </p>
       </div>
     </div>

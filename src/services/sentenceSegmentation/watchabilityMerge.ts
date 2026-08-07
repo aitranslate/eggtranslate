@@ -8,7 +8,6 @@ import type { DpSegment, Preset } from './types';
 
 const MERGE_GAP_MS = 500;
 const MERGE_BUDGET_MS = 6000;
-const MERGE_LEN_RATIO = 1.55;
 
 const norm = (s: string) => s.replace(/[\r\n]/g, ' ').split(/\s+/).filter(Boolean).join(' ').trim();
 
@@ -139,10 +138,21 @@ const mergePair = (l: DpSegment, r: DpSegment): DpSegment => ({
 });
 
 /**
+ * 用 profile.tokenUnits 计量段长（与 DP 一致；优先 words[]）。
+ */
+function segmentUnits(seg: DpSegment, tokenUnits: (t: string) => number): number {
+  if (seg.words?.length) {
+    return seg.words.reduce((s, w) => s + tokenUnits(w.text), 0);
+  }
+  // 无 words 时：按空白拆（拉丁）；整段无空白则整段当一 token
+  const parts = seg.text.split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return tokenUnits(seg.text.trim());
+  return parts.reduce((s, t) => s + tokenUnits(t), 0);
+}
+
+/**
  * 对 DP 断句产物做 watchability 合并。纯函数，返回新数组。
- * @param segments segmentWords 的输出
- * @param lang       语言码（与断句时一致）
- * @param preset     长度预设（决定合并后长度上限 = sourceLimit * 1.55）
+ * 合并后长度不得超过 sourceLimit（硬上限，与设置一致）。
  */
 export function mergeWatchabilitySegments(
   segments: DpSegment[],
@@ -150,24 +160,139 @@ export function mergeWatchabilitySegments(
   preset: Preset = 'standard',
 ): DpSegment[] {
   if (segments.length < 2) return segments;
-  const limit = getProfile(lang).sourceLimit(preset);
-  const maxUnits = limit * MERGE_LEN_RATIO;
+  const profile = getProfile(lang);
+  const hardLimit = profile.sourceLimit(preset);
+  const maxUnits = hardLimit;
 
-  const merged: DpSegment[] = [];
+  const pass1: DpSegment[] = [];
   let i = 0;
   while (i < segments.length) {
     if (i + 1 >= segments.length) {
-      merged.push(segments[i]);
+      pass1.push(segments[i]);
       break;
     }
-    const l = segments[i], r = segments[i + 1];
+    const l = segments[i];
+    const r = segments[i + 1];
+    // 先用 profile 计量合并后是否超 cap，再走语义 canMerge
+    const pairUnits =
+      segmentUnits(l, profile.tokenUnits) + segmentUnits(r, profile.tokenUnits);
+    // 合并至少 2 token → 必须 ≤ hardLimit
+    const tokenCount = (l.words?.length ?? 1) + (r.words?.length ?? 1);
+    if (tokenCount > 1 && pairUnits > maxUnits) {
+      pass1.push(l);
+      i += 1;
+      continue;
+    }
     if (canMerge(l, r, maxUnits, lang)) {
-      merged.push(mergePair(l, r));
+      pass1.push(mergePair(l, r));
       i += 2;
     } else {
-      merged.push(l);
+      pass1.push(l);
       i += 1;
     }
   }
-  return merged;
+
+  // 第二遍：在硬上限内吸收「一闪而过」的极短段（时长 < 800ms）
+  return absorbFlashSegments(pass1, profile, hardLimit);
+}
+
+const FLASH_MS = 800;
+
+function absorbFlashSegments(
+  segments: DpSegment[],
+  profile: ReturnType<typeof getProfile>,
+  hardLimit: number,
+): DpSegment[] {
+  if (segments.length < 2) return segments;
+  const out: DpSegment[] = [];
+  let i = 0;
+  while (i < segments.length) {
+    const cur = segments[i];
+    const dur = cur.endTime - cur.startTime;
+    if (dur >= FLASH_MS || i === segments.length - 1) {
+      // 尝试并入前一段
+      if (dur < FLASH_MS && out.length > 0) {
+        const prev = out[out.length - 1];
+        const gap = cur.startTime - prev.endTime;
+        const pairU =
+          segmentUnits(prev, profile.tokenUnits) +
+          segmentUnits(cur, profile.tokenUnits);
+        const tok =
+          (prev.words?.length ?? 1) + (cur.words?.length ?? 1);
+        if (
+          gap <= MERGE_GAP_MS &&
+          cur.endTime - prev.startTime <= MERGE_BUDGET_MS &&
+          (tok <= 1 || pairU <= hardLimit)
+        ) {
+          out[out.length - 1] = mergePair(prev, cur);
+          i += 1;
+          continue;
+        }
+      }
+      out.push(cur);
+      i += 1;
+      continue;
+    }
+    // 短段：优先并右侧，否则并左侧
+    const next = segments[i + 1];
+    const gapR = next.startTime - cur.endTime;
+    const pairR =
+      segmentUnits(cur, profile.tokenUnits) +
+      segmentUnits(next, profile.tokenUnits);
+    const tokR = (cur.words?.length ?? 1) + (next.words?.length ?? 1);
+    if (
+      gapR <= MERGE_GAP_MS &&
+      next.endTime - cur.startTime <= MERGE_BUDGET_MS &&
+      (tokR <= 1 || pairR <= hardLimit)
+    ) {
+      // 与 next 合并后作为新 cur 再判断（简化：直接 push 合并体）
+      const m = mergePair(cur, next);
+      // 若仍 flash 且有前段，再并前
+      if (
+        m.endTime - m.startTime < FLASH_MS &&
+        out.length > 0
+      ) {
+        const prev = out[out.length - 1];
+        const gap = m.startTime - prev.endTime;
+        const pairU =
+          segmentUnits(prev, profile.tokenUnits) +
+          segmentUnits(m, profile.tokenUnits);
+        const tok =
+          (prev.words?.length ?? 1) + (m.words?.length ?? 1);
+        if (
+          gap <= MERGE_GAP_MS &&
+          m.endTime - prev.startTime <= MERGE_BUDGET_MS &&
+          (tok <= 1 || pairU <= hardLimit)
+        ) {
+          out[out.length - 1] = mergePair(prev, m);
+          i += 2;
+          continue;
+        }
+      }
+      out.push(m);
+      i += 2;
+      continue;
+    }
+    if (out.length > 0) {
+      const prev = out[out.length - 1];
+      const gap = cur.startTime - prev.endTime;
+      const pairU =
+        segmentUnits(prev, profile.tokenUnits) +
+        segmentUnits(cur, profile.tokenUnits);
+      const tok =
+        (prev.words?.length ?? 1) + (cur.words?.length ?? 1);
+      if (
+        gap <= MERGE_GAP_MS &&
+        cur.endTime - prev.startTime <= MERGE_BUDGET_MS &&
+        (tok <= 1 || pairU <= hardLimit)
+      ) {
+        out[out.length - 1] = mergePair(prev, cur);
+        i += 1;
+        continue;
+      }
+    }
+    out.push(cur);
+    i += 1;
+  }
+  return out;
 }

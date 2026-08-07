@@ -79,13 +79,15 @@ describe('Layer1+Layer2 完整断句', () => {
     const text =
       'Today the local transcription pipeline keeps complete semantic sentences for accurate review, but it should split long subtitle lines near punctuation for comfortable offline viewing.';
     const segs = segmentWords(mkWords(text), 'en', 'short');
-    expect(segs).toHaveLength(2);
+    // 硬上限 short=12 词：长句可切多段，但首刀仍应落在 review, 语义边界
+    expect(segs.length).toBeGreaterThanOrEqual(2);
     expect(segs[0].text).toBe(
       'Today the local transcription pipeline keeps complete semantic sentences for accurate review,',
     );
-    expect(segs[1].text).toBe(
-      'but it should split long subtitle lines near punctuation for comfortable offline viewing.',
-    );
+    for (const s of segs) {
+      const words = s.text.split(/\s+/).filter(Boolean).length;
+      expect(words).toBeLessThanOrEqual(12);
+    }
   });
 
   it('dp_does_not_isolate_leading_discourse_marker', () => {
@@ -158,9 +160,48 @@ describe('splitSpanByDp 单元', () => {
       'Today the local transcription pipeline keeps complete semantic sentences for accurate review, but it should split long subtitle lines near punctuation for comfortable offline viewing.';
     const tokens = tokenize(text, profile);
     const ranges = splitSpanByDp(tokens, profile, profile.sourceLimit('short'));
-    // 应切成两段，第一段止于 "review,"。
+    // 硬上限下可多段；首段仍止于 "review,"
     const first = tokens.slice(ranges[0][0], ranges[0][1] + 1).map((t) => t.word).join(' ');
     expect(first.endsWith('review,')).toBe(true);
-    expect(ranges.length).toBe(2);
+    expect(ranges.length).toBeGreaterThanOrEqual(2);
+    for (const [a, b] of ranges) {
+      expect(b - a + 1).toBeLessThanOrEqual(12);
+    }
+  });
+
+  it('hard_cap_en_short_multi_token_never_exceeds_12', () => {
+    const words = mkWords(
+      Array.from({ length: 30 }, (_, i) => `word${i}`).join(' '),
+    );
+    const segs = segmentWords(words, 'en', 'short');
+    for (const s of segs) {
+      expect(s.words.length).toBeLessThanOrEqual(12);
+    }
+  });
+
+  it('hard_cap_zh_short_multi_token_respects_char_limit', () => {
+    // 模拟 ASR：单字/双字 token，总计远超 16 字
+    const tokens = [
+      '我', '们', '今天', '要', '讨', '论', '的', '是', '关', '于',
+      '人', '工', '智', '能', '在', '教', '育', '领', '域', '的',
+      '应', '用', '前', '景', '和', '发', '展', '趋', '势',
+    ];
+    const words = tokens.map((t, i) => w(i, t));
+    const segs = segmentWords(words, 'zh', 'short');
+    expect(segs.length).toBeGreaterThan(1);
+    for (const s of segs) {
+      const chars = [...s.text].filter((ch) => /[\u4e00-\u9fff]/.test(ch)).length;
+      // 多 token 段：字数 ≤ 16
+      if (s.words.length > 1) {
+        expect(chars).toBeLessThanOrEqual(16);
+      }
+    }
+  });
+
+  it('single_oversize_cjk_token_stays_intact', () => {
+    const words = [w(0, '这是一个超过十六个汉字限制的超长识别单元示例词')];
+    const segs = segmentWords(words, 'zh', 'short');
+    expect(segs).toHaveLength(1);
+    expect(segs[0].text).toBe(words[0].text);
   });
 });

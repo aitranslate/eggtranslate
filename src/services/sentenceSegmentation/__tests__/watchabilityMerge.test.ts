@@ -25,9 +25,21 @@ function seg(text: string, startTime: number, endTime: number): DpSegment {
 }
 
 describe('mergeWatchabilitySegments', () => {
-  it('不合并不满足长度门槛的左段（词数 < 6）', () => {
+  it('极短相邻段在 hard 内可 flash 合并（消除一闪而过）', () => {
+    // 两段各 500ms < 800ms，间隔 100ms，字数远低于 short=16 → 应合并
     const segs: DpSegment[] = [seg('好的', 0, 500), seg('没问题', 600, 1100)];
-    expect(mergeWatchabilitySegments(segs, 'zh')).toHaveLength(2);
+    const merged = mergeWatchabilitySegments(segs, 'zh', 'short');
+    expect(merged).toHaveLength(1);
+    expect(merged[0].text).toBe('好的没问题');
+  });
+
+  it('flash 合并不得突破 hard 上限', () => {
+    // 两段虽极短，但字数合并后超过 short=16 → 不得合并
+    const a = '一二三四五六七八';
+    const b = '九十十一十二十三十四十五';
+    const segs: DpSegment[] = [seg(a, 0, 400), seg(b, 450, 900)];
+    const merged = mergeWatchabilitySegments(segs, 'zh', 'short');
+    expect(merged.length).toBe(2);
   });
 
   it('不在静音间隔 > 0.5s 处合并', () => {

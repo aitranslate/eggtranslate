@@ -1,6 +1,5 @@
-// 语言 profile —— 复刻 D:\voxtrans 的 language.rs。
-// 所有语言相关知识集中在此，DP 骨架不做 `if lang ==` 分支。
-// 当前仅重点实现英文（sentence-splitter 硬切分 + 连词代价），其余语言走默认标点。
+// 语言 profile：长度预算 + token 计量 + 硬切分策略。
+// DP 骨架只调 profile.tokenUnits / sourceLimit，不做 lang 分支。
 
 import type { Preset, WordToken } from './types';
 
@@ -11,13 +10,21 @@ export interface LanguageProfile {
   key: string;
   /** 硬切分用 sentence-splitter（英文）还是默认标点（其它语言）。 */
   hardSplit: HardSplitStrategy;
-  /** 连词表：DP 中在这些词"前面"切代价更优。 */
+  /** 连词表：DP 中在这些词「前面」切代价更优。 */
   connectors: string[];
-  /** 该预设下的长度预算（拉丁=词数，CJK=字数）。 */
+  /**
+   * 该预设下的硬上限（多 token 段不得超过）。
+   * 拉丁系=词数；CJK=字数（与 UI 一致）。
+   */
   sourceLimit(preset: Preset): number;
-  /** 是否按字符计数（CJK）。当前默认 false（按词），其他语言不做字符级。 */
+  /**
+   * 是否倾向按「显示字」计（CJK）。
+   * 注意：segmentWords 路径 token 已是 ASR 词，不再按字拆 token。
+   */
   isCharBased: boolean;
-  /** 单 token 的长度单位。 */
+  /** 相邻 token 拼最终文本时是否插空格（CJK 为 false）。 */
+  joinWithSpace: boolean;
+  /** 单 ASR token 的长度单位（不可拆 token）。 */
   tokenUnits(token: string): number;
 }
 
@@ -27,12 +34,65 @@ const ENGLISH_CONNECTORS = [
   'then', 'though', 'although', 'however', 'therefore',
 ];
 
-// ---- 长度预算（词数）：short/standard/loose ----
-const WORD_LIMITS: Record<Preset, number> = { short: 12, standard: 16, loose: 20 };
+/** UI：短/标准/宽松 — 拉丁词数 */
+export const WORD_LIMITS: Record<Preset, number> = {
+  short: 12,
+  standard: 16,
+  loose: 20,
+};
 
-// 拉丁语系：含字母/数字记 1 单位，纯标点记 0。
-function latinTokenUnits(token: string): number {
-  return /[A-Za-z0-9]/.test(token) ? 1 : 0;
+/** UI：短/标准/宽松 — 中日韩等字数 */
+export const CJK_CHAR_LIMITS: Record<Preset, number> = {
+  short: 16,
+  standard: 22,
+  loose: 28,
+};
+
+function isCjkChar(ch: string): boolean {
+  const c = ch.codePointAt(0)!;
+  return (
+    (c >= 0x3040 && c <= 0x30ff) || // 假名
+    (c >= 0x3400 && c <= 0x4dbf) ||
+    (c >= 0x4e00 && c <= 0x9fff) || // CJK 统一汉字
+    (c >= 0xf900 && c <= 0xfaff) ||
+    (c >= 0xac00 && c <= 0xd7af) // 韩文音节
+  );
+}
+
+/**
+ * 词级计量（拉丁 / 西里尔 / 阿拉伯 / 印地等）：
+ * 一个 ASR token 只要含字母或数字 → 计 1 词；纯标点 → 0。
+ * 解决俄/阿等非 ASCII 被 latinTokenUnits 算成 0 的问题。
+ */
+export function wordTokenUnits(token: string): number {
+  return /\p{L}|\p{N}/u.test(token) ? 1 : 0;
+}
+
+/**
+ * CJK 显示字计量（不拆 token）：
+ * - 每个汉字/假名/韩文音节 = 1
+ * - 连续拉丁/数字块 = 1（混排英文）
+ * - 纯标点 = 0
+ */
+export function cjkTokenUnits(token: string): number {
+  let n = 0;
+  let inAsciiWord = false;
+  for (const ch of token) {
+    if (isCjkChar(ch)) {
+      n += 1;
+      inAsciiWord = false;
+      continue;
+    }
+    if (/[A-Za-z0-9]/.test(ch)) {
+      if (!inAsciiWord) {
+        n += 1;
+        inAsciiWord = true;
+      }
+      continue;
+    }
+    inAsciiWord = false;
+  }
+  return n;
 }
 
 const EnglishProfile: LanguageProfile = {
@@ -41,35 +101,73 @@ const EnglishProfile: LanguageProfile = {
   connectors: ENGLISH_CONNECTORS,
   sourceLimit: (p) => WORD_LIMITS[p],
   isCharBased: false,
-  tokenUnits: latinTokenUnits,
+  joinWithSpace: true,
+  tokenUnits: wordTokenUnits,
 };
 
-// 默认（其它语言）：按词计数，空连词，走默认标点切分。
+const CjkProfile: LanguageProfile = {
+  key: 'cjk',
+  hardSplit: 'punctuation',
+  connectors: [],
+  sourceLimit: (p) => CJK_CHAR_LIMITS[p],
+  isCharBased: true,
+  joinWithSpace: false,
+  tokenUnits: cjkTokenUnits,
+};
+
+/** 默认：词级计量 + 空格拼接（西/法/德/俄/阿/印地…） */
 const DefaultProfile: LanguageProfile = {
   key: 'default',
   hardSplit: 'punctuation',
   connectors: [],
   sourceLimit: (p) => WORD_LIMITS[p],
   isCharBased: false,
-  tokenUnits: latinTokenUnits,
+  joinWithSpace: true,
+  tokenUnits: wordTokenUnits,
 };
 
-/** 解析 BCP-47 风格的语言标签，返回对应 profile（未知语言回退默认）。 */
+const CJK_LANG_KEYS = new Set(['zh', 'yue', 'cmn', 'ja', 'jp', 'ko', 'th']);
+
+/** 解析 BCP-47 风格语言标签，返回对应 profile。 */
 export function getProfile(lang: string): LanguageProfile {
   const key = lang.trim().split(/[-_]/)[0].toLowerCase();
   if (key === 'en') return EnglishProfile;
+  if (CJK_LANG_KEYS.has(key)) return CjkProfile;
   return DefaultProfile;
 }
 
-/** 仅 tokenize 用：把句子拆成 token（按词或按字）。 */
-export function tokenize(sentence: string, profile: LanguageProfile): WordToken[] {
-  if (profile.isCharBased) {
-    return Array.from(sentence)
-      .filter((ch) => ch.trim().length > 0)
-      .map((ch) => ({ word: ch }));
-  }
+/**
+ * 仅 tokenize 用（纯文本路径）。
+ * CJK profile 仍按空格拆 ASR 风格 token，不按字拆——与生产 segmentWords 一致。
+ * isCharBased 仅影响计量语义，不在此拆 token。
+ */
+export function tokenize(sentence: string, _profile: LanguageProfile): WordToken[] {
   return sentence
     .split(/\s+/)
     .filter(Boolean)
     .map((w) => ({ word: w }));
+}
+
+/** 按 profile 拼接 token 文本（CJK 不插空格，拉丁插空格；混排时 CJK 旁不插）。 */
+export function joinTokenTexts(texts: string[], profile: LanguageProfile): string {
+  if (texts.length === 0) return '';
+  if (profile.joinWithSpace) {
+    return texts.join(' ').replace(/\s+/g, ' ').trim();
+  }
+  // CJK：相邻两侧皆非「需空格的拉丁块」则直接粘
+  let out = texts[0] ?? '';
+  for (let i = 1; i < texts.length; i++) {
+    const left = out;
+    const right = texts[i] ?? '';
+    if (!left || !right) {
+      out += right;
+      continue;
+    }
+    const leftCh = left[left.length - 1]!;
+    const rightCh = right[0]!;
+    const needSpace =
+      /[A-Za-z0-9]/.test(leftCh) && /[A-Za-z0-9]/.test(rightCh);
+    out += needSpace ? ` ${right}` : right;
+  }
+  return out;
 }

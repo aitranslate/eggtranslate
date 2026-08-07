@@ -1,7 +1,7 @@
 {
   "name": "eggtranslate",
   "private": true,
-  "version": "2.1.0",
+  "version": "2.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -23,7 +23,7 @@
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
     "@tanstack/react-virtual": "^3.13.26",
-    "assemblyai": "^4.23.0",
+    "assemblyai": "^4.36.4",
     "framer-motion": "^12.23.12",
     "jsonrepair": "^3.13.0",
     "jszip": "^3.10.1",
