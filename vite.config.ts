@@ -13,10 +13,6 @@ const pkg = JSON.parse(
 // 安装元数据用 public/manifest.webmanifest + index.html 静态 link。
 export default defineConfig(({ command }) => ({
   base: '/',
-  // 与 package.json version 同步，UI 左上角等处使用
-  define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
-  },
   plugins: [
     react(),
     sourceIdentifierPlugin({
@@ -71,6 +67,8 @@ export default defineConfig(({ command }) => ({
   },
   define: {
     global: 'globalThis',
+    // 与 package.json version 同步，UI 左上角等处使用
+    __APP_VERSION__: JSON.stringify(pkg.version),
   },
   resolve: {
     alias: {
