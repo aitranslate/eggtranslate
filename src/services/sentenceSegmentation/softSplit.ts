@@ -1,10 +1,16 @@
 // Layer2 DP 软切分。
-// 硬上限 = preset limit（多 token 段不得超过）。
-// 单 ASR token 即使超 limit 也不可拆，允许单独成段。
+//
+// 长度策略（翻译质量优先，观看次之）：
+// 1) ≤ limit：不切
+// 2) limit < units ≤ limit+grace：仅在「好切点」切开到每段 ≤ limit；无好切点则整句保留
+// 3) units > limit+grace：必须切，允许普通词界，每段多 token ≤ limit
+// 单 ASR token 不可拆，可单独成段。
 
 import {
   BOUNDARY_COST,
   FORBIDDEN_COST,
+  GOOD_SILENCE_SEC,
+  LENGTH_GRACE_UNITS,
   LENGTH_PENALTY_WEIGHT,
   MIN_FRAGMENT_UNITS,
 } from './constants';
@@ -20,7 +26,7 @@ import {
   vadStrength,
 } from './textRules';
 
-function boundaryBaseCost(
+export function boundaryBaseCost(
   tokens: WordToken[],
   i: number,
   profile: LanguageProfile,
@@ -57,6 +63,41 @@ function boundaryBaseCost(
   return BOUNDARY_COST.word;
 }
 
+/**
+ * quality 模式用的「好切点」：标点 / 连词 / 明显静音。
+ * 不含普通词缝；也不含词间自然缝隙（< GOOD_SILENCE_SEC）。
+ */
+export function isQualityCutBoundary(
+  tokens: WordToken[],
+  i: number,
+  profile: LanguageProfile,
+  silence: SilenceQuery | undefined,
+): boolean {
+  const left = tokens[i];
+  const right = tokens[i + 1];
+  if (!left || !right) return false;
+  if (endsWithOpeningPunctuation(left.word) || startsWithClosingPunctuation(right.word)) {
+    return false;
+  }
+  if (isNumericContinuation(left.word, right.word)) return false;
+  if (isTerminalBoundary(left.word)) return true;
+  if (endsWithSoftPunctuation(left.word)) return true;
+  if (left.word.trimEnd().endsWith(',') || left.word.trimEnd().endsWith('，')) {
+    return true;
+  }
+  if (
+    isConnectorLike(right.word, profile.connectors) &&
+    !isConnectorLike(left.word, profile.connectors)
+  ) {
+    return true;
+  }
+  if (silence) {
+    const sil = silence(left, right);
+    if (sil != null && sil >= GOOD_SILENCE_SEC) return true;
+  }
+  return false;
+}
+
 /** 单 token 永远合法；多 token 必须 units ≤ hardLimit */
 function isValidSegment(tokenCount: number, segUnits: number, hardLimit: number): boolean {
   if (tokenCount <= 1) return true;
@@ -83,13 +124,11 @@ function absorbShortFragments(
       const units = prefix[b] - prefix[a];
       if (units > MIN_FRAGMENT_UNITS) continue;
 
-      // 优先与右侧合并，否则与左侧
       if (segIdx + 2 < bounds.length) {
         const c = bounds[segIdx + 2];
         const mergedU = prefix[c] - prefix[a];
         const mergedT = c - a;
         if (isValidSegment(mergedT, mergedU, hardLimit)) {
-          // 去掉 b 对应的 cut（cutsRel 中值为 b）
           const cutVal = b;
           const ix = cutsRel.indexOf(cutVal);
           if (ix >= 0) {
@@ -134,18 +173,16 @@ function cutsRespectHardLimit(
 }
 
 /**
- * 从左贪心：在不超过 hardLimit 的前提下尽量长，保证多 token 合法。
+ * 从左贪心：在不超过 hardLimit 的前提下尽量长。
  * 返回 1-indexed cutsRel（在第 k 个 token 后切）。
  */
 function greedyCutsByHardLimit(prefix: number[], n: number, hardLimit: number): number[] {
   const cuts: number[] = [];
-  let start = 0; // 0-based token index of segment start
+  let start = 0;
   for (let i = 1; i < n; i++) {
-    // 尝试把 token i 并入当前段 → 段 [start, i]，units = prefix[i+1]-prefix[start]
     const units = prefix[i + 1] - prefix[start];
     const tok = i - start + 1;
     if (tok > 1 && units > hardLimit) {
-      // 在 token (i-1) 后切开；1-indexed cut = i
       cuts.push(i);
       start = i;
     }
@@ -153,9 +190,13 @@ function greedyCutsByHardLimit(prefix: number[], n: number, hardLimit: number): 
   return cuts;
 }
 
+export type DpSplitMode = 'quality' | 'force';
+
 /**
  * 对单个 span 做 DP 软切分。
- * 返回绝对 token 下标（0-based，切分点左侧 token 下标）。
+ * @param mode quality = 仅好切点，失败返回 null（由调用方整句保留）
+ *             force = 允许词界，失败回退贪心
+ * @returns 绝对 token 下标（切分点左侧）；null 表示 quality 模式无法合法切开
  */
 export function dpSplitSpan(
   tokens: WordToken[],
@@ -163,13 +204,12 @@ export function dpSplitSpan(
   end: number,
   profile: LanguageProfile,
   limit: number,
-  maxUnits: number,
+  hardLimit: number,
   silence: SilenceQuery | undefined,
-): number[] {
+  mode: DpSplitMode = 'force',
+): number[] | null {
   const n = end - start + 1;
   if (n < 2) return [];
-
-  const hardLimit = maxUnits;
 
   const prefix = new Array<number>(n + 1).fill(0);
   for (let k = 0; k < n; k++) {
@@ -185,6 +225,20 @@ export function dpSplitSpan(
   }
   baseCost[n] = 0;
 
+  const onlyGood = mode === 'quality';
+  // quality 允许切的边界（相对 span 的 1..n-1）
+  const qualityOk = new Array<boolean>(n + 1).fill(false);
+  if (onlyGood) {
+    for (let k = 1; k < n; k++) {
+      qualityOk[k] = isQualityCutBoundary(
+        tokens,
+        start + k - 1,
+        profile,
+        silence,
+      );
+    }
+  }
+
   const dp = new Array<number>(n + 1).fill(Infinity);
   const prev = new Array<number>(n + 1).fill(0);
   dp[0] = 0;
@@ -196,6 +250,8 @@ export function dpSplitSpan(
       if (tokenCount > 1 && segLen > hardLimit) break;
       if (!isValidSegment(tokenCount, segLen, hardLimit)) continue;
       if (baseCost[j] === Infinity || dp[j] === Infinity) continue;
+      // 在 j 处切开（j 为前一段终点）：quality 模式只允许好切点
+      if (onlyGood && j > 0 && j < n && !qualityOk[j]) continue;
       const lengthPenalty =
         limit > 0 ? (LENGTH_PENALTY_WEIGHT * Math.abs(segLen - limit)) / limit : 0;
       const cost = dp[j] + baseCost[j] + lengthPenalty;
@@ -207,6 +263,7 @@ export function dpSplitSpan(
   }
 
   if (dp[n] === Infinity) {
+    if (mode === 'quality') return null;
     return greedyCutsByHardLimit(prefix, n, hardLimit).map((k) => start + k - 1);
   }
 
@@ -221,6 +278,15 @@ export function dpSplitSpan(
 
   absorbShortFragments(cutsRel, prefix, n, hardLimit);
 
+  // quality：吸收后若破坏 hardLimit 或引入非好切点，整句保留
+  if (mode === 'quality') {
+    if (!cutsRespectHardLimit(cutsRel, prefix, n, hardLimit)) return null;
+    for (const c of cutsRel) {
+      if (c > 0 && c < n && !qualityOk[c]) return null;
+    }
+    return cutsRel.map((k) => start + k - 1);
+  }
+
   if (!cutsRespectHardLimit(cutsRel, prefix, n, hardLimit)) {
     return greedyCutsByHardLimit(prefix, n, hardLimit).map((k) => start + k - 1);
   }
@@ -228,10 +294,16 @@ export function dpSplitSpan(
   return cutsRel.map((k) => start + k - 1);
 }
 
+function totalUnits(tokens: WordToken[], profile: LanguageProfile): number {
+  let u = 0;
+  for (const t of tokens) u += profile.tokenUnits(t.word);
+  return u;
+}
+
 /**
  * 对已硬切分句子做 DP 软切分。
- * hardLimit = limit（设置值即硬上限）。
- * @param _presetMaxRatio 已废弃，保留签名兼容，始终忽略。
+ * @param _presetMaxRatio 已废弃，保留签名兼容。
+ * @param grace 无好切点时允许略超 limit 的缓冲，默认 LENGTH_GRACE_UNITS。
  */
 export function splitSpanByDp(
   tokens: WordToken[],
@@ -239,20 +311,82 @@ export function splitSpanByDp(
   limit: number,
   _presetMaxRatio = 1.0,
   silence?: SilenceQuery,
+  grace: number = LENGTH_GRACE_UNITS,
 ): Array<[number, number]> {
   if (tokens.length < 2) {
     return tokens.length === 0 ? [] : [[0, 0]];
   }
-  const hardLimit = limit;
-  const cuts = dpSplitSpan(
-    tokens,
-    0,
-    tokens.length - 1,
-    profile,
-    limit,
-    hardLimit,
-    silence
-  );
+
+  const units = totalUnits(tokens, profile);
+
+  // ① 未超目标：不切
+  if (units <= limit) {
+    return [[0, tokens.length - 1]];
+  }
+
+  let cuts: number[] | null;
+
+  if (units <= limit + grace) {
+    // ② 略超：仅好切点切到 ≤ limit；失败则整句保留（可到 limit+grace）
+    cuts = dpSplitSpan(
+      tokens,
+      0,
+      tokens.length - 1,
+      profile,
+      limit,
+      limit,
+      silence,
+      'quality',
+    );
+    if (cuts === null) {
+      return [[0, tokens.length - 1]];
+    }
+  } else {
+    // ③ 远超：必须切，允许词界，每段 ≤ limit
+    cuts = dpSplitSpan(
+      tokens,
+      0,
+      tokens.length - 1,
+      profile,
+      limit,
+      limit,
+      silence,
+      'force',
+    );
+    if (cuts === null) {
+      cuts = [];
+    }
+  }
+
+  const bounds = [0, ...cuts.map((c) => c + 1), tokens.length];
+  const ranges: Array<[number, number]> = [];
+  for (let i = 0; i < bounds.length - 1; i++) {
+    ranges.push([bounds[i], bounds[i + 1] - 1]);
+  }
+  return ranges;
+}
+
+/** 供 A/B 对比：旧逻辑 = 一律 hard limit，无 grace / quality 门闩 */
+export function splitSpanByDpLegacyHard(
+  tokens: WordToken[],
+  profile: LanguageProfile,
+  limit: number,
+  silence?: SilenceQuery,
+): Array<[number, number]> {
+  if (tokens.length < 2) {
+    return tokens.length === 0 ? [] : [[0, 0]];
+  }
+  const cuts =
+    dpSplitSpan(
+      tokens,
+      0,
+      tokens.length - 1,
+      profile,
+      limit,
+      limit,
+      silence,
+      'force',
+    ) ?? [];
   const bounds = [0, ...cuts.map((c) => c + 1), tokens.length];
   const ranges: Array<[number, number]> = [];
   for (let i = 0; i < bounds.length - 1; i++) {

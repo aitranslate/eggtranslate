@@ -6,6 +6,18 @@
  */
 export const MIN_FRAGMENT_UNITS = 2.0;
 
+/**
+ * 无「好切点」时允许略超设置长度的缓冲（词/字单位与 limit 一致）。
+ * 例：短=12 → 最多整句保留 14；有好切点时仍按 limit 切开。
+ */
+export const LENGTH_GRACE_UNITS = 2;
+
+/**
+ * 静音多久才算「好切点」（秒）。
+ * 词间正常缝隙（~50–200ms）不算；明显停顿才允许 quality 模式切开。
+ */
+export const GOOD_SILENCE_SEC = 0.35;
+
 /** 长度惩罚相对边界代价的权重（边界质量主导，长度拟合次之）。 */
 export const LENGTH_PENALTY_WEIGHT = 0.3;
 
@@ -18,5 +30,5 @@ export const BOUNDARY_COST = {
   soft: 1.0, // 分号 / 冒号
   comma: 1.5, // 逗号
   connector: 2.5, // 连词前
-  word: 6.0, // 普通词界（最差合法切）
+  word: 6.0, // 普通词界（最差合法切；不算「好切点」）
 } as const;

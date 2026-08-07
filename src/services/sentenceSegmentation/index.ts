@@ -1,4 +1,5 @@
-// DP 断句模块总入口 —— Layer1 硬切分 + Layer2 DP 软切分（硬上限 = 设置值）。
+// DP 断句模块总入口 —— Layer1 硬切分 + Layer2 DP 软切分。
+// Layer2：设置长度为 target；略超且无好切点可 +grace 整句保留；远超必切。
 
 import { getProfile, joinTokenTexts, tokenize } from './profiles';
 import { splitTextToSentences, mapSentencesToWordRanges } from './hardSplit';
@@ -39,7 +40,8 @@ export function segmentText(text: string, lang: string, preset: Preset = 'standa
 /**
  * 音频流转录（带单词级时间戳）断句。
  * words 的 start/end 单位为秒；产出 startTime/endTime 为毫秒。
- * 切分仅在 ASR token 边界；硬上限 = preset 设置值。
+ * 切分仅在 ASR token 边界。
+ * Layer2：≤limit 不切；略超仅好切点切，否则 +grace 可整句；远超必切。
  */
 export function segmentWords(
   words: WordWithTime[],
@@ -71,7 +73,6 @@ export function segmentWords(
       return gap > 0 ? gap : null;
     };
 
-    // Layer2：硬上限 = limit（不再 × 1.15）
     const dpRanges = splitSpanByDp(tokens, profile, limit, 1.0, silence);
     for (const [a, b] of dpRanges) {
       const segWords = slice.slice(a, b + 1);

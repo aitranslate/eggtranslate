@@ -169,18 +169,43 @@ describe('splitSpanByDp 单元', () => {
     }
   });
 
-  it('hard_cap_en_short_multi_token_never_exceeds_12', () => {
+  it('force_path_en_short_far_over_grace_each_seg_leq_12', () => {
+    // 30 词无标点 > 12+2 → 强制切，每段 ≤12
     const words = mkWords(
       Array.from({ length: 30 }, (_, i) => `word${i}`).join(' '),
     );
     const segs = segmentWords(words, 'en', 'short');
+    expect(segs.length).toBeGreaterThan(1);
     for (const s of segs) {
       expect(s.words.length).toBeLessThanOrEqual(12);
     }
   });
 
-  it('hard_cap_zh_short_multi_token_respects_char_limit', () => {
-    // 模拟 ASR：单字/双字 token，总计远超 16 字
+  it('grace_keeps_13_words_when_no_good_cut_short_limit_12', () => {
+    // 13 词、无逗号/连词 → 略超 short=12，整句保留（翻译质量）
+    const words = mkWords(
+      'one two three four five six seven eight nine ten eleven twelve thirteen',
+    );
+    const segs = segmentWords(words, 'en', 'short');
+    expect(segs).toHaveLength(1);
+    expect(segs[0].words.length).toBe(13);
+  });
+
+  it('good_comma_cut_splits_even_inside_grace_band', () => {
+    // 13 词但中间有逗号 → 有好切点，应按 limit 切开（不整句赖 grace）
+    const words = mkWords(
+      'one two three four five six seven, eight nine ten eleven twelve thirteen',
+    );
+    const segs = segmentWords(words, 'en', 'short');
+    expect(segs.length).toBeGreaterThanOrEqual(2);
+    expect(segs[0].text.endsWith('seven,') || segs[0].text.includes('seven,')).toBe(true);
+    for (const s of segs) {
+      expect(s.words.length).toBeLessThanOrEqual(12);
+    }
+  });
+
+  it('force_path_zh_short_far_over_grace', () => {
+    // 模拟 ASR：单字/双字 token，总计远超 16+2
     const tokens = [
       '我', '们', '今天', '要', '讨', '论', '的', '是', '关', '于',
       '人', '工', '智', '能', '在', '教', '育', '领', '域', '的',
@@ -191,7 +216,6 @@ describe('splitSpanByDp 单元', () => {
     expect(segs.length).toBeGreaterThan(1);
     for (const s of segs) {
       const chars = [...s.text].filter((ch) => /[\u4e00-\u9fff]/.test(ch)).length;
-      // 多 token 段：字数 ≤ 16
       if (s.words.length > 1) {
         expect(chars).toBeLessThanOrEqual(16);
       }
