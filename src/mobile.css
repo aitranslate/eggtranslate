@@ -584,6 +584,66 @@
   border-radius: 0;
   box-shadow: none;
   background: var(--wb-panel);
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.m-shell .wb-editor-body {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 移动端：文件信息 / 搜索默认可折叠 */
+.se-mobile-chrome {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--wb-border);
+  background: var(--wb-panel);
+}
+
+.se-mobile-chrome-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--wb-text-2);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.se-mobile-chrome-summary:active {
+  background: var(--wb-panel-2);
+}
+
+.se-mobile-chrome-summary-main {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--wb-text);
+  font-weight: 500;
+}
+
+.se-mobile-chrome-summary-hint {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--wb-text-3);
+  font-size: 12px;
+}
+
+.se-mobile-chrome.is-open .se-mobile-chrome-summary {
+  border-bottom: 1px solid var(--wb-border);
 }
 
 .m-shell .wb-editor-toolbar {
@@ -722,6 +782,94 @@
   background: var(--wb-panel);
   border-top: 1px solid var(--wb-border);
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.m-detail-bar.is-collapsed {
+  position: relative;
+  gap: 0;
+  padding: 0 0 calc(4px + var(--m-safe-b));
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.04);
+}
+
+.m-detail-bar-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 14px 14px 10px;
+  border: none;
+  background: transparent;
+  color: var(--wb-text-2);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.m-detail-bar-summary:active {
+  background: var(--wb-panel-2);
+}
+
+.m-detail-bar-grip {
+  display: block;
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--wb-border-strong, var(--wb-border));
+  margin: 0 auto;
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  transform: translateX(-50%);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.m-detail-bar-summary-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--wb-text);
+  font-weight: 500;
+}
+
+.m-detail-bar-summary-hint {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--wb-text-3);
+  font-size: 12px;
+}
+
+.m-detail-bar-collapse {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 28px;
+  margin: -2px 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--wb-text-3);
+  font-size: 12px;
+  cursor: pointer;
+  position: relative;
+  padding-top: 12px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.m-detail-bar-collapse .m-detail-bar-grip {
+  top: 4px;
+}
+
+.m-detail-bar-collapse:active {
+  color: var(--wb-text-2);
 }
 
 /* 热词：标签靠左 + 下拉占剩余，不整行居中大胶囊 */

@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useMemo, useRef, memo, useEffect, forwardRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Search, FileText, X } from 'lucide-react';
+import { Search, FileText, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { MOBILE_DETAIL_SCROLL_EVENT } from '@/components/mobile/MobileDetailBar';
 import { useShallow } from 'zustand/react/shallow';
 import { SubtitleEntry } from '@/types';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -457,6 +458,8 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const [searchInput, setSearchInput] = useState('');
   const searchTerm = useDebouncedValue(searchInput, 300);
   const [filterType, setFilterType] = useState<'all' | 'translated' | 'untranslated'>('all');
+  /** 移动端：文件信息/搜索默认收起，扩大字幕区 */
+  const [mobileChromeOpen, setMobileChromeOpen] = useState(false);
   const draftRef = useRef({
     text: '',
     translation: '',
@@ -560,7 +563,27 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   // 筛选 / 断点变化后重测，避免沿用错误高度缓存
   useEffect(() => {
     virtualizer.measure();
-  }, [virtualizer, filterType, searchTerm, fileId, isMobile, filteredEntries.length]);
+  }, [virtualizer, filterType, searchTerm, fileId, isMobile, filteredEntries.length, mobileChromeOpen]);
+
+  // 移动端：滚动字幕列表时收起顶栏 chrome，并通知底栏收起
+  useEffect(() => {
+    if (!isMobile) return;
+    const el = parentRef.current;
+    if (!el) return;
+    let lastY = el.scrollTop;
+    const onScroll = () => {
+      const y = el.scrollTop;
+      if (Math.abs(y - lastY) < 4) return;
+      lastY = y;
+      // 搜索/筛选进行中不自动收顶栏
+      if (!searchInput && filterType === 'all') {
+        setMobileChromeOpen(false);
+      }
+      window.dispatchEvent(new CustomEvent(MOBILE_DETAIL_SCROLL_EVENT));
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [isMobile, searchInput, filterType, fileId]);
 
   const clearDraft = useCallback(() => {
     setEditingId(null);
@@ -573,6 +596,11 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const onStartEdit = useCallback(
     (entry: SubtitleEntry, field: FocusField = 'translation') => {
       if (isTaskBusy) return;
+      // 进入行编辑：收起移动端 chrome / 通知底栏收起，给键盘腾位
+      if (isMobile) {
+        setMobileChromeOpen(false);
+        window.dispatchEvent(new CustomEvent(MOBILE_DETAIL_SCROLL_EVENT));
+      }
       setEditingId(entry.id);
       setFocusField(field);
       setEditText(entry.text);
@@ -580,7 +608,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
       setEditStartTime(entry.startTime);
       setEditEndTime(entry.endTime);
     },
-    [isTaskBusy]
+    [isTaskBusy, isMobile]
   );
 
   // 任务进入处理中时，强制退出编辑（不落盘，避免与流水线冲突）
@@ -734,131 +762,176 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     return null;
   }
 
-  const editorBody = (
-    <div className={variant === 'panel' ? 'wb-editor' : 'flex flex-col flex-1 min-h-0'}>
-      <div className={variant === 'panel' ? 'wb-editor-toolbar' : 'flex items-center justify-between px-5 py-3 border-b flex-shrink-0'}>
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-          <div
-            className="w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0"
-            style={{ background: 'var(--apple-blue-soft)', color: 'var(--apple-blue)' }}
-          >
-            <FileText className="h-4 w-4" />
+  const fileChrome = (
+    <div className={variant === 'panel' ? 'wb-editor-toolbar' : 'flex items-center justify-between px-5 py-3 border-b flex-shrink-0'}>
+      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+        <div
+          className="w-8 h-8 rounded-[8px] flex items-center justify-center flex-shrink-0"
+          style={{ background: 'var(--apple-blue-soft)', color: 'var(--apple-blue)' }}
+        >
+          <FileText className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <div className="font-semibold text-[15px] truncate" title={file?.name || '未知文件'}>
+            {file?.name || '未知文件'}
           </div>
-          <div className="min-w-0">
-            <div className="font-semibold text-[15px] truncate" title={file?.name || '未知文件'}>
-              {file?.name || '未知文件'}
+          <div className="text-[13px] text-[var(--wb-text-3)] flex flex-wrap gap-x-2 gap-y-0.5 items-center">
+            <div className="se-lang-pair" data-testid="editor-lang-pair">
+              <select
+                className="se-lang-select"
+                value={sourceSelectValue}
+                onChange={(e) => handleSourceLanguageChange(e.target.value)}
+                title="本任务源语言"
+                aria-label="源语言"
+                data-testid="editor-source-lang"
+              >
+                {LANGUAGE_OPTIONS.map((lang) => (
+                  <option key={`src-${lang.value}`} value={lang.value}>
+                    {lang.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="se-lang-swap"
+                onClick={handleSwapLanguages}
+                title="交换本任务源语言与目标语言"
+                aria-label="交换语言"
+                data-testid="editor-lang-swap"
+              >
+                ⇄
+              </button>
+              <select
+                className="se-lang-select"
+                value={targetSelectValue}
+                onChange={(e) => handleTargetLanguageChange(e.target.value)}
+                title="本任务目标语言"
+                aria-label="目标语言"
+                data-testid="editor-target-lang"
+              >
+                {LANGUAGE_OPTIONS.map((lang) => (
+                  <option key={`tgt-${lang.value}`} value={lang.value}>
+                    {lang.label}
+                  </option>
+                ))}
+              </select>
             </div>
-            <div className="text-[13px] text-[var(--wb-text-3)] flex flex-wrap gap-x-2 gap-y-0.5 items-center">
-              <div className="se-lang-pair" data-testid="editor-lang-pair">
-                <select
-                  className="se-lang-select"
-                  value={sourceSelectValue}
-                  onChange={(e) => handleSourceLanguageChange(e.target.value)}
-                  title="本任务源语言"
-                  aria-label="源语言"
-                  data-testid="editor-source-lang"
-                >
-                  {LANGUAGE_OPTIONS.map((lang) => (
-                    <option key={`src-${lang.value}`} value={lang.value}>
-                      {lang.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="se-lang-swap"
-                  onClick={handleSwapLanguages}
-                  title="交换本任务源语言与目标语言"
-                  aria-label="交换语言"
-                  data-testid="editor-lang-swap"
-                >
-                  ⇄
-                </button>
-                <select
-                  className="se-lang-select"
-                  value={targetSelectValue}
-                  onChange={(e) => handleTargetLanguageChange(e.target.value)}
-                  title="本任务目标语言"
-                  aria-label="目标语言"
-                  data-testid="editor-target-lang"
-                >
-                  {LANGUAGE_OPTIONS.map((lang) => (
-                    <option key={`tgt-${lang.value}`} value={lang.value}>
-                      {lang.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <span>·</span>
-              <span>{translationStats.total} 条</span>
-              <span>·</span>
-              <span>
-                {translationStats.translated}/{translationStats.total} 已译 · {translationStats.percentage}%
-              </span>
-              {agentUiVisible && agentRun ? (
-                // 桌面 + 移动均可打开过程面板（chunk 未就绪时不出现孤立「·」）
-                <LazySurface fallback={null}>
-                  <>
-                    <span aria-hidden>·</span>
-                    <LazyAgentProcessControl status={agentRun} visible />
-                  </>
-                </LazySurface>
-              ) : null}
-            </div>
+            <span>·</span>
+            <span>{translationStats.total} 条</span>
+            <span>·</span>
+            <span>
+              {translationStats.translated}/{translationStats.total} 已译 · {translationStats.percentage}%
+            </span>
+            {agentUiVisible && agentRun ? (
+              <LazySurface fallback={null}>
+                <>
+                  <span aria-hidden>·</span>
+                  <LazyAgentProcessControl status={agentRun} visible />
+                </>
+              </LazySurface>
+            ) : null}
           </div>
         </div>
-        {onClose && variant === 'modal' && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 hover:bg-[var(--wb-panel-2)] rounded-full flex-shrink-0"
-            aria-label="关闭"
-          >
-            <X className="h-5 w-5 text-[var(--wb-text-2)]" />
-          </button>
+      </div>
+      {onClose && variant === 'modal' && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-2 hover:bg-[var(--wb-panel-2)] rounded-full flex-shrink-0"
+          aria-label="关闭"
+        >
+          <X className="h-5 w-5 text-[var(--wb-text-2)]" />
+        </button>
+      )}
+    </div>
+  );
+
+  const searchToolbar = (
+    <div className="se-toolbar flex-shrink-0">
+      <div className="se-toolbar-progress">
+        <div className="se-progress-track">
+          <div
+            className="se-progress-fill"
+            style={{ width: `${translationStats.percentage}%` }}
+          />
+        </div>
+        <span className="se-progress-label tabular-nums">
+          {translationStats.percentage}%
+        </span>
+      </div>
+      <div className="se-toolbar-filters">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--wb-text-3)]" />
+          <input
+            type="text"
+            placeholder="搜索原文 / 译文…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="se-search-input"
+          />
+        </div>
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value as 'all' | 'translated' | 'untranslated')}
+          className="se-filter-select"
+        >
+          <option value="all">全部</option>
+          <option value="translated">已翻译</option>
+          <option value="untranslated">未翻译</option>
+        </select>
+        {matchCountLabel && (
+          <span className="se-match-count" data-testid="editor-match-count">
+            {matchCountLabel}
+          </span>
         )}
       </div>
+    </div>
+  );
+
+  const mobileChromeSummary = (
+    <button
+      type="button"
+      className="se-mobile-chrome-summary"
+      onClick={() => setMobileChromeOpen((o) => !o)}
+      aria-expanded={mobileChromeOpen}
+      aria-label={mobileChromeOpen ? '收起文件信息与搜索' : '展开文件信息与搜索'}
+      data-testid="editor-mobile-chrome-toggle"
+    >
+      <span className="se-mobile-chrome-summary-main">
+        {translationStats.translated}/{translationStats.total} 已译 · {translationStats.percentage}%
+        {hasSearchOrFilter ? ' · 筛选中' : ''}
+      </span>
+      <span className="se-mobile-chrome-summary-hint">
+        {mobileChromeOpen ? '收起' : '语言 · 搜索'}
+        {mobileChromeOpen ? (
+          <ChevronUp className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5" />
+        )}
+      </span>
+    </button>
+  );
+
+  const editorBody = (
+    <div className={variant === 'panel' ? 'wb-editor' : 'flex flex-col flex-1 min-h-0'}>
+      {isMobile ? (
+        <div className={`se-mobile-chrome${mobileChromeOpen ? ' is-open' : ''}`}>
+          {mobileChromeSummary}
+          {mobileChromeOpen ? (
+            <>
+              {fileChrome}
+              {searchToolbar}
+            </>
+          ) : null}
+        </div>
+      ) : (
+        <>
+          {fileChrome}
+        </>
+      )}
 
       <div className={variant === 'panel' ? 'wb-editor-body se-editor-body' : 'px-4 py-3 flex flex-col flex-1 min-h-0'}>
-        <div className="se-toolbar flex-shrink-0">
-          <div className="se-toolbar-progress">
-            <div className="se-progress-track">
-              <div
-                className="se-progress-fill"
-                style={{ width: `${translationStats.percentage}%` }}
-              />
-            </div>
-            <span className="se-progress-label tabular-nums">
-              {translationStats.percentage}%
-            </span>
-          </div>
-          <div className="se-toolbar-filters">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--wb-text-3)]" />
-              <input
-                type="text"
-                placeholder="搜索原文 / 译文…"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="se-search-input"
-              />
-            </div>
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value as 'all' | 'translated' | 'untranslated')}
-              className="se-filter-select"
-            >
-              <option value="all">全部</option>
-              <option value="translated">已翻译</option>
-              <option value="untranslated">未翻译</option>
-            </select>
-            {matchCountLabel && (
-              <span className="se-match-count" data-testid="editor-match-count">
-                {matchCountLabel}
-              </span>
-            )}
-          </div>
-        </div>
+        {!isMobile ? searchToolbar : null}
 
         <div className="se-table flex-1 min-h-0 flex flex-col">
           <div className="se-colhead" aria-hidden>

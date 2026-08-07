@@ -1,9 +1,10 @@
 /**
- * 移动端任务详情底栏：转录 / 翻译 / 导出
+ * 移动端任务详情底栏：默认收起为把手，展开后显示热词 / 导出 / 转录 / 转译。
+ * 忙碌时自动展开；列表滚动时收起（非忙碌）。
  */
 
-import { useMemo, useCallback } from 'react';
-import { Play, Square, Mic, Loader2 } from 'lucide-react';
+import { useMemo, useCallback, useState, useEffect } from 'react';
+import { Play, Square, Mic, Loader2, ChevronUp, ChevronDown } from 'lucide-react';
 import type { SubtitleFileMetadata } from '@/types';
 import { ALL_PHASES } from '@/types';
 import { useFilesStore } from '@/stores/filesStore';
@@ -20,6 +21,9 @@ import { canRetranscribe } from '@/utils/fileUtils';
 import type { ExportFormat } from '@/utils/fileExport';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+
+/** 编辑器列表滚动时派发，底栏非忙碌则收起 */
+export const MOBILE_DETAIL_SCROLL_EVENT = 'egg-mobile-detail-scroll';
 
 interface MobileDetailBarProps {
   file: SubtitleFileMetadata;
@@ -63,13 +67,11 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
 
   const canTranscribe = isAudioVideo && !isBusy && canRetranscribe(file) && !allPhasesDone;
   const isTranscribeFailed = file.phases.transcribing.status === 'failed';
-  /** 失败后文案更长，布局须保证单行不换行 */
   const transcribeLabel = isTranscribeFailed ? '重新转录' : '转录';
 
   const canRun = useMemo(() => {
     if (isQueued) return true;
     if (isBusy || allPhasesDone) return false;
-    // 转录失败：仍可点主按钮走「仅翻译」以外的主路径；有字幕时可译
     if (isAudioVideo && !isTranscriptionDone && !isTranscribeFailed) return true;
     if (isAudioVideo && isTranscribeFailed && (file.entryCount ?? 0) === 0) return false;
     if (pct >= 100) return false;
@@ -92,7 +94,6 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
       : isAudioVideo && !isTranscriptionDone && !isTranscribeFailed
         ? '转译'
         : '翻译';
-  // 忙时不重复「处理中」：阶段进度/列表状态已表达；按钮灰显保留动作名
   const primaryLabel = isQueued
     ? '取消排队'
     : isBusy
@@ -100,6 +101,22 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
         ? '翻译'
         : idlePrimary
       : idlePrimary;
+
+  const [expanded, setExpanded] = useState(false);
+
+  // 忙碌时自动展开，便于取消/看状态
+  useEffect(() => {
+    if (isBusy) setExpanded(true);
+  }, [isBusy]);
+
+  // 列表滚动：非忙碌则收起
+  useEffect(() => {
+    const onScroll = () => {
+      if (!isBusy) setExpanded(false);
+    };
+    window.addEventListener(MOBILE_DETAIL_SCROLL_EVENT, onScroll);
+    return () => window.removeEventListener(MOBILE_DETAIL_SCROLL_EVENT, onScroll);
+  }, [isBusy]);
 
   const handlePrimary = useCallback(() => {
     if (isQueued) {
@@ -125,8 +142,63 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
     [file.taskId, file.name, handleError]
   );
 
+  const summaryLeft = useMemo(() => {
+    const total = file.entryCount ?? 0;
+    const done = file.translatedCount ?? 0;
+    if (isBusy) {
+      if (file.phases.transcribing.status === 'active') return '转录中…';
+      if (file.phases.translating.status === 'active') return '翻译中…';
+      if (isQueued) return `排队 #${queuePosition}`;
+      return '处理中…';
+    }
+    if (total <= 0) return '暂无字幕';
+    return `${done}/${total} 已译 · ${pct}%`;
+  }, [
+    file.entryCount,
+    file.translatedCount,
+    file.phases.transcribing.status,
+    file.phases.translating.status,
+    isBusy,
+    isQueued,
+    queuePosition,
+    pct,
+  ]);
+
+  if (!expanded) {
+    return (
+      <div className="m-detail-bar is-collapsed">
+        <button
+          type="button"
+          className="m-detail-bar-summary"
+          onClick={() => setExpanded(true)}
+          aria-expanded={false}
+          aria-label="展开操作：热词、导出、转录、翻译"
+        >
+          <span className="m-detail-bar-grip" aria-hidden />
+          <span className="m-detail-bar-summary-text">{summaryLeft}</span>
+          <span className="m-detail-bar-summary-hint">
+            操作
+            <ChevronUp className="h-3.5 w-3.5" />
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="m-detail-bar">
+    <div className="m-detail-bar is-expanded">
+      <button
+        type="button"
+        className="m-detail-bar-collapse"
+        onClick={() => setExpanded(false)}
+        aria-expanded
+        aria-label="收起操作栏"
+      >
+        <span className="m-detail-bar-grip" aria-hidden />
+        <span>收起</span>
+        <ChevronDown className="h-3.5 w-3.5" />
+      </button>
+
       {isAudioVideo && keytermGroups.length > 0 && (
         <label className="m-detail-keyterm">
           <span>热词</span>
@@ -145,9 +217,7 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
         </label>
       )}
 
-      <div
-        className={`m-detail-actions${isAudioVideo ? ' has-transcribe' : ''}`}
-      >
+      <div className={`m-detail-actions${isAudioVideo ? ' has-transcribe' : ''}`}>
         <div className="m-export-wrap">
           <ExportButton
             variant="icon"
