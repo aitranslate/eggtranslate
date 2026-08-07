@@ -1,13 +1,22 @@
 import path from "path"
+import { readFileSync } from "fs"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import sourceIdentifierPlugin from 'vite-plugin-source-info'
+
+const pkg = JSON.parse(
+  readFileSync(path.resolve(__dirname, "package.json"), "utf-8")
+) as { version: string }
 
 // 部署到 Cloudflare Pages，使用根路径
 // 不注册 Service Worker：应用强依赖在线 API，SW 无离线收益且曾导致缓存/白屏问题。
 // 安装元数据用 public/manifest.webmanifest + index.html 静态 link。
 export default defineConfig(({ command }) => ({
   base: '/',
+  // 与 package.json version 同步，UI 左上角等处使用
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   plugins: [
     react(),
     sourceIdentifierPlugin({
