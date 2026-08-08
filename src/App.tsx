@@ -30,7 +30,7 @@ function App() {
           duration: 3000,
           style: toastBaseStyle,
           success: {
-            duration: 2500,
+            duration: 3000,
             iconTheme: {
               primary: 'var(--apple-success, #10B981)',
               secondary: 'var(--wb-panel, #fff)',

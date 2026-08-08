@@ -71,8 +71,9 @@ async function addMediaFile(
   defaultKeytermGroupId: string | null,
   langs: { sourceLanguage: string; targetLanguage: string }
 ): Promise<string | null> {
-  // 处理中 toast（持续显示；内部 FFmpeg 抽音轨，用户无感）
-  const toastId = toast.loading(`正在处理 ${file.name}…`, { duration: Infinity });
+  // 处理中 toast：loading 默认 duration=Infinity；勿显式写 Infinity，
+  // 否则同 id 更新为 success 时 Infinity 会残留导致永不消失（react-hot-toast 合并行为）
+  const toastId = toast.loading(`正在处理 ${file.name}…`);
 
   try {
     // 1) 解析元数据
@@ -108,12 +109,12 @@ async function addMediaFile(
     // 双保险：addTask 已 flush，这里再 await 确保 MP3 key 与任务列表一致落盘
     await flushFilesStorePersist();
 
-    toast.success(`已添加：${file.name}`, { id: toastId });
+    toast.success(`已添加：${file.name}`, { id: toastId, duration: 3000 });
     return result.metadata.id;
   } catch (error) {
     const appError = toAppError(error, '导入失败');
     logger.error(appError.message, appError);
-    toast.error(`导入失败：${file.name}（${appError.message}）`, { id: toastId });
+    toast.error(`导入失败：${file.name}（${appError.message}）`, { id: toastId, duration: 4000 });
     return null;
   }
 }

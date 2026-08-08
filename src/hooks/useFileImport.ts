@@ -90,8 +90,9 @@ export function useFileImport() {
       /** 仅统计成功入库的媒体，避免「SRT 成功 + 媒体失败」仍弹转录 tip */
       let okMedia = 0;
 
+      // loading 默认 duration=Infinity；勿显式写 Infinity，避免同 id 更新 success 时残留
       const progressToastId =
-        total > 1 ? toast.loading(formatImportProgress(0, total), { duration: Infinity }) : null;
+        total > 1 ? toast.loading(formatImportProgress(0, total)) : null;
 
       for (let i = 0; i < files.length; i++) {
         if (progressToastId) {
@@ -109,11 +110,11 @@ export function useFileImport() {
 
       if (progressToastId) {
         if (ok > 0 && fail === 0) {
-          toast.success(formatImportSummary(ok, fail), { id: progressToastId });
+          toast.success(formatImportSummary(ok, fail), { id: progressToastId, duration: 3000 });
         } else if (ok === 0) {
-          toast.error(formatImportSummary(ok, fail), { id: progressToastId });
+          toast.error(formatImportSummary(ok, fail), { id: progressToastId, duration: 4000 });
         } else {
-          toast.success(formatImportSummary(ok, fail), { id: progressToastId });
+          toast.success(formatImportSummary(ok, fail), { id: progressToastId, duration: 3000 });
         }
       }
 
