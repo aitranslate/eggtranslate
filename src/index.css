@@ -39,8 +39,13 @@
     background-color: var(--wb-bg, #f0f1f4);
   }
 
-  /* 仅安装后的独立窗口用 dvh 铺满（不影响普通网页底栏贴边） */
-  @media (display-mode: standalone), (display-mode: fullscreen) {
+  /*
+   * PWA 独立窗口：钉满可视窗口。
+   * - is-pwa 由 index.html 内联脚本 + pwaShell.ts 设置（比纯 media 更稳，含 iOS standalone）
+   * - --app-height = visualViewport/innerHeight，避免 100%/100dvh 短一截露底缝
+   * 普通浏览器标签页不走此分支，底栏仍 100% 链贴边。
+   */
+  @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
     html {
       height: 100%;
       height: 100dvh;
@@ -52,9 +57,36 @@
     }
   }
 
+  html.is-pwa {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: var(--app-height, 100dvh);
+    max-height: var(--app-height, 100dvh);
+    overflow: hidden;
+    background-color: var(--wb-bg, #f0f1f4);
+  }
+
+  html.is-pwa body,
+  html.is-pwa #root {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    background-color: var(--wb-bg, #f0f1f4);
+  }
+
   html.dark,
   html.dark body,
   html.dark #root {
+    background-color: var(--wb-bg, #14171c);
+  }
+
+  html.is-pwa.dark,
+  html.is-pwa.dark body,
+  html.is-pwa.dark #root {
     background-color: var(--wb-bg, #14171c);
   }
 

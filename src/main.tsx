@@ -11,7 +11,10 @@ import { rehydrateAppStores } from '@/stores/bootstrap'
 import { initThemeFromStorage } from '@/stores/themeStore'
 import { initSoundFromStorage } from '@/stores/soundStore'
 import { isFfmpegCacheName } from '@/utils/convertToMP3'
+import { initPwaShell } from '@/utils/pwaShell'
 
+/* 尽早标记 is-pwa / --app-height，避免独立窗口底栏下方露缝 */
+initPwaShell()
 initThemeFromStorage()
 initSoundFromStorage()
 

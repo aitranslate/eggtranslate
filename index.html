@@ -21,6 +21,26 @@
   <link rel="apple-touch-icon" href="/icons/192.png" />
   <!-- 仅 manifest（主题色/名称/图标）；不注册 Service Worker -->
   <link rel="manifest" href="/manifest.webmanifest" />
+  <!-- 首屏前标记 PWA，避免独立窗口高度未算准时底缝闪一下 -->
+  <script>
+    (function () {
+      try {
+        var n = window.navigator;
+        var standalone =
+          (window.matchMedia &&
+            (window.matchMedia('(display-mode: standalone)').matches ||
+              window.matchMedia('(display-mode: fullscreen)').matches ||
+              window.matchMedia('(display-mode: minimal-ui)').matches)) ||
+          n.standalone === true;
+        if (standalone) document.documentElement.classList.add('is-pwa');
+        var h =
+          (window.visualViewport && window.visualViewport.height) ||
+          window.innerHeight ||
+          0;
+        if (h) document.documentElement.style.setProperty('--app-height', Math.round(h) + 'px');
+      } catch (e) {}
+    })();
+  </script>
 </head>
 
 <body>

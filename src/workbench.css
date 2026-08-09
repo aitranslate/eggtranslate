@@ -48,10 +48,11 @@
 }
 
 /*
- * PWA 独立窗口：吃掉刘海/Home 条安全区。
- * 普通浏览器标签页不启用，避免底栏被垫高或出现底缝。
+ * PWA 独立窗口：吃掉刘海/Home 条安全区，壳铺满窗口。
+ * is-pwa 与 display-mode 双保险（iOS 主屏幕 / 桌面安装）。
+ * 普通浏览器标签页不启用，避免底栏被垫高。
  */
-@media (display-mode: standalone), (display-mode: fullscreen) {
+@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
   .workbench {
     --wb-safe-t: env(safe-area-inset-top, 0px);
     --wb-safe-b: env(safe-area-inset-bottom, 0px);
@@ -64,7 +65,25 @@
       calc(var(--wb-status-h) + var(--wb-safe-b));
     padding-left: var(--wb-safe-l);
     padding-right: var(--wb-safe-r);
+    max-height: none;
   }
+}
+
+html.is-pwa .workbench {
+  --wb-safe-t: env(safe-area-inset-top, 0px);
+  --wb-safe-b: env(safe-area-inset-bottom, 0px);
+  --wb-safe-l: env(safe-area-inset-left, 0px);
+  --wb-safe-r: env(safe-area-inset-right, 0px);
+
+  grid-template-rows:
+    calc(var(--wb-top-h) + var(--wb-safe-t))
+    minmax(0, 1fr)
+    calc(var(--wb-status-h) + var(--wb-safe-b));
+  padding-left: var(--wb-safe-l);
+  padding-right: var(--wb-safe-r);
+  width: 100%;
+  height: 100%;
+  max-height: none;
 }
 
 /* 隐藏的 file input 不得占 grid 槽位（否则会挤出隐式行，顶飞状态栏） */
@@ -102,13 +121,20 @@
   flex-shrink: 0;
 }
 
-@media (display-mode: standalone), (display-mode: fullscreen) {
+@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
   .wb-topbar {
     height: 100%;
     min-height: 0;
     max-height: none;
     padding: var(--wb-safe-t) 10px 0 14px;
   }
+}
+
+html.is-pwa .wb-topbar {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  padding: var(--wb-safe-t) 10px 0 14px;
 }
 
 .wb-brand {
@@ -2514,14 +2540,21 @@ html.dark .wb-alert {
   overflow: hidden;
 }
 
-@media (display-mode: standalone), (display-mode: fullscreen) {
+@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
   .wb-statusbar {
     height: 100%;
     min-height: 0;
     max-height: none;
-    /* 底安全区同色延伸，文案仍在 26px 内容带内 */
+    /* 底安全区同色延伸，文案仍在内容带内 */
     padding: 0 10px var(--wb-safe-b);
   }
+}
+
+html.is-pwa .wb-statusbar {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  padding: 0 10px var(--wb-safe-b);
 }
 
 .wb-statusbar-left,
@@ -2641,8 +2674,19 @@ html.dark .wb-alert {
 }
 
 @media (max-width: 900px) and (display-mode: standalone),
-  (max-width: 900px) and (display-mode: fullscreen) {
+  (max-width: 900px) and (display-mode: fullscreen),
+  (max-width: 900px) and (display-mode: minimal-ui) {
   .workbench {
+    grid-template-rows:
+      calc(var(--wb-top-h) + var(--wb-safe-t))
+      minmax(100px, 30%)
+      minmax(0, 1fr)
+      calc(var(--wb-status-h) + var(--wb-safe-b));
+  }
+}
+
+@media (max-width: 900px) {
+  html.is-pwa .workbench {
     grid-template-rows:
       calc(var(--wb-top-h) + var(--wb-safe-t))
       minmax(100px, 30%)

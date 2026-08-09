@@ -28,6 +28,14 @@
   color-scheme: light;
 }
 
+/* PWA：钉满窗口，底栏（tabbar）贴物理底边 */
+html.is-pwa .m-shell {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  min-height: 100%;
+}
+
 .m-shell[data-theme='dark'] {
   color-scheme: dark;
   --wb-bg: #14171c;
