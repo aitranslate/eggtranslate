@@ -8,22 +8,42 @@
 
 @layer base {
   /*
-   * 应用壳（非网站）：整页禁止滚动，仅内部面板滚动。
-   * 高度用 100% 链（html→body→#root→.workbench），避免 100vh 与浏览器 UI 叠出双滚动条。
+   * 应用壳（非网站 / PWA standalone）：
+   * - 整页禁止滚动，仅内部面板滚动
+   * - 背景与壳色一致，PWA 底部安全区空隙不露白
+   * - 高度 100% / 100dvh / -webkit-fill-available，独立窗口也贴底
    */
   html {
     width: 100%;
     height: 100%;
     overflow: hidden;
     overscroll-behavior: none;
+    background-color: var(--wb-bg, #f0f1f4);
+  }
+
+  /* 优先 dvh；旧 WebKit 无 dvh 时用 fill-available 铺满独立窗口 */
+  @supports (height: 100dvh) {
+    html {
+      height: 100dvh;
+    }
+  }
+
+  @supports not (height: 100dvh) {
+    @supports (height: -webkit-fill-available) {
+      html {
+        height: -webkit-fill-available;
+      }
+    }
   }
 
   body {
     width: 100%;
     height: 100%;
+    min-height: 100%;
     margin: 0;
     overflow: hidden;
     overscroll-behavior: none;
+    background-color: var(--wb-bg, #f0f1f4);
   }
 
   #root {
@@ -31,6 +51,39 @@
     height: 100%;
     min-height: 0;
     overflow: hidden;
+    background-color: var(--wb-bg, #f0f1f4);
+  }
+
+  /* 安装后的独立窗口：显式铺满，避免底栏下方露系统/白底 */
+  @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+    html {
+      height: 100%;
+    }
+
+    @supports (height: 100dvh) {
+      html {
+        height: 100dvh;
+      }
+    }
+
+    @supports not (height: 100dvh) {
+      @supports (height: -webkit-fill-available) {
+        html {
+          height: -webkit-fill-available;
+        }
+      }
+    }
+
+    body,
+    #root {
+      height: 100%;
+    }
+  }
+
+  html.dark,
+  html.dark body,
+  html.dark #root {
+    background-color: var(--wb-bg, #14171c);
   }
 
   * {
