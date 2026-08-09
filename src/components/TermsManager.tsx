@@ -348,7 +348,7 @@ export const TermsManager: React.FC<TermsManagerProps> = ({
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden border-b border-[var(--wb-border)]"
               >
-                <div className="p-3 space-y-2 bg-[var(--wb-panel)]">
+                <div className="p-3 space-y-2 bg-[var(--wb-bg)]">
                   <textarea
                     placeholder={'每行一条：原文: 译文 [备注]\n例：LLM: 大语言模型 [技术]'}
                     value={importText}

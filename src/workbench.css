@@ -1838,7 +1838,7 @@ html.dark .se-row-editing,
 
 /* 列表/工具条里仍可能用到的轻按钮 */
 
-/* ── Stage panels (client settings / glossary / history) ── */
+/* ── Stage panels (glossary / history)：与侧栏同一灰壳，无缝贴边 ── */
 .wb-panel {
   flex: 1;
   min-height: 0;
@@ -1857,7 +1857,8 @@ html.dark .se-row-editing,
   height: 44px;
   border-bottom: 1px solid var(--wb-border);
   flex-shrink: 0;
-  background: var(--wb-panel);
+  /* 与顶栏/侧栏同色，避免白条浮在灰底上 */
+  background: var(--wb-bg);
 }
 
 .wb-panel-title {
@@ -1889,17 +1890,32 @@ html.dark .se-row-editing,
   padding: 12px 14px 16px;
 }
 
-/* 历史 / 术语 sheet：父级只做 flex 列，滚动交给 .wb-sheet-scroll / .wb-glossary-scroll */
+/* 历史 / 术语 sheet：铺满 stage，无外边距/圆角白卡，与侧栏发丝线相接即可 */
 .wb-panel-body.is-sheet {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 0;
+  background: var(--wb-bg);
 }
 
 .wb-panel-body.is-sheet .wb-sheet,
 .wb-panel-body.is-sheet .wb-glossary-shell {
   flex: 1;
   min-height: 0;
+  background: var(--wb-bg);
+  border: none;
+  border-radius: 0;
+}
+
+.wb-panel-body.is-sheet .wb-glossary-toolbar,
+.wb-panel-body.is-sheet .wb-sheet-toolbar,
+.wb-panel-body.is-sheet .wb-glossary-add {
+  background: var(--wb-bg);
+}
+
+.wb-panel-body.is-sheet .wb-stats.in-sheet > div {
+  background: var(--wb-bg);
 }
 
 .wb-panel-body.is-sheet .wb-sheet-scroll,
@@ -1907,6 +1923,7 @@ html.dark .se-row-editing,
   max-height: none;
   min-height: 0;
   flex: 1;
+  background: var(--wb-bg);
 }
 
 /* 工具栏尾部动作靠右（替代 inline marginLeft / Tailwind important） */
@@ -2578,17 +2595,17 @@ html.dark .wb-alert {
   }
 }
 
-/* ── Glossary (tag cloud) ── */
-/* 单卡分段容器：工具行/统计条/列表收进一张卡片，分区用 1px 边线隔开 */
+/* ── Glossary / History sheet ── */
+/* 默认灰壳一体；stage 内由 .is-sheet 去掉边框圆角；输入控件仍可用 --wb-panel 抬一层 */
 .wb-glossary-shell,
 .wb-sheet {
   display: flex;
   flex-direction: column;
   min-height: 0;
   flex: 1;
-  background: var(--wb-panel);
-  border: 1px solid var(--wb-border);
-  border-radius: 10px;
+  background: var(--wb-bg);
+  border: none;
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -2598,9 +2615,9 @@ html.dark .wb-alert {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--wb-border);
-  background: var(--wb-panel);
+  background: var(--wb-bg);
 }
 
 /* 收进 sheet 的统计条/列表：去掉自身外框，只保留分区细线 */
@@ -2622,10 +2639,10 @@ html.dark .wb-alert {
   align-items: center;
   padding: 10px 12px;
   border-bottom: 1px solid var(--wb-border);
-  background: var(--wb-panel);
+  background: var(--wb-bg);
 }
 
-/* 添加术语：白底细边（与全站搜索/设置输入一致） */
+/* 添加术语：浅面细边，在灰壳上略抬起便于辨认输入区 */
 .wb-glossary-field {
   box-sizing: border-box;
   width: 100%;
