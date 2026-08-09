@@ -8,18 +8,14 @@
 
 @layer base {
   /*
-   * 应用壳（浏览器标签页）：
-   * - 整页禁止滚动，仅内部面板滚动
-   * - 高度只用 100% 链，避免 100dvh 与浏览器工具栏叠出底缝/双滚动
-   * - 背景与壳色一致（PWA 启动/安全区空隙也不露白）
-   * PWA 独立窗口的 dvh / safe-area 见下方 display-mode 与 workbench.css
+   * 应用壳（非网站）：整页禁止滚动，仅内部面板滚动。
+   * 高度用 100% 链（html→body→#root→.workbench），避免 100vh 与浏览器 UI 叠出双滚动条。
    */
   html {
     width: 100%;
     height: 100%;
     overflow: hidden;
     overscroll-behavior: none;
-    background-color: var(--wb-bg, #f0f1f4);
   }
 
   body {
@@ -28,7 +24,6 @@
     margin: 0;
     overflow: hidden;
     overscroll-behavior: none;
-    background-color: var(--wb-bg, #f0f1f4);
   }
 
   #root {
@@ -36,85 +31,6 @@
     height: 100%;
     min-height: 0;
     overflow: hidden;
-    background-color: var(--wb-bg, #f0f1f4);
-  }
-
-  /*
-   * PWA 独立窗口：用 top/right/bottom/left 拉满布局视口。
-   * 安卓上不要用 visualViewport 算出的 --app-height 当 max-height（常偏矮 → 底缝）。
-   * 普通浏览器标签页不走 is-pwa，底栏仍 100% 链贴边。
-   */
-  @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
-    html {
-      height: 100%;
-    }
-
-    body,
-    #root {
-      height: 100%;
-    }
-  }
-
-  html.is-pwa {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    width: auto;
-    height: auto; /* 由 top/bottom 拉满，避免像素高度偏矮 */
-    max-height: none;
-    min-height: 0;
-    overflow: hidden;
-    background-color: var(--wb-bg, #f0f1f4);
-  }
-
-  html.is-pwa body,
-  html.is-pwa #root {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    width: auto;
-    height: auto;
-    max-height: none;
-    min-height: 0;
-    overflow: hidden;
-    background-color: var(--wb-bg, #f0f1f4);
-  }
-
-  /*
-   * 安卓 PWA 偶发壳比窗口矮 1～几十 px：固定铺一层壳色垫底，
-   * 底栏即使短一截也不露白/系统色缝。
-   */
-  html.is-pwa body::before {
-    content: '';
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 0;
-    background-color: var(--wb-bg, #f0f1f4);
-    pointer-events: none;
-  }
-
-  html.is-pwa #root {
-    z-index: 1;
-  }
-
-  html.dark,
-  html.dark body,
-  html.dark #root {
-    background-color: var(--wb-bg, #14171c);
-  }
-
-  html.is-pwa.dark,
-  html.is-pwa.dark body,
-  html.is-pwa.dark #root,
-  html.is-pwa.dark body::before {
-    background-color: var(--wb-bg, #14171c);
   }
 
   * {

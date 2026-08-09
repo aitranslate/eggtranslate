@@ -24,15 +24,9 @@
 }
 
 .workbench {
-  /* 浏览器默认安全区为 0；PWA standalone 见下方 media 覆盖 */
-  --wb-safe-t: 0px;
-  --wb-safe-b: 0px;
-  --wb-safe-l: 0px;
-  --wb-safe-r: 0px;
-
   display: grid;
   grid-template-columns: var(--wb-sidebar-w) minmax(0, 1fr);
-  /* 顶栏 | 主区(可缩) | 状态栏 — 三行固定填满父级，贴底无缝 */
+  /* 顶栏 | 主区(可缩) | 状态栏 — 三行固定填满父级，不产生文档滚动 */
   grid-template-rows: var(--wb-top-h) minmax(0, 1fr) var(--wb-status-h);
   width: 100%;
   height: 100%;
@@ -44,46 +38,6 @@
   font-family: var(--apple-font-stack);
   -webkit-font-smoothing: antialiased;
   font-size: 15px;
-  box-sizing: border-box;
-}
-
-/*
- * PWA 独立窗口：吃掉刘海/Home 条安全区，壳铺满窗口。
- * is-pwa 与 display-mode 双保险（iOS 主屏幕 / 桌面安装）。
- * 普通浏览器标签页不启用，避免底栏被垫高。
- */
-@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
-  .workbench {
-    --wb-safe-t: env(safe-area-inset-top, 0px);
-    --wb-safe-b: env(safe-area-inset-bottom, 0px);
-    --wb-safe-l: env(safe-area-inset-left, 0px);
-    --wb-safe-r: env(safe-area-inset-right, 0px);
-
-    grid-template-rows:
-      calc(var(--wb-top-h) + var(--wb-safe-t))
-      minmax(0, 1fr)
-      calc(var(--wb-status-h) + var(--wb-safe-b));
-    padding-left: var(--wb-safe-l);
-    padding-right: var(--wb-safe-r);
-    max-height: none;
-  }
-}
-
-html.is-pwa .workbench {
-  --wb-safe-t: env(safe-area-inset-top, 0px);
-  --wb-safe-b: env(safe-area-inset-bottom, 0px);
-  --wb-safe-l: env(safe-area-inset-left, 0px);
-  --wb-safe-r: env(safe-area-inset-right, 0px);
-
-  grid-template-rows:
-    calc(var(--wb-top-h) + var(--wb-safe-t))
-    minmax(0, 1fr)
-    calc(var(--wb-status-h) + var(--wb-safe-b));
-  padding-left: var(--wb-safe-l);
-  padding-right: var(--wb-safe-r);
-  width: 100%;
-  height: 100%;
-  max-height: none;
 }
 
 /* 隐藏的 file input 不得占 grid 槽位（否则会挤出隐式行，顶飞状态栏） */
@@ -117,24 +71,7 @@ html.is-pwa .workbench {
   height: var(--wb-top-h);
   min-height: var(--wb-top-h);
   max-height: var(--wb-top-h);
-  box-sizing: border-box;
   flex-shrink: 0;
-}
-
-@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
-  .wb-topbar {
-    height: 100%;
-    min-height: 0;
-    max-height: none;
-    padding: var(--wb-safe-t) 10px 0 14px;
-  }
-}
-
-html.is-pwa .wb-topbar {
-  height: 100%;
-  min-height: 0;
-  max-height: none;
-  padding: var(--wb-safe-t) 10px 0 14px;
 }
 
 .wb-brand {
@@ -2529,7 +2466,6 @@ html.dark .wb-alert {
   height: var(--wb-status-h);
   min-height: var(--wb-status-h);
   max-height: var(--wb-status-h);
-  box-sizing: border-box;
   flex-shrink: 0;
   background: var(--wb-bg);
   border-top: 1px solid var(--wb-border);
@@ -2538,39 +2474,6 @@ html.dark .wb-alert {
   z-index: 15;
   min-width: 0;
   overflow: hidden;
-  position: relative;
-}
-
-@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
-  .wb-statusbar {
-    height: 100%;
-    min-height: 0;
-    max-height: none;
-    /* 底安全区同色延伸，文案仍在内容带内 */
-    padding: 0 10px var(--wb-safe-b);
-    overflow: visible; /* 允许向下延伸铺色（安卓底缝） */
-  }
-}
-
-html.is-pwa .wb-statusbar {
-  height: 100%;
-  min-height: 0;
-  max-height: none;
-  padding: 0 10px var(--wb-safe-b);
-  overflow: visible;
-}
-
-/* 安卓 PWA：底栏向下再铺一段同色，盖住 1px～手势条区域露缝 */
-html.is-pwa .wb-statusbar::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 100%;
-  height: max(48px, env(safe-area-inset-bottom, 0px), 3vh);
-  background: var(--wb-bg);
-  pointer-events: none;
-  z-index: 1;
 }
 
 .wb-statusbar-left,
@@ -2651,7 +2554,7 @@ html.is-pwa .wb-statusbar::after {
 }
 
 @media (max-width: 900px) {
-  /* 窄屏桌面壳（MobileShell 未接管时）：四行仍锁在 100% 高度内，贴底 */
+  /* 窄屏桌面壳（MobileShell 未接管时）：四行仍锁在 100% 高度内，不撑文档滚动 */
   .workbench {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows:
@@ -2686,28 +2589,6 @@ html.is-pwa .wb-statusbar::after {
 
   .wb-nav-btn span.wb-nav-label {
     display: none;
-  }
-}
-
-@media (max-width: 900px) and (display-mode: standalone),
-  (max-width: 900px) and (display-mode: fullscreen),
-  (max-width: 900px) and (display-mode: minimal-ui) {
-  .workbench {
-    grid-template-rows:
-      calc(var(--wb-top-h) + var(--wb-safe-t))
-      minmax(100px, 30%)
-      minmax(0, 1fr)
-      calc(var(--wb-status-h) + var(--wb-safe-b));
-  }
-}
-
-@media (max-width: 900px) {
-  html.is-pwa .workbench {
-    grid-template-rows:
-      calc(var(--wb-top-h) + var(--wb-safe-t))
-      minmax(100px, 30%)
-      minmax(0, 1fr)
-      calc(var(--wb-status-h) + var(--wb-safe-b));
   }
 }
 
