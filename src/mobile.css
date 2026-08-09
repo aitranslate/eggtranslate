@@ -982,6 +982,20 @@ html.is-pwa .m-shell {
   box-sizing: border-box;
   background: var(--wb-panel);
   border-top: 1px solid var(--wb-border);
+  position: relative;
+  z-index: 15;
+}
+
+/* 安卓 PWA：tabbar 向下同色延伸，盖住底缝 */
+html.is-pwa .m-tabbar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: max(48px, env(safe-area-inset-bottom, 0px), 3vh);
+  background: var(--wb-panel);
+  pointer-events: none;
 }
 
 .m-tab {
