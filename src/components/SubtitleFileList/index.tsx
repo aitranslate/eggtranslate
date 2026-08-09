@@ -247,7 +247,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
         <div className="flex items-center justify-between mb-4">
           <h3 className="apple-heading-medium">文件列表</h3>
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="text-sm text-gray-600">共 {files.length} 个文件</div>
+            <div className="text-sm text-[var(--wb-text-2)]">共 {files.length} 个文件</div>
             <button
               type="button"
               onClick={handleStartAll}

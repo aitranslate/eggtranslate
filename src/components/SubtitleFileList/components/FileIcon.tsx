@@ -22,14 +22,18 @@ const getFileIconComponent = (type?: FileType): typeof FileText => {
 export const FileIcon: React.FC<FileIconProps> = ({ type, size = 20, className }) => {
   const IconComponent = getFileIconComponent(type);
 
-  const colorClass = type === 'audio' ? 'text-green-400' :
-                     type === 'video' ? 'text-purple-400' :
-                     'text-blue-400';
+  // 类型色：成功 / 品牌 / 次要文案 — 不引入独立紫
+  const color =
+    type === 'audio'
+      ? 'var(--palette-success)'
+      : type === 'video'
+        ? 'var(--wb-brand)'
+        : 'var(--wb-text-3)';
 
   return (
     <IconComponent
-      style={{ width: size, height: size }}
-      className={`${colorClass} ${className || ''}`}
+      style={{ width: size, height: size, color }}
+      className={className || ''}
     />
   );
 };

@@ -8,5 +8,5 @@ interface SettingsHintProps {
 
 /** 设置说明文案：纯 DOM，不拉 framer-motion */
 export const SettingsHint: React.FC<SettingsHintProps> = ({ children }) => (
-  <p className="text-xs text-gray-500 leading-relaxed">{children}</p>
+  <p className="text-xs text-[var(--wb-text-3)] leading-relaxed">{children}</p>
 );

@@ -3,32 +3,11 @@
  * 基于 Apple.com 官方设计规范
  */
 
-/* ===== CSS 变量 ===== */
+/* ===== CSS 变量 =====
+ * 颜色只来自 theme/palette.css（--palette-* / 已写好的 --apple-* 别名）。
+ * 本文件只保留非色 token（字号、圆角、阴影形状等）。
+ */
 :root {
-  /* 色彩系统 */
-  --apple-bg-primary: #ffffff;
-  --apple-bg-secondary: #f5f5f7;
-  --apple-bg-tertiary: #e8e8ed;
-
-  --apple-text-primary: #1d1d1f;
-  --apple-text-secondary: #86868b;
-  --apple-text-tertiary: #a1a1a6;
-
-  --apple-blue: #0071e3;
-  --apple-blue-hover: #0077ed;
-  --apple-blue-active: #0062cc;
-  --apple-blue-soft: rgba(0, 113, 227, 0.08);
-  --apple-blue-soft-strong: rgba(0, 113, 227, 0.14);
-
-  --apple-success: #34c759;
-  --apple-success-soft: #ecfdf5;
-  --apple-danger: #ff3b30;
-  --apple-danger-soft: #fff5f5;
-  --apple-warning: #ff9500;
-
-  --apple-border-light: #d2d2d7;
-  --apple-border-lighter: #e8e8ed;
-
   /* 控件高度节奏 */
   --apple-control-h: 36px;
   --apple-control-h-sm: 32px;

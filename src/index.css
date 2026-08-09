@@ -1,4 +1,5 @@
-/* Apple Design System - 必须在最前面导入 */
+/* 色板源头 → 语义 alias → 组件样式 */
+@import './theme/palette.css';
 @import './apple-style.css';
 @import './workbench.css';
 

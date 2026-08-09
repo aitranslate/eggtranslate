@@ -104,7 +104,7 @@ export const KeytermGroupsSettings: React.FC<KeytermGroupsSettingsProps> = ({
         热词
       </h3>
       {!compact && (
-        <p className="text-xs text-gray-500">上传时优先识别这些词，提高转录准确率。</p>
+        <p className="text-xs text-[var(--wb-text-3)]">上传时优先识别这些词，提高转录准确率。</p>
       )}
 
       <div className="flex flex-wrap gap-1.5">

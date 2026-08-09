@@ -142,7 +142,10 @@ const CompletedSummary: React.FC<{
         <div className="flex items-center gap-3">
           <motion.div
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-            style={{ background: 'white', boxShadow: `0 0 0 1px rgba(16,185,129,0.2)` }}
+            style={{
+              background: 'var(--wb-panel)',
+              boxShadow: '0 0 0 1px color-mix(in srgb, var(--palette-success) 22%, transparent)',
+            }}
             initial={reduceMotion ? false : { scale: 0.7 }}
             animate={{ scale: 1 }}
             transition={reduceMotion ? { duration: 0 } : MOTION_SPRING_SOFT}
@@ -152,8 +155,11 @@ const CompletedSummary: React.FC<{
 
           <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-2 gap-y-1">
             {phases.map((key, i) => (
-              <span key={key} className="inline-flex items-center gap-1 text-[12px] text-gray-700">
-                {i > 0 && <span className="text-gray-300 mx-0.5">·</span>}
+              <span
+                key={key}
+                className="inline-flex items-center gap-1 text-[12px] text-[var(--wb-text-2)]"
+              >
+                {i > 0 && <span className="text-[var(--wb-text-3)] mx-0.5">·</span>}
                 <span
                   className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full"
                   style={{ background: 'color-mix(in srgb, var(--apple-success) 18%, transparent)' }}
@@ -212,12 +218,12 @@ const StatusProgressRow: React.FC<{
             className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
             style={{
               background: isUpcoming
-                ? '#EFF6FF'
+                ? 'var(--palette-brand-soft)'
                 : isFailed
-                  ? '#FFF5F5'
+                  ? 'var(--palette-danger-soft)'
                   : isCompleted
-                    ? 'white'
-                    : '#EFF6FF',
+                    ? 'var(--wb-panel)'
+                    : 'var(--palette-brand-soft)',
               boxShadow: isActive
                 ? `0 0 0 3px ${BRAND}18`
                 : isUpcoming
@@ -355,7 +361,7 @@ const PhaseNode: React.FC<{
   const meta = phaseMeta(phase);
 
   const border = isUpcoming ? GRAY_LINE : isFailed ? RED : BRAND;
-  const bg = isCompleted ? BRAND : isFailed ? RED : 'white';
+  const bg = isCompleted ? BRAND : isFailed ? RED : 'var(--wb-panel)';
   const labelColor = isActive ? BRAND : isFailed ? RED : isCompleted ? GRAY_TEXT : GRAY_MUTED;
 
   return (

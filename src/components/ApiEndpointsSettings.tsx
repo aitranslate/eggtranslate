@@ -53,7 +53,7 @@ export const ApiEndpointsSettings: React.FC<ApiKeysSettingsProps> = ({
       </div>
 
       {!compact && (
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-[var(--wb-text-3)]">
           多个 KEY 用 | 分隔，失败时自动轮询。
         </p>
       )}

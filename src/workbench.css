@@ -1,23 +1,11 @@
 /* ── Workbench shell: desktop-client chrome ── */
 
 /*
- * Token 必须挂在 :root / html.dark：
- * SettingsModal 等 UI 会 createPortal 到 document.body，
- * 若不在根上定义 --wb-*，body 下 var(--wb-panel) 会失效 → 抽屉变透明。
+ * 颜色：仅 theme/palette.css（--palette-* → --wb-* / --apple-*）。
+ * 此处只保留布局/动效等非色 token。
+ * SettingsModal 等 portal 到 body 时仍能读到 :root 上的 --wb-*。
  */
 :root {
-  /* 三层结构：--wb-bg 灰壳（顶栏/侧栏/状态栏）→ --wb-panel 白色内容面 → --wb-panel-2 凹槽控件 */
-  --wb-bg: #f2f3f5;
-  --wb-panel: #ffffff;
-  --wb-panel-2: #e9ebef;
-  --wb-border: #e3e5ea;
-  --wb-border-strong: #d2d5db;
-  --wb-text: #1f2328;
-  --wb-text-2: #5f6670;
-  --wb-text-3: #878e99;
-  --wb-brand: var(--apple-blue, #0071e3);
-  --wb-brand-soft: var(--apple-blue-soft, rgba(0, 113, 227, 0.08));
-  --wb-shadow: 0 1px 0 rgba(0, 0, 0, 0.03), 0 4px 14px rgba(0, 0, 0, 0.04);
   --wb-sidebar-w: 288px;
   --wb-top-h: 44px;
   --wb-status-h: 26px;
@@ -25,8 +13,6 @@
   --wb-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Code", Consolas, monospace;
   --wb-radius-ctl: 6px;
   --wb-radius-panel: 8px;
-  --wb-scroll: #c4c9d1;
-  --wb-scroll-hover: #a7aeb9;
   /* Motion tokens（与 src/motion/tokens.ts 对齐；CSS 过渡用） */
   --wb-motion-micro: 120ms;
   --wb-motion-base: 150ms;
@@ -35,62 +21,6 @@
   --wb-motion-progress: 500ms;
   --wb-ease-out: cubic-bezier(0.4, 0, 0.2, 1);
   --wb-ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/*
- * Dark: 灰壳最深 → 内容面略亮（与浅色同一层级模型）
- */
-html.dark {
-  --wb-bg: #14171c;
-  --wb-panel: #1b1f26;
-  --wb-panel-2: #242a33;
-  --wb-border: #2a303a;
-  --wb-border-strong: #39414d;
-  --wb-text: #e6eaf0;
-  --wb-text-2: #9aa4b2;
-  --wb-text-3: #77818e;
-  --wb-brand: #2f81f7;
-  --wb-brand-soft: rgba(47, 129, 247, 0.14);
-  --wb-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.45);
-  --wb-scroll: #3d4450;
-  --wb-scroll-hover: #4d5563;
-  --apple-bg-primary: #1b1f26;
-  --apple-bg-secondary: #242a33;
-  --apple-bg-tertiary: #2c333e;
-  --apple-text-primary: #e6eaf0;
-  --apple-text-secondary: #9aa4b2;
-  --apple-text-tertiary: #77818e;
-  --apple-border-light: #39414d;
-  --apple-border-lighter: #2a303a;
-  --apple-blue: #2f81f7;
-  --apple-blue-hover: #4c94ff;
-  --apple-blue-active: #1f6feb;
-  --apple-blue-soft: rgba(47, 129, 247, 0.14);
-  --apple-blue-soft-strong: rgba(47, 129, 247, 0.24);
-  --apple-success: #3fb950;
-  --apple-success-soft: rgba(63, 185, 80, 0.16);
-  --apple-danger: #f85149;
-  --apple-danger-soft: rgba(248, 81, 73, 0.16);
-  --apple-warning: #d29922;
-  color-scheme: dark;
-}
-
-/* 兼容旧写法：data-theme 挂在 .workbench 上时同样生效 */
-.workbench[data-theme='dark'] {
-  --wb-bg: #14171c;
-  --wb-panel: #1b1f26;
-  --wb-panel-2: #242a33;
-  --wb-border: #2a303a;
-  --wb-border-strong: #39414d;
-  --wb-text: #e6eaf0;
-  --wb-text-2: #9aa4b2;
-  --wb-text-3: #77818e;
-  --wb-brand: #2f81f7;
-  --wb-brand-soft: rgba(47, 129, 247, 0.14);
-  --wb-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.45);
-  --wb-scroll: #3d4450;
-  --wb-scroll-hover: #4d5563;
-  color-scheme: dark;
 }
 
 .workbench {
@@ -323,7 +253,7 @@ html.dark {
   padding: 0 5px;
   border-radius: 999px;
   background: var(--wb-brand);
-  color: #fff;
+  color: var(--palette-on-brand);
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
 }
@@ -548,12 +478,12 @@ html.dark {
 .wb-proj-list-btn.primary {
   background: var(--wb-brand);
   border-color: transparent;
-  color: #fff;
+  color: var(--palette-on-brand);
 }
 
 .wb-proj-list-btn.primary:hover {
   background: var(--apple-blue-hover, #0077ed);
-  color: #fff;
+  color: var(--palette-on-brand);
 }
 
 /* 暗色：主 CTA 用 soft，避免侧栏大蓝块 */
@@ -1070,7 +1000,7 @@ html.dark .wb-proj-tool.primary:disabled,
 
 .wb-proj-tool.primary.muted {
   background: var(--wb-text-3);
-  color: #fff;
+  color: var(--palette-on-brand);
   border-color: transparent;
 }
 
@@ -1798,7 +1728,7 @@ html.dark .se-row-editing,
   border-radius: 7px;
   border: none;
   background: var(--wb-brand);
-  color: #fff;
+  color: var(--palette-on-brand);
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
@@ -2013,12 +1943,12 @@ html.dark .se-row-editing,
 .wb-tool.primary {
   background: var(--wb-brand);
   border-color: transparent;
-  color: #fff;
+  color: var(--palette-on-brand);
 }
 
 .wb-tool.primary:hover:not(:disabled) {
   background: var(--apple-blue-hover, #0077ed);
-  color: #fff;
+  color: var(--palette-on-brand);
 }
 
 .wb-tool.danger {
@@ -2152,7 +2082,8 @@ html.dark .se-row-editing,
   color: var(--apple-success);
 }
 .wb-stats .val.purple {
-  color: #7c3aed;
+  /* 原独立紫改为品牌色，避免第三色相 */
+  color: var(--wb-brand);
 }
 
 .wb-stats .lbl {
@@ -3047,7 +2978,7 @@ html.dark .wb-term-inline:focus,
   height: 14px;
   border-radius: 50%;
   background: var(--wb-brand);
-  color: #fff;
+  color: var(--palette-on-brand);
   display: grid;
   place-items: center;
   font-size: 11px;
@@ -3132,52 +3063,7 @@ html.dark .apple-input:focus {
   box-shadow: 0 0 0 3px var(--apple-blue-soft-strong);
 }
 
-/* Tailwind hardcode → dark tokens */
-html.dark .bg-gray-50,
-html.dark .bg-gray-50\/50,
-html.dark .bg-gray-50\/60,
-html.dark .bg-gray-100 {
-  background-color: var(--wb-panel-2) !important;
-}
-
-html.dark .bg-white {
-  background-color: var(--wb-panel) !important;
-}
-
-html.dark .text-gray-900,
-html.dark .text-gray-800,
-html.dark .text-gray-700,
-html.dark .text-gray-600 {
-  color: var(--wb-text) !important;
-}
-
-html.dark .text-gray-500,
-html.dark .text-gray-400 {
-  color: var(--wb-text-2) !important;
-}
-
-html.dark .text-gray-300 {
-  color: var(--wb-text-3) !important;
-}
-
-html.dark .border-gray-100,
-html.dark .border-gray-200,
-html.dark .border-gray-300 {
-  border-color: var(--wb-border) !important;
-}
-
-html.dark .hover\:bg-gray-50:hover,
-html.dark .hover\:bg-gray-100:hover,
-html.dark .hover\:bg-gray-200:hover {
-  background-color: rgba(255, 255, 255, 0.06) !important;
-}
-
-html.dark .bg-blue-50,
-html.dark .bg-blue-50\/80 {
-  background-color: var(--apple-blue-soft) !important;
-}
-
-/* 暗色滚动条/焦点环：由 index.css 全局规则 + --wb-scroll / --wb-brand token 统一覆盖 */
+/* 暗色：色值已在 palette 统一；此处仅 color-scheme */
 html.dark,
 html.dark body {
   color-scheme: dark;
@@ -3191,7 +3077,7 @@ html.dark .workbench,
 html.dark .wb-tool.primary,
 .workbench[data-theme='dark'] .wb-tool.primary {
   background: var(--wb-brand);
-  color: #fff;
+  color: var(--palette-on-brand);
 }
 
 html.dark .wb-tool.primary:hover:not(:disabled),
@@ -3208,7 +3094,7 @@ html.dark .wb-chip-btn.is-active,
 .workbench[data-theme='dark'] .wb-chip-btn.is-active {
   background: var(--wb-brand-soft);
   border-color: color-mix(in srgb, var(--wb-brand) 40%, transparent);
-  color: #8bb8ff;
+  color: var(--wb-brand);
 }
 
 

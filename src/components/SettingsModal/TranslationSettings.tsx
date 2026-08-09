@@ -27,7 +27,7 @@ interface TranslationSettingsProps {
 
 /** 方案 A：白底细边，focus 不换底 */
 const inputClass =
-  'w-full p-2.5 bg-[var(--wb-panel,#fff)] border border-[var(--wb-border,#e3e5ea)] rounded-[10px] text-[var(--apple-text-primary,#1d1d1f)] text-sm hover:border-[var(--wb-border-strong,#d2d5db)] focus:outline-none focus:border-[var(--apple-blue)] focus:ring-2 focus:ring-[var(--apple-blue-soft)] focus:bg-[var(--wb-panel,#fff)] transition-[border-color,box-shadow]';
+  'w-full p-2.5 bg-[var(--wb-panel)] border border-[var(--wb-border)] rounded-[10px] text-[var(--wb-text)] text-sm hover:border-[var(--wb-border-strong)] focus:outline-none focus:border-[var(--wb-brand)] focus:ring-2 focus:ring-[var(--wb-brand-soft)] focus:bg-[var(--wb-panel)] transition-[border-color,box-shadow]';
 
 export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
   config,
@@ -53,7 +53,7 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
           {showHeadings && (
             <>
               <h3 className="apple-heading-small">翻译服务</h3>
-              <p className="text-xs text-gray-400">点选服务商即切换；每家各自保存 Key，URL/模型可改</p>
+              <p className="text-xs text-[var(--wb-text-3)]">点选服务商即切换；每家各自保存 Key，URL/模型可改</p>
             </>
           )}
 
@@ -137,13 +137,13 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
                 aria-expanded={paramsOpen}
               >
                 <ChevronDown
-                  className={`w-4 h-4 text-gray-500 transition-transform duration-200 shrink-0 ${
+                  className={`w-4 h-4 text-[var(--wb-text-3)] transition-transform duration-200 shrink-0 ${
                     paramsOpen ? 'rotate-0' : '-rotate-90'
                   }`}
                 />
                 <h3 className="apple-heading-small">翻译参数</h3>
                 {!paramsOpen && (
-                  <span className="text-xs text-gray-400 font-normal ml-1">
+                  <span className="text-xs text-[var(--wb-text-3)] font-normal ml-1">
                     上下文 {config.contextBefore}/{config.contextAfter} · 批次 {config.batchSize} · 线程{' '}
                     {config.threadCount}
                   </span>
@@ -180,7 +180,7 @@ function ParamsFields({
 }) {
   const labelCls = compact
     ? 'block text-[10.5px] font-medium text-[var(--wb-text-3)] mb-1'
-    : 'block text-xs font-medium text-gray-600 mb-1.5';
+    : 'block text-xs font-medium text-[var(--wb-text-2)] mb-1.5';
   return (
     <>
       <div className={`grid grid-cols-2 md:grid-cols-4 ${compact ? 'gap-2' : 'gap-3'}`}>

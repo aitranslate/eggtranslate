@@ -72,15 +72,16 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
 
   // 使用 getCardBadge 计算 badge 信息
   const badgeInfo = getCardBadge(file.phases, displayPhases, isQueued, queuePosition);
-  const badgeClass = badgeInfo.color === 'green'
-    ? 'bg-green-50 text-green-600'
-    : badgeInfo.color === 'blue'
-    ? 'bg-blue-50 text-blue-600'
-    : badgeInfo.color === 'red'
-    ? 'bg-red-50 text-red-600'
-    : badgeInfo.color === 'yellow'
-    ? 'bg-amber-100 text-amber-700'
-    : 'border border-gray-200 text-gray-500 bg-transparent';
+  const badgeClass =
+    badgeInfo.color === 'green'
+      ? 'bg-[var(--palette-success-soft)] text-[var(--palette-success)]'
+      : badgeInfo.color === 'blue'
+        ? 'bg-[var(--palette-brand-soft)] text-[var(--wb-brand)]'
+        : badgeInfo.color === 'red'
+          ? 'bg-[var(--palette-danger-soft)] text-[var(--palette-danger)]'
+          : badgeInfo.color === 'yellow'
+            ? 'bg-[var(--palette-warning-soft)] text-[var(--palette-warning)]'
+            : 'border border-[var(--wb-border)] text-[var(--wb-text-3)] bg-transparent';
   const badgeText = badgeInfo.text;
 
   // Token count
@@ -94,10 +95,10 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
 
   return (
     <div
-      className="relative bg-white rounded-2xl p-3 md:p-3.5 lg:p-5 flex flex-col gap-3 md:gap-5 lg:gap-5 hover:-translate-y-0.5 transition-transform duration-200 will-change-transform cursor-pointer"
+      className="relative bg-[var(--wb-panel)] rounded-2xl p-3 md:p-3.5 lg:p-5 flex flex-col gap-3 md:gap-5 lg:gap-5 hover:-translate-y-0.5 transition-transform duration-200 will-change-transform cursor-pointer"
       style={{
         boxShadow: selected
-          ? '0 0 0 2px var(--apple-blue-soft-strong), 0 2px 12px rgba(0,0,0,0.04)'
+          ? '0 0 0 2px var(--palette-brand-soft-strong), 0 2px 12px rgba(0,0,0,0.04)'
           : '0 2px 12px rgba(0,0,0,0.03), 0 0 0 1px rgba(0,0,0,0.02)',
         zIndex: isTooltipVisible ? 50 : 'auto',
       }}
@@ -110,10 +111,13 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
           <FileIcon type={file.fileType} size={24} className="hidden md:inline-flex lg:hidden" />
           <FileIcon type={file.fileType} size={32} className="hidden lg:inline-flex" />
           <div className="min-w-0 flex-1">
-            <h4 className="text-xs md:text-sm font-semibold text-gray-900 truncate" title={file.name}>
+            <h4
+              className="text-xs md:text-sm font-semibold text-[var(--wb-text)] truncate"
+              title={file.name}
+            >
               {file.name}
             </h4>
-            <div className="text-[10px] md:text-xs text-gray-500 mt-0.5 flex items-center gap-1.5">
+            <div className="text-[10px] md:text-xs text-[var(--wb-text-3)] mt-0.5 flex items-center gap-1.5">
               {file.fileType === 'srt' ? (
                 <span>{file.entryCount ?? 0} 条字幕</span>
               ) : (
@@ -130,8 +134,17 @@ export const SubtitleFileItem: React.FC<SubtitleFileItemProps> = ({
               {tokens > 0 && (
                 <span className="inline-flex items-center gap-0.5">
                   ·
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="var(--palette-warning)"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                   </svg>
                   <span>{tokens.toLocaleString()}</span>
                 </span>
@@ -205,12 +218,12 @@ const KeytermDropdown: React.FC<KeytermDropdownProps> = ({
 
   return (
     <div className="flex items-center gap-1.5 flex-shrink-0">
-      <span className="text-xs text-gray-500">热词:</span>
+      <span className="text-xs text-[var(--wb-text-3)]">热词:</span>
       <select
         value={fileSelectedGroupId ?? ''}
         onChange={handleChange}
         aria-label={`热词分组 (${displayText})`}
-        className="text-xs px-2 py-1 rounded-md border border-gray-200 bg-white text-gray-700 focus:outline-none focus:border-blue-500 cursor-pointer hover:border-gray-300 transition-colors"
+        className="text-xs px-2 py-1 rounded-md border border-[var(--wb-border)] bg-[var(--wb-panel)] text-[var(--wb-text-2)] focus:outline-none focus:border-[var(--wb-brand)] cursor-pointer hover:border-[var(--wb-border-strong)] transition-colors"
       >
         <option value="">不使用</option>
         {keytermGroups.map((group) => (

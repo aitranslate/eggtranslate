@@ -287,7 +287,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
         >
           <motion.div
             {...panelMotion}
-            className="bg-white shadow-2xl w-full max-w-[680px] rounded-2xl p-5 max-h-[90vh] overflow-y-auto"
+            className="bg-[var(--wb-panel)] text-[var(--wb-text)] shadow-2xl w-full max-w-[680px] rounded-2xl p-5 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {body}

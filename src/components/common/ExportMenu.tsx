@@ -155,7 +155,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
               zIndex: 9999,
               transformOrigin: 'top right',
             }}
-            className="bg-white border border-gray-200 shadow-xl rounded-xl p-1.5 min-w-[188px]"
+            className="bg-[var(--wb-panel)] border border-[var(--wb-border)] shadow-xl rounded-xl p-1.5 min-w-[188px] text-[var(--wb-text)]"
             {...menuMotion}
           >
             {/* 文本格式项 */}
@@ -173,15 +173,23 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
                     disabled={disabled}
                     className={`
                       w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors relative
-                      ${active ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700 hover:bg-blue-50/60 hover:text-blue-600'}
-                      ${disabled ? 'opacity-30 pointer-events-none text-gray-300 hover:bg-transparent hover:text-gray-300 cursor-not-allowed' : 'cursor-pointer'}
+                      ${
+                        active
+                          ? 'bg-[var(--wb-brand-soft)] text-[var(--wb-brand)] font-medium'
+                          : 'text-[var(--wb-text-2)] hover:bg-[var(--wb-brand-soft)] hover:text-[var(--wb-brand)]'
+                      }
+                      ${
+                        disabled
+                          ? 'opacity-30 pointer-events-none text-[var(--wb-text-3)] hover:bg-transparent hover:text-[var(--wb-text-3)] cursor-not-allowed'
+                          : 'cursor-pointer'
+                      }
                     `}
                     {...itemMotion}
                     onClick={() => !disabled && handleSelect(fmt)}
                   >
                     {/* 选中态左侧蓝色竖条 */}
                     {active && (
-                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-blue-500 rounded-full ml-1" />
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-[var(--wb-brand)] rounded-full ml-1" />
                     )}
                     {item.icon}
                     <span>{item.label}</span>
@@ -191,7 +199,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
             </div>
 
             {/* 分隔线 */}
-            <div className="border-t my-1 border-gray-100" />
+            <div className="border-t my-1 border-[var(--wb-border)]" />
 
             {/* 打包项 */}
             <motion.button
@@ -199,13 +207,17 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
               role="menuitem"
               className={`
                 w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors relative cursor-pointer
-                ${currentFormat === 'package' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700 hover:bg-blue-50/60 hover:text-blue-600'}
+                ${
+                  currentFormat === 'package'
+                    ? 'bg-[var(--wb-brand-soft)] text-[var(--wb-brand)] font-medium'
+                    : 'text-[var(--wb-text-2)] hover:bg-[var(--wb-brand-soft)] hover:text-[var(--wb-brand)]'
+                }
               `}
               {...staggerItemMotion(TEXT_FORMAT_ITEMS.length, reduceMotion)}
               onClick={() => handleSelect('package')}
             >
               {currentFormat === 'package' && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-blue-500 rounded-full ml-1" />
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-[var(--wb-brand)] rounded-full ml-1" />
               )}
               {PACKAGE_ITEM.icon}
               <span>{PACKAGE_ITEM.label}</span>

@@ -185,10 +185,10 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
           bottom: menuRect.bottom,
           zIndex: 9999,
         }}
-        className="max-h-48 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl"
+        className="max-h-48 overflow-y-auto rounded-xl border border-[var(--wb-border)] bg-[var(--wb-panel)] shadow-xl"
       >
         {filteredModels.length === 0 ? (
-          <p className="px-3 py-2 text-xs text-gray-400">无匹配模型，可继续手填</p>
+          <p className="px-3 py-2 text-xs text-[var(--wb-text-3)]">无匹配模型，可继续手填</p>
         ) : (
           filteredModels.map((m) => {
             const active = m.id === activeProfile.model;
@@ -205,11 +205,11 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
                   setFilter('');
                 }}
                 className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                  active ? 'bg-blue-50 text-blue-800' : 'text-gray-800 hover:bg-gray-50'
+                  active ? 'bg-[var(--wb-brand-soft)] text-[var(--wb-brand)]' : 'text-[var(--wb-text)] hover:bg-[var(--wb-panel-2)]'
                 }`}
               >
                 <span className="truncate font-mono text-[13px]">{m.id}</span>
-                <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--wb-panel-2)] text-[var(--wb-text-3)]">
                   {MODEL_KIND_LABEL[m.kind]}
                 </span>
               </button>
@@ -232,7 +232,7 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
       />
 
       <div className="md:col-span-2">
-        <label className="block text-sm font-medium text-gray-700 mb-2">API 密钥 *</label>
+        <label className="block text-sm font-medium text-[var(--wb-text-2)] mb-2">API 密钥 *</label>
         <div className="relative">
           <Input
             type={showApiKey ? 'text' : 'password'}
@@ -245,7 +245,7 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
           <button
             type="button"
             onClick={() => setShowApiKey(!showApiKey)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--wb-text-3)] hover:text-[var(--wb-text-2)]"
             aria-label={showApiKey ? '隐藏密钥' : '显示密钥'}
           >
             {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -257,7 +257,7 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
         <button
           type="button"
           onClick={() => setEndpointOpen((v) => !v)}
-          className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-[var(--wb-text-2)] hover:text-[var(--wb-text)] transition-colors"
           aria-expanded={endpointOpen}
         >
           <ChevronDown
@@ -265,7 +265,7 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
           />
           接口地址与模型
           {!endpointOpen && (
-            <span className="text-xs text-gray-400 font-normal truncate max-w-[14rem] sm:max-w-xs">
+            <span className="text-xs text-[var(--wb-text-3)] font-normal truncate max-w-[14rem] sm:max-w-xs">
               · {activeProfile.model || '未设模型'}
             </span>
           )}
@@ -276,7 +276,7 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
             <motion.div {...collapse} className="overflow-hidden">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Base URL</label>
+                  <label className="block text-sm font-medium text-[var(--wb-text-2)] mb-2">Base URL</label>
                   <Input
                     value={activeProfile.baseURL}
                     onChange={(e) => onUpdateActiveProfile({ baseURL: e.target.value })}
@@ -286,12 +286,12 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
 
                 <div ref={pickerRef} className="relative">
                   <div className="flex items-center justify-between gap-2 mb-2">
-                    <label className="block text-sm font-medium text-gray-700">模型</label>
+                    <label className="block text-sm font-medium text-[var(--wb-text-2)]">模型</label>
                     <button
                       type="button"
                       onClick={onFetchModels}
                       disabled={!canFetch || modelsLoading}
-                      className="inline-flex items-center gap-1 text-xs text-[var(--apple-blue)] hover:opacity-80 disabled:text-gray-400 disabled:cursor-not-allowed"
+                      className="inline-flex items-center gap-1 text-xs text-[var(--apple-blue)] hover:opacity-80 disabled:text-[var(--wb-text-3)] disabled:cursor-not-allowed"
                     >
                       {modelsLoading ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -331,7 +331,7 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
                           setPickerOpen(willOpen);
                           setFilter(willOpen ? (activeProfile.model || '') : '');
                         }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--wb-text-3)] hover:text-[var(--wb-text-2)]"
                         aria-label="打开模型列表"
                       >
                         <ChevronDown

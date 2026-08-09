@@ -1,0 +1,135 @@
+/**
+ * Single color source for the entire app.
+ *
+ * - All neutrals / brand / semantic colors live here only.
+ * - `--wb-*` (workbench) and `--apple-*` (legacy aliases) map to these.
+ * - Components must use tokens, never Tailwind gray-*/blue-* or raw hex for UI chrome.
+ *
+ * Light: soft neutral gray shell (closer to #f5f5f7 than icy #f2f3f5).
+ * Dark: same hierarchy — deepest shell, raised surface, recessed surface-2.
+ */
+
+:root {
+  /* ── Neutrals ── */
+  --palette-bg: #f5f5f7;
+  --palette-surface: #ffffff;
+  --palette-surface-2: #e8e8ed;
+  --palette-border: #e3e5ea;
+  --palette-border-strong: #d2d5db;
+  --palette-text: #1f2328;
+  --palette-text-2: #5f6670;
+  --palette-text-3: #878e99;
+  --palette-scroll: #c4c9d1;
+  --palette-scroll-hover: #a7aeb9;
+
+  /* ── Brand (single blue) ── */
+  --palette-brand: #0071e3;
+  --palette-brand-hover: #0077ed;
+  --palette-brand-active: #0062cc;
+  --palette-brand-soft: rgba(0, 113, 227, 0.08);
+  --palette-brand-soft-strong: rgba(0, 113, 227, 0.14);
+  --palette-on-brand: #ffffff;
+
+  /* ── Semantic ── */
+  --palette-success: #34c759;
+  --palette-success-soft: rgba(52, 199, 89, 0.12);
+  --palette-danger: #ff3b30;
+  --palette-danger-soft: rgba(255, 59, 48, 0.1);
+  --palette-warning: #ff9500;
+  --palette-warning-soft: rgba(255, 149, 0, 0.12);
+
+  /* ── Elevation ── */
+  --palette-shadow: 0 1px 0 rgba(0, 0, 0, 0.03), 0 4px 14px rgba(0, 0, 0, 0.04);
+
+  /* ── Workbench aliases ── */
+  --wb-bg: var(--palette-bg);
+  --wb-panel: var(--palette-surface);
+  --wb-panel-2: var(--palette-surface-2);
+  --wb-border: var(--palette-border);
+  --wb-border-strong: var(--palette-border-strong);
+  --wb-text: var(--palette-text);
+  --wb-text-2: var(--palette-text-2);
+  --wb-text-3: var(--palette-text-3);
+  --wb-brand: var(--palette-brand);
+  --wb-brand-soft: var(--palette-brand-soft);
+  --wb-shadow: var(--palette-shadow);
+  --wb-scroll: var(--palette-scroll);
+  --wb-scroll-hover: var(--palette-scroll-hover);
+
+  /* ── Apple / legacy aliases (must not invent a second gray scale) ── */
+  --apple-bg-primary: var(--palette-surface);
+  --apple-bg-secondary: var(--palette-bg);
+  --apple-bg-tertiary: var(--palette-surface-2);
+  --apple-text-primary: var(--palette-text);
+  --apple-text-secondary: var(--palette-text-2);
+  --apple-text-tertiary: var(--palette-text-3);
+  --apple-blue: var(--palette-brand);
+  --apple-blue-hover: var(--palette-brand-hover);
+  --apple-blue-active: var(--palette-brand-active);
+  --apple-blue-soft: var(--palette-brand-soft);
+  --apple-blue-soft-strong: var(--palette-brand-soft-strong);
+  --apple-success: var(--palette-success);
+  --apple-success-soft: var(--palette-success-soft);
+  --apple-danger: var(--palette-danger);
+  --apple-danger-soft: var(--palette-danger-soft);
+  --apple-warning: var(--palette-warning);
+  --apple-border-light: var(--palette-border-strong);
+  --apple-border-lighter: var(--palette-border);
+}
+
+html.dark {
+  --palette-bg: #14171c;
+  --palette-surface: #1b1f26;
+  --palette-surface-2: #242a33;
+  --palette-border: #2a303a;
+  --palette-border-strong: #39414d;
+  --palette-text: #e6eaf0;
+  --palette-text-2: #9aa4b2;
+  --palette-text-3: #77818e;
+  --palette-scroll: #3d4450;
+  --palette-scroll-hover: #4d5563;
+
+  --palette-brand: #2f81f7;
+  --palette-brand-hover: #4c94ff;
+  --palette-brand-active: #1f6feb;
+  --palette-brand-soft: rgba(47, 129, 247, 0.14);
+  --palette-brand-soft-strong: rgba(47, 129, 247, 0.24);
+  --palette-on-brand: #ffffff;
+
+  --palette-success: #3fb950;
+  --palette-success-soft: rgba(63, 185, 80, 0.16);
+  --palette-danger: #f85149;
+  --palette-danger-soft: rgba(248, 81, 73, 0.16);
+  --palette-warning: #d29922;
+  --palette-warning-soft: rgba(210, 153, 34, 0.16);
+
+  --palette-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.45);
+
+  color-scheme: dark;
+}
+
+/* data-theme on .workbench (legacy path) — same palette */
+.workbench[data-theme='dark'] {
+  --palette-bg: #14171c;
+  --palette-surface: #1b1f26;
+  --palette-surface-2: #242a33;
+  --palette-border: #2a303a;
+  --palette-border-strong: #39414d;
+  --palette-text: #e6eaf0;
+  --palette-text-2: #9aa4b2;
+  --palette-text-3: #77818e;
+  --palette-scroll: #3d4450;
+  --palette-scroll-hover: #4d5563;
+  --palette-brand: #2f81f7;
+  --palette-brand-hover: #4c94ff;
+  --palette-brand-active: #1f6feb;
+  --palette-brand-soft: rgba(47, 129, 247, 0.14);
+  --palette-brand-soft-strong: rgba(47, 129, 247, 0.24);
+  --palette-success: #3fb950;
+  --palette-success-soft: rgba(63, 185, 80, 0.16);
+  --palette-danger: #f85149;
+  --palette-danger-soft: rgba(248, 81, 73, 0.16);
+  --palette-warning: #d29922;
+  --palette-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}

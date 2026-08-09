@@ -32,13 +32,13 @@ export const ProviderPresetPicker: React.FC<ProviderPresetPickerProps> = ({
   return (
     <div className="space-y-2 md:col-span-2">
       <div className="flex items-center justify-between gap-2">
-        <label className="block text-sm font-medium text-gray-700">服务商</label>
+        <label className="block text-sm font-medium text-[var(--wb-text-2)]">服务商</label>
         {selected.keyUrl && (
           <a
             href={selected.keyUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 shrink-0"
+            className="inline-flex items-center gap-1 text-xs text-[var(--wb-brand)] hover:text-[var(--wb-brand)] shrink-0"
           >
             获取 {selected.shortName} Key
             <ExternalLink className="w-3 h-3" />
@@ -63,19 +63,19 @@ export const ProviderPresetPicker: React.FC<ProviderPresetPickerProps> = ({
                 active:scale-[0.97]
                 ${
                   isSelected
-                    ? 'border-[var(--apple-blue)] bg-[var(--apple-blue-soft)] shadow-sm shadow-blue-500/10 ring-1 ring-[var(--apple-blue-soft-strong)]'
-                    : 'border-[var(--wb-border,#e3e5ea)] bg-[var(--wb-panel,#fff)] hover:border-[var(--wb-border-strong,#d2d5db)]'
+                    ? 'border-[var(--wb-brand)] bg-[var(--wb-brand-soft)] shadow-sm ring-1 ring-[var(--palette-brand-soft-strong)]'
+                    : 'border-[var(--wb-border)] bg-[var(--wb-panel)] hover:border-[var(--wb-border-strong)]'
                 }
               `}
             >
               {preset.badge && (
                 <span
-                  className={`absolute -top-1.5 -right-1 z-10 px-1 py-0.5 text-[9px] font-semibold leading-none rounded-full text-white shadow-sm ${
+                  className={`absolute -top-1.5 -right-1 z-10 px-1 py-0.5 text-[9px] font-semibold leading-none rounded-full text-[var(--palette-on-brand)] shadow-sm ${
                     preset.badgeTone === 'recommend'
-                      ? 'bg-[var(--apple-blue)]'
+                      ? 'bg-[var(--wb-brand)]'
                       : preset.badgeTone === 'free'
-                        ? 'bg-[var(--apple-success)]'
-                        : 'bg-[var(--apple-text-tertiary)]'
+                        ? 'bg-[var(--palette-success)]'
+                        : 'bg-[var(--wb-text-3)]'
                   }`}
                 >
                   {preset.badge}
@@ -99,7 +99,7 @@ export const ProviderPresetPicker: React.FC<ProviderPresetPickerProps> = ({
               )}
               <span
                 className={`text-[10px] font-medium leading-tight text-center truncate w-full ${
-                  isSelected ? 'text-[var(--apple-blue)]' : 'text-gray-600'
+                  isSelected ? 'text-[var(--apple-blue)]' : 'text-[var(--wb-text-2)]'
                 }`}
               >
                 {preset.shortName}
@@ -120,7 +120,7 @@ export const ProviderPresetPicker: React.FC<ProviderPresetPickerProps> = ({
       </div>
 
       {(selected.hint || modelLabel) && (
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-[var(--wb-text-3)]">
           {selected.name}
           {selected.hint ? ` · ${selected.hint}` : ''}
           {modelLabel ? ` · ${modelLabel}` : ''}

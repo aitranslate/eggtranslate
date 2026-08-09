@@ -521,7 +521,7 @@ export const TermsManager: React.FC<TermsManagerProps> = ({
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <motion.div
         {...modalPanel}
-        className="bg-white shadow-2xl w-full max-w-[680px] rounded-2xl p-5 max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-[var(--wb-panel)] text-[var(--wb-text)] shadow-2xl w-full max-w-[680px] rounded-2xl p-5 max-h-[90vh] overflow-hidden flex flex-col"
       >
         {body}
       </motion.div>

@@ -104,7 +104,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
   return (
     <div
       className={`flex flex-col gap-2 border-t ${padY} md:flex-row md:items-center md:justify-between md:gap-0`}
-      style={{ borderColor: '#E5E5EA' }}
+      style={{ borderColor: 'var(--wb-border)' }}
     >
       {/* Secondary actions: keyterm dropdown, edit, export, delete */}
       <div className="flex items-center gap-1.5 flex-wrap">
@@ -112,14 +112,14 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          className={`flex items-center justify-center ${iconBtn} rounded-md transition-all duration-200 hover:bg-gray-100 text-gray-500 hover:text-gray-900`}
+          className={`flex items-center justify-center ${iconBtn} rounded-md transition-all duration-200 hover:bg-[var(--wb-panel-2)] text-[var(--wb-text-3)] hover:text-[var(--wb-text)]`}
           title="在编辑器中打开"
         >
           <Edit3 className="w-3.5 h-3.5" />
         </button>
         <ExportButton
           variant="icon"
-          className={`flex items-center justify-center ${iconBtn} rounded-md transition-all duration-200 hover:bg-gray-100 text-gray-500 hover:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed`}
+          className={`flex items-center justify-center ${iconBtn} rounded-md transition-all duration-200 hover:bg-[var(--wb-panel-2)] text-[var(--wb-text-3)] hover:text-[var(--wb-text)] disabled:opacity-40 disabled:cursor-not-allowed`}
           disabled={(file.entryCount ?? 0) === 0 || isBusy}
           hasTranslation={(file.translatedCount ?? 0) > 0}
           onSelect={onExportFormat}
@@ -127,7 +127,7 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className={`flex items-center justify-center ${iconBtn} rounded-md hover:bg-red-50 text-red-500 hover:text-red-600 transition-transform hover:scale-105 active:scale-95`}
+          className={`flex items-center justify-center ${iconBtn} rounded-md hover:bg-[var(--palette-danger-soft)] text-[var(--palette-danger)] transition-transform hover:scale-105 active:scale-95`}
           title="删除"
         >
           <Trash2 className="w-3.5 h-3.5" />
@@ -176,16 +176,16 @@ export const FileActionButtons: React.FC<FileActionButtonsProps> = ({
               }
             }}
             disabled={primaryButtonDisabled}
-            className={`flex items-center justify-center gap-1.5 ${btnPad} font-medium text-white transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto`}
+            className={`flex items-center justify-center gap-1.5 ${btnPad} font-medium text-[var(--palette-on-brand)] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto`}
             style={{
               borderRadius: 'var(--apple-radius-button)',
               background: isQueued
-                ? 'var(--apple-text-tertiary)'
+                ? 'var(--wb-text-3)'
                 : primaryButtonDisabled
-                  ? 'var(--apple-border-light)'
+                  ? 'var(--wb-border-strong)'
                   : canTranscribeAndTranslate || canTranslate
-                    ? 'var(--apple-blue)'
-                    : 'var(--apple-border-light)',
+                    ? 'var(--wb-brand)'
+                    : 'var(--wb-border-strong)',
             }}
             onMouseEnter={(e) => {
               if (!isQueued && !primaryButtonDisabled) {
