@@ -7,7 +7,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import {
   SubtitleEntry,
   SubtitleFileMetadata,
@@ -20,15 +20,58 @@ import {
 } from "@/types";
 import { convertTaskToMetadata } from "@/services/SubtitleFileManager";
 import { generateStableFileId } from "@/utils/taskIdGenerator";
+import { maybeSimplifyChinese } from "@/utils/chineseScript";
 import localforage from "localforage";
 import type { SingleTask } from "@/types";
 import { useAgentRunStore } from "@/stores/agentRunStore";
+import { useTranslationConfigStore } from "@/stores/translationConfigStore";
 import {
   clearAllTaskEntries,
+  clearEntriesLifecycle,
+  flushDirtyTaskEntries,
+  forcePersistTaskEntriesFromTasks,
+  isEntriesHydrated,
+  isEntriesLoading,
   loadTaskEntries,
-  persistEntriesFromTasks,
+  markEntriesDirty,
+  markEntriesHydrated,
+  markEntriesLoading,
   removeTaskEntries,
+  stripSubtitleWords,
+  subscribeEntriesLifecycle,
 } from "@/stores/taskEntriesStorage";
+
+/** 任务目标语言：任务级优先，否则全局配置 */
+function resolveTaskTargetLanguage(task: SingleTask): string {
+  const own = task.targetLanguage?.trim();
+  if (own) return own;
+  return useTranslationConfigStore.getState().config.targetLanguage;
+}
+
+/** 写入译文时：目标为简体中文则 OpenCC 繁→简 */
+function normalizeTranslatedText(
+  text: string | undefined,
+  targetLanguage: string
+): string | undefined {
+  if (text === undefined) return undefined;
+  return maybeSimplifyChinese(text, targetLanguage);
+}
+
+/**
+ * 内存条目被用户/流水线改写后：登记 hydrate + dirty。
+ * 空壳（未 load 且 entryCount>0）不得冒充权威，否则会脏写空数组。
+ */
+function touchTaskEntriesDirty(taskId: string): void {
+  if (isEntriesHydrated(taskId)) {
+    markEntriesDirty(taskId);
+    return;
+  }
+  const task = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
+  if (!task) return;
+  const len = task.subtitle_entries?.length ?? 0;
+  if (len === 0 && (task.entryCount ?? 0) > 0) return;
+  markEntriesHydrated(taskId, { dirty: true });
+}
 
 /** 快速连续写入时合并 IDB persist（翻译热路径） */
 export const FILES_PERSIST_DEBOUNCE_MS = 800;
@@ -154,6 +197,10 @@ interface FilesState {
   ) => void;
   deleteEntry: (fileId: string, entryId: number) => void;
   batchUpdateEntries: (fileId: string, updates: BatchEntryUpdate[]) => void;
+  /**
+   * 整表替换字幕（转录完成等）。权威写入：hydrate + dirty + strip words。
+   */
+  replaceTaskEntries: (taskId: string, entries: SubtitleEntry[]) => void;
 
   updatePhase: (
     fileId: string,
@@ -207,9 +254,9 @@ export async function flushFilesStorePersist(): Promise<void> {
     clearTimeout(persistTimer);
     persistTimer = null;
   }
-  // 先落独立 entries，再写主表（主表 partialize 后不含 entries）
+  // 先落 dirty entries，再写主表（主表 partialize 后不含 entries）
   try {
-    await persistEntriesFromTasks(useFilesStore.getState().tasks);
+    await flushDirtyTaskEntries(useFilesStore.getState().tasks);
   } catch {
     /* best-effort */
   }
@@ -223,17 +270,64 @@ export async function flushFilesStorePersist(): Promise<void> {
 /** 打开任务 / 导出 / 开译前：确保 entries 已从 IDB 载入内存 */
 const entriesLoadInflight = new Map<string, Promise<void>>();
 
+/**
+ * 任务字幕是否可展示：无条目、已 hydrate、或 entryCount 为 0。
+ */
+export function isTaskEntriesReady(taskId: string | undefined | null): boolean {
+  if (!taskId) return true;
+  if (isEntriesHydrated(taskId)) return true;
+  const task = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
+  if (!task) return true;
+  if ((task.entryCount ?? 0) <= 0) return true;
+  // 内存里已有全文（旁路 setState / 同会话未丢）
+  if ((task.subtitle_entries?.length ?? 0) > 0) return true;
+  return false;
+}
+
+export function isTaskEntriesLoading(taskId: string | undefined | null): boolean {
+  if (!taskId) return false;
+  return isEntriesLoading(taskId);
+}
+
+/** 编辑器：订阅 entries 是否就绪（loading → ready） */
+export function useTaskEntriesReady(taskId: string | undefined | null): boolean {
+  return useSyncExternalStore(
+    subscribeEntriesLifecycle,
+    () => isTaskEntriesReady(taskId),
+    () => true
+  );
+}
+
+export function useTaskEntriesLoading(taskId: string | undefined | null): boolean {
+  return useSyncExternalStore(
+    subscribeEntriesLifecycle,
+    () => isTaskEntriesLoading(taskId),
+    () => false
+  );
+}
+
 export async function ensureTaskEntriesLoaded(taskId: string): Promise<void> {
   const existing = useFilesStore
     .getState()
     .tasks.find((t) => t.taskId === taskId);
   if (!existing) return;
-  if ((existing.subtitle_entries?.length ?? 0) > 0) return;
-  if ((existing.entryCount ?? 0) <= 0) return;
+
+  // 已 hydrate 或内存已有权威全文
+  if (isEntriesHydrated(taskId)) return;
+  if ((existing.subtitle_entries?.length ?? 0) > 0) {
+    markEntriesHydrated(taskId, { dirty: false });
+    return;
+  }
+  // 无字幕任务：空即权威
+  if ((existing.entryCount ?? 0) <= 0) {
+    markEntriesHydrated(taskId, { dirty: false });
+    return;
+  }
 
   let p = entriesLoadInflight.get(taskId);
   if (!p) {
     p = (async () => {
+      markEntriesLoading(taskId, true);
       try {
         const entries = (await loadTaskEntries(taskId)) ?? [];
         useFilesStore.setState((state) => ({
@@ -250,7 +344,9 @@ export async function ensureTaskEntriesLoaded(taskId: string): Promise<void> {
               : t
           ),
         }));
+        markEntriesHydrated(taskId, { dirty: false });
       } finally {
+        markEntriesLoading(taskId, false);
         entriesLoadInflight.delete(taskId);
       }
     })();
@@ -307,19 +403,26 @@ export const useFilesStore = create<FilesState>()(
       selectedFileId: null,
 
       addTask: (task) => {
+        const entries = stripSubtitleWords(
+          Array.isArray(task.subtitle_entries) ? task.subtitle_entries : []
+        );
+        const entryCount = task.entryCount ?? entries.length;
+        const translatedCount =
+          task.translatedCount ??
+          entries.filter((e) => e.translatedText).length;
         set((state) => ({
           tasks: [
             ...state.tasks,
             {
               ...task,
-              entryCount: task.entryCount ?? task.subtitle_entries?.length ?? 0,
-              translatedCount:
-                task.translatedCount ??
-                task.subtitle_entries?.filter((e) => e.translatedText).length ??
-                0,
+              subtitle_entries: entries,
+              entryCount,
+              translatedCount,
             },
           ],
         }));
+        // 新任务内存即为权威；有正文则 dirty 立刻落盘
+        markEntriesHydrated(task.taskId, { dirty: entries.length > 0 });
         // 新任务立即落盘，避免 debounce 窗口内 rehydrate/刷新丢任务
         void flushFilesStorePersist();
       },
@@ -353,44 +456,58 @@ export const useFilesStore = create<FilesState>()(
       updateEntry: (fileId, entryId, text, translatedText, status, startTime, endTime, words) => {
         const file = get().getFile(fileId);
         if (!file) return;
+        let changed = false;
         set((state) => {
           const newTasks = state.tasks.map((t) => {
             if (t.taskId !== file.taskId) return t;
             const oldEntry = t.subtitle_entries?.find((e) => e.id === entryId);
+            if (!oldEntry) return t;
             const nextStatus = status ?? oldEntry?.translationStatus ?? 'pending';
             // 仅 completed 计入已译（streaming 部分文本不推高计数）
             const wasTranslated = oldEntry?.translationStatus === 'completed';
             const willBeTranslated = nextStatus === 'completed';
             const delta = wasTranslated === willBeTranslated ? 0 : willBeTranslated ? 1 : -1;
+            const targetLang = resolveTaskTargetLanguage(t);
+            const nextTranslated =
+              translatedText !== undefined
+                ? normalizeTranslatedText(translatedText, targetLang) ?? ''
+                : oldEntry.translatedText;
+            changed = true;
             return {
               ...t,
               subtitle_entries: (t.subtitle_entries || []).map((e) => {
                 if (e.id !== entryId) return e;
+                // 编辑路径不保留词级时间戳（words 参数忽略）
+                void words;
+                const { words: _drop, ...base } = e;
                 return {
-                  ...e,
+                  ...base,
                   text,
-                  translatedText: translatedText ?? e.translatedText,
+                  translatedText: nextTranslated,
                   translationStatus: nextStatus,
                   startTime: startTime ?? e.startTime,
                   endTime: endTime ?? e.endTime,
-                  words: words ?? e.words,
                 };
               }),
               translatedCount: t.translatedCount + delta,
             };
           });
-          return { tasks: newTasks };
+          return changed ? { tasks: newTasks } : state;
         });
+        if (changed) touchTaskEntriesDirty(file.taskId);
       },
 
       deleteEntry: (fileId, entryId) => {
         const file = get().getFile(fileId);
         if (!file) return;
+        let changed = false;
         set((state) => {
           const newTasks = state.tasks.map((t) => {
             if (t.taskId !== file.taskId) return t;
             const removed = t.subtitle_entries?.find((e) => e.id === entryId);
+            if (!removed) return t;
             const wasTranslated = removed?.translationStatus === 'completed';
+            changed = true;
             return {
               ...t,
               subtitle_entries: (t.subtitle_entries || []).filter((e) => e.id !== entryId),
@@ -398,8 +515,9 @@ export const useFilesStore = create<FilesState>()(
               translatedCount: Math.max(0, t.translatedCount - (wasTranslated ? 1 : 0)),
             };
           });
-          return { tasks: newTasks };
+          return changed ? { tasks: newTasks } : state;
         });
+        if (changed) touchTaskEntriesDirty(file.taskId);
       },
 
       batchUpdateEntries: (fileId, updates) => {
@@ -411,13 +529,16 @@ export const useFilesStore = create<FilesState>()(
         const newTasks = tasks.map((t) => {
           if (t.taskId !== file.taskId) return t;
           const byId = new Map((t.subtitle_entries || []).map((e) => [e.id, e]));
+          const targetLang = resolveTaskTargetLanguage(t);
           let delta = 0;
           let taskChanged = false;
           for (const update of updates) {
             const prev = byId.get(update.id);
             if (!prev) continue;
             const nextTranslated =
-              update.translatedText !== undefined ? update.translatedText : prev.translatedText;
+              update.translatedText !== undefined
+                ? normalizeTranslatedText(update.translatedText, targetLang) ?? ''
+                : prev.translatedText;
             const nextStatus = update.status ?? prev.translationStatus;
             // 值未变：跳过该条目（重试/重复回调）
             if (
@@ -434,6 +555,8 @@ export const useFilesStore = create<FilesState>()(
               translatedText: nextTranslated,
               translationStatus: nextStatus,
             };
+            // 翻译定稿不保留词级时间戳
+            if ('words' in next) delete next.words;
             const willBeTranslated = next.translationStatus === 'completed';
             if (wasTranslated !== willBeTranslated) {
               delta += willBeTranslated ? 1 : -1;
@@ -453,6 +576,28 @@ export const useFilesStore = create<FilesState>()(
         });
         if (!changed) return;
         set({ tasks: newTasks });
+        touchTaskEntriesDirty(file.taskId);
+      },
+
+      replaceTaskEntries: (taskId, entries) => {
+        const clean = stripSubtitleWords(entries);
+        const translatedCount = clean.filter((e) => e.translatedText?.trim()).length;
+        let found = false;
+        set((state) => ({
+          tasks: state.tasks.map((t) => {
+            if (t.taskId !== taskId) return t;
+            found = true;
+            return {
+              ...t,
+              subtitle_entries: clean,
+              entryCount: clean.length,
+              translatedCount,
+            };
+          }),
+        }));
+        if (!found) return;
+        markEntriesHydrated(taskId, { dirty: true });
+        void flushFilesStorePersist();
       },
 
       updatePhase: (fileId, phase, update) => {
@@ -615,7 +760,7 @@ export const useFilesStore = create<FilesState>()(
           }
           if (version < 4) {
             // 旧版 entries 嵌在主表：异步拆到独立 key，内存本会话仍保留
-            void persistEntriesFromTasks(tasks);
+            void forcePersistTaskEntriesFromTasks(tasks);
           }
           return { ...state, tasks };
         }
@@ -625,6 +770,7 @@ export const useFilesStore = create<FilesState>()(
        * merge 在每一次 rehydrate 都会执行（与 version 无关）。
        * 在写入内存前把 active phase → failed，刷新后可重新处理，而不是卡死在「处理中」。
        * v4+：主表 entries 为空，点开任务时 ensureTaskEntriesLoaded。
+       * 会话 lifecycle 清空：未打开任务不 hydrate，flush 不会写空壳覆盖 IDB。
        */
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<{
@@ -635,15 +781,27 @@ export const useFilesStore = create<FilesState>()(
         // 若 rehydrate 仍带嵌套 entries（旧数据未 migrate 完），先拆 key 再清空内存以统一懒加载
         const hasInline = raw.some((t) => (t.subtitle_entries?.length ?? 0) > 0);
         if (hasInline) {
-          void persistEntriesFromTasks(raw);
+          void forcePersistTaskEntriesFromTasks(raw);
         }
+        clearEntriesLifecycle();
         const tasks = raw
           .map((t) =>
             hasInline
               ? { ...t, subtitle_entries: [] as SubtitleEntry[], agentSnapshot: undefined }
-              : { ...t, agentSnapshot: t.agentSnapshot }
+              : {
+                  ...t,
+                  // 统一懒加载：主表不带 entries
+                  subtitle_entries: [] as SubtitleEntry[],
+                  agentSnapshot: t.agentSnapshot,
+                }
           )
           .map(recoverInterruptedPhases);
+        // entryCount===0 的任务空即权威，无需再 load
+        for (const t of tasks) {
+          if ((t.entryCount ?? 0) <= 0) {
+            markEntriesHydrated(t.taskId, { dirty: false });
+          }
+        }
         return {
           ...currentState,
           ...persisted,

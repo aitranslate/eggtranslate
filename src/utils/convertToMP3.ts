@@ -16,7 +16,13 @@ const TARGET_BITRATE = '64k';
 const CORE_BASE =
   'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm';
 
-const CACHE_NAME = 'egg-ffmpeg-core-v1';
+/** Cache Storage 名：启动清理必须保留此前缀，否则每次冷启动重下 ~30MB */
+export const FFMPEG_CACHE_NAME = 'egg-ffmpeg-core-v1';
+
+/** 是否为 FFmpeg core 缓存（清理旧 SW/precache 时跳过） */
+export function isFfmpegCacheName(cacheName: string): boolean {
+  return cacheName === FFMPEG_CACHE_NAME || cacheName.startsWith('egg-ffmpeg-core');
+}
 
 let ffmpegInstance: FFmpeg | null = null;
 let loadPromise: Promise<FFmpeg> | null = null;
@@ -47,7 +53,7 @@ function safeInputName(file: File): string {
 async function cachedBlobURL(url: string, mime: string): Promise<string> {
   try {
     if (typeof caches !== 'undefined') {
-      const cache = await caches.open(CACHE_NAME);
+      const cache = await caches.open(FFMPEG_CACHE_NAME);
       let res = await cache.match(url);
       if (!res) {
         res = await fetch(url);

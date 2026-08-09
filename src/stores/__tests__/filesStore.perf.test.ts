@@ -49,6 +49,43 @@ describe('filesStore batchUpdateEntries', () => {
     useFilesStore.setState({ tasks: [], selectedFileId: null });
   });
 
+  it('simplifies traditional Chinese when task target is 简体中文', () => {
+    const fileId = generateStableFileId('t1');
+    useFilesStore.setState({
+      tasks: [
+        makeTask({
+          targetLanguage: '简体中文',
+          subtitle_entries: [makeEntry(1)],
+          entryCount: 1,
+        }),
+      ],
+    });
+    useFilesStore.getState().batchUpdateEntries(fileId, [
+      { id: 1, text: 'text-1', translatedText: '我會說漢語', status: 'completed' },
+    ]);
+    expect(useFilesStore.getState().tasks[0].subtitle_entries[0]?.translatedText).toBe(
+      '我会说汉语'
+    );
+  });
+
+  it('does not convert when target is 繁体中文', () => {
+    const fileId = generateStableFileId('t1');
+    const trad = '我會說漢語';
+    useFilesStore.setState({
+      tasks: [
+        makeTask({
+          targetLanguage: '繁体中文',
+          subtitle_entries: [makeEntry(1)],
+          entryCount: 1,
+        }),
+      ],
+    });
+    useFilesStore.getState().batchUpdateEntries(fileId, [
+      { id: 1, text: 'text-1', translatedText: trad, status: 'completed' },
+    ]);
+    expect(useFilesStore.getState().tasks[0].subtitle_entries[0]?.translatedText).toBe(trad);
+  });
+
   it('setTaskLanguages updates task source/target and leaves other tasks alone', () => {
     useFilesStore.setState({
       tasks: [

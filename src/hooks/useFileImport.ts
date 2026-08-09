@@ -110,11 +110,11 @@ export function useFileImport() {
 
       if (progressToastId) {
         if (ok > 0 && fail === 0) {
-          toast.success(formatImportSummary(ok, fail), { id: progressToastId, duration: 3000 });
+          toast.success(formatImportSummary(ok, fail), { id: progressToastId, duration: 2000 });
         } else if (ok === 0) {
-          toast.error(formatImportSummary(ok, fail), { id: progressToastId, duration: 4000 });
+          toast.error(formatImportSummary(ok, fail), { id: progressToastId, duration: 3000 });
         } else {
-          toast.success(formatImportSummary(ok, fail), { id: progressToastId, duration: 3000 });
+          toast.success(formatImportSummary(ok, fail), { id: progressToastId, duration: 2000 });
         }
       }
 
@@ -128,7 +128,7 @@ export function useFileImport() {
         const apiKeys = useTranscriptionStore.getState().apiKeys;
         if (!isTranscriptionApiConfigured(apiKeys)) {
           toast('已导入音视频。开始转录前请在设置中配置 AssemblyAI Key。', {
-            duration: 4500,
+            duration: 3000,
             id: 'transcription-key-hint',
           });
         }

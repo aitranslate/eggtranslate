@@ -27,17 +27,17 @@ function App() {
       <Toaster
         position="top-right"
         toastOptions={{
-          duration: 3000,
+          duration: 2000,
           style: toastBaseStyle,
           success: {
-            duration: 3000,
+            duration: 2000,
             iconTheme: {
               primary: 'var(--apple-success, #10B981)',
               secondary: 'var(--wb-panel, #fff)',
             },
           },
           error: {
-            duration: 4000,
+            duration: 3000,
             iconTheme: {
               primary: 'var(--apple-danger, #EF4444)',
               secondary: 'var(--wb-panel, #fff)',

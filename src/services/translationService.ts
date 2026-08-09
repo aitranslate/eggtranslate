@@ -34,6 +34,7 @@ import type {
   TranslationStatus,
 } from '@/types';
 import { withTaskLanguages } from '@/utils/taskLanguages';
+import { maybeSimplifyChinese } from '@/utils/chineseScript';
 import toast from 'react-hot-toast';
 
 /** 可注入依赖：单测时 mock，默认走全局 store */
@@ -93,8 +94,20 @@ function createDefaultDeps(): TranslationServiceDeps {
       useFilesStore.getState().updatePhase(fileId, phase, update),
     batchUpdateEntries: (fileId, updates) =>
       useFilesStore.getState().batchUpdateEntries(fileId, updates),
-    applyStreamingPartials: (fileId, updates) =>
-      useStreamingOverlayStore.getState().applyPartials(fileId, updates),
+    applyStreamingPartials: (fileId, updates) => {
+      // 流式预览与定稿同一规则：目标简体中文时繁→简
+      const file = useFilesStore.getState().getFile(fileId);
+      const target =
+        (file?.targetLanguage && file.targetLanguage.trim()) ||
+        useTranslationConfigStore.getState().config.targetLanguage;
+      useStreamingOverlayStore.getState().applyPartials(
+        fileId,
+        updates.map((u) => ({
+          id: u.id,
+          text: maybeSimplifyChinese(u.text, target),
+        }))
+      );
+    },
     clearStreamingIds: (fileId, ids) =>
       useStreamingOverlayStore.getState().clearIds(fileId, ids),
     clearStreamingFile: (fileId) => useStreamingOverlayStore.getState().clearFile(fileId),

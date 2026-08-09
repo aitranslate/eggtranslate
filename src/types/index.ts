@@ -23,7 +23,11 @@ export interface SubtitleEntry {
   text: string;
   translatedText: string;
   translationStatus: TranslationStatus;
-  words?: SubtitleWord[];  // 单词级时间戳（转录产生，SRT 导入为空）
+  /**
+   * 词级时间戳：仅断句中间态可能出现。
+   * 入库 / 持久化 / 历史一律剥离，UI 与导出不依赖。
+   */
+  words?: SubtitleWord[];
 }
 
 // LLM API 基础配置类型（调用时用）

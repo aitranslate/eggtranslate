@@ -82,15 +82,12 @@ export async function startTranscription(fileId: string): Promise<void> {
       },
     });
 
+    // 先写 phase 元数据，再 replaceTaskEntries（权威 hydrate + dirty flush）
     useFilesStore.setState((state) => ({
       tasks: state.tasks.map((t) =>
         t.taskId === file.taskId
           ? {
               ...t,
-              subtitle_entries: result.entries,
-              // 同步更新 task 顶层派生字段，供字幕编辑器头部统计与卡片 badge 使用
-              entryCount: result.entries.length,
-              translatedCount: result.entries.filter(e => e.translatedText).length,
               phases: {
                 ...t.phases,
                 converting: { status: 'completed', progress: 100, tokens: 0 },
@@ -108,6 +105,7 @@ export async function startTranscription(fileId: string): Promise<void> {
           : t
       ),
     }));
+    useFilesStore.getState().replaceTaskEntries(file.taskId, result.entries);
 
     toast.success(`转录完成！生成 ${result.entries.length} 条字幕`);
   } catch (error) {

@@ -51,6 +51,7 @@ export const runTranscriptionPipeline = async (
     let entryId = 1;
 
     for (const sentence of sentences) {
+      // 断句完成后不再携带 word 级时间戳：UI/导出/IDB 均不需要，源头即剥离
       entries.push({
         id: entryId++,
         startTime: formatTime(sentence.start / 1000),
@@ -58,7 +59,6 @@ export const runTranscriptionPipeline = async (
         text: sentence.text,
         translatedText: '',
         translationStatus: 'pending',
-        words: sentence.words,
       });
     }
 

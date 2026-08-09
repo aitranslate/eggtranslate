@@ -47,7 +47,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   return copyText(text);
 }
 
-/** 错误 Toast（默认 5s；点击本体关闭，复制钮 stopPropagation） */
+/** 错误 Toast（默认 3s；点击本体关闭，复制钮 stopPropagation） */
 export function toastError(message: string, options?: { duration?: number }) {
   return toast.custom(
     (t) => (
@@ -79,6 +79,6 @@ export function toastError(message: string, options?: { duration?: number }) {
         </button>
       </div>
     ),
-    { duration: options?.duration ?? 5000, position: 'top-right' }
+    { duration: options?.duration ?? 3000, position: 'top-right' }
   );
 }

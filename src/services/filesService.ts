@@ -11,7 +11,7 @@ import { useQueueStore } from '@/stores/queueStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { loadFromFile, removeMp3Data } from './SubtitleFileManager';
-import { convertToMP3 } from '@/utils/convertToMP3';
+import { convertToMP3, warmupFfmpeg } from '@/utils/convertToMP3';
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { playAppSound } from '@/utils/appSound';
@@ -74,9 +74,11 @@ async function addMediaFile(
   // 处理中 toast：loading 默认 duration=Infinity；勿显式写 Infinity，
   // 否则同 id 更新为 success 时 Infinity 会残留导致永不消失（react-hot-toast 合并行为）
   const toastId = toast.loading(`正在处理 ${file.name}…`);
+  // 与元数据解析并行预热 FFmpeg（按需，不在冷启动全站预拉）
+  warmupFfmpeg();
 
   try {
-    // 1) 解析元数据
+    // 1) 解析元数据（不持有原始 File 进 store：转码后只留 IDB 里的 MP3）
     const result = await loadFromFile(file, {
       existingFilesCount: useFilesStore.getState().tasks.length,
       defaultKeytermGroupId,
@@ -96,10 +98,9 @@ async function addMediaFile(
     await localforage.setItem(`mp3_data:${result.task.taskId}`, mp3Blob);
     logger.info(`[addFile] 转码完成: ${file.name}, ${(mp3Blob.size / 1024 / 1024).toFixed(2)}MB`);
 
-    // 3) 加入 store（此时 converting 已是 completed）
+    // 3) 加入 store：不挂 fileRef，避免大视频整段占堆；转录只读 mp3_data
     const finalTask = {
       ...result.task,
-      fileRef: file,
       phases: {
         ...result.task.phases,
         converting: { status: 'completed' as const, progress: 100, tokens: 0 },
@@ -109,12 +110,12 @@ async function addMediaFile(
     // 双保险：addTask 已 flush，这里再 await 确保 MP3 key 与任务列表一致落盘
     await flushFilesStorePersist();
 
-    toast.success(`已添加：${file.name}`, { id: toastId, duration: 3000 });
+    toast.success(`已添加：${file.name}`, { id: toastId, duration: 2000 });
     return result.metadata.id;
   } catch (error) {
     const appError = toAppError(error, '导入失败');
     logger.error(appError.message, appError);
-    toast.error(`导入失败：${file.name}（${appError.message}）`, { id: toastId, duration: 4000 });
+    toast.error(`导入失败：${file.name}（${appError.message}）`, { id: toastId, duration: 3000 });
     return null;
   }
 }

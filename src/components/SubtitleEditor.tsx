@@ -6,7 +6,13 @@ import { MOBILE_DETAIL_SCROLL_EVENT } from '@/components/mobile/MobileDetailBar'
 import { useShallow } from 'zustand/react/shallow';
 import { SubtitleEntry } from '@/types';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-import { useFilesStore, useFile, ensureFileEntriesLoaded } from '@/stores/filesStore';
+import {
+  useFilesStore,
+  useFile,
+  ensureFileEntriesLoaded,
+  useTaskEntriesLoading,
+  useTaskEntriesReady,
+} from '@/stores/filesStore';
 import {
   EMPTY_STREAMING_OVERLAY,
   calcDisplayTranslationProgress,
@@ -389,13 +395,15 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const setTaskLanguages = useFilesStore((state) => state.setTaskLanguages);
   const config = useTranslationConfig();
 
-  // 懒加载条目：主表 rehydrate 不含大数组
+  // 懒加载条目：主表 rehydrate 不含大数组（lifecycle：hydrate 后才是权威）
   useEffect(() => {
     if (!fileId) return;
     void ensureFileEntriesLoaded(fileId);
   }, [fileId]);
 
   const taskId = file?.taskId;
+  const entriesReady = useTaskEntriesReady(taskId);
+  const entriesLoading = useTaskEntriesLoading(taskId);
   const fileEntries = useFilesStore(
     useShallow((state) => {
       if (!taskId) return EMPTY_ENTRIES;
@@ -995,8 +1003,15 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
             </div>
 
             {filteredEntries.length === 0 && (
-              <div className="text-center py-10 text-[var(--wb-text-3)] text-sm">
-                {searchTerm || filterType !== 'all' ? '没有找到匹配的字幕' : '没有字幕数据'}
+              <div
+                className="text-center py-10 text-[var(--wb-text-3)] text-sm"
+                data-testid="editor-entries-empty"
+              >
+                {entriesLoading || !entriesReady
+                  ? '正在加载字幕…'
+                  : searchTerm || filterType !== 'all'
+                    ? '没有找到匹配的字幕'
+                    : '没有字幕数据'}
               </div>
             )}
           </div>
