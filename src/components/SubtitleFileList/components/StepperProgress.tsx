@@ -8,12 +8,17 @@
 import { Check, X, Mic, Languages, Loader2, Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useFilesStore } from '@/stores/filesStore';
 import { generateStableFileId } from '@/utils/taskIdGenerator';
 import { PhaseTooltipCard } from './PhaseTooltipCard';
 import { shouldLineBeActive } from '@/utils/badgeHelper';
 import { ALL_PHASES, type ProgressPhase, type PhaseProgress } from '@/types';
+import {
+  indeterminateBarMotion,
+  MOTION_SPRING_SOFT,
+  progressWidthTransition,
+} from '@/motion';
 
 interface StepperProgressProps {
   fileId: string;
@@ -125,21 +130,22 @@ const Shell: React.FC<{
 const CompletedSummary: React.FC<{
   phases: ProgressPhase[];
 }> = ({ phases }) => {
+  const reduceMotion = useReducedMotion();
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6 }}
+      initial={reduceMotion ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+      transition={reduceMotion ? { duration: 0 } : MOTION_SPRING_SOFT}
     >
       <Shell tone="success" className="!py-2.5">
         <div className="flex items-center gap-3">
           <motion.div
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
             style={{ background: 'white', boxShadow: `0 0 0 1px rgba(16,185,129,0.2)` }}
-            initial={{ scale: 0.7 }}
+            initial={reduceMotion ? false : { scale: 0.7 }}
             animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 420, damping: 18 }}
+            transition={reduceMotion ? { duration: 0 } : MOTION_SPRING_SOFT}
           >
             <Check className="w-4 h-4" style={{ color: 'var(--apple-success)' }} strokeWidth={2.8} />
           </motion.div>
@@ -170,6 +176,7 @@ const StatusProgressRow: React.FC<{
   phase: PhaseProgress;
   onHoverChange: (v: boolean) => void;
 }> = ({ phaseKey, phase, onHoverChange }) => {
+  const reduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState(false);
   const isActive = phase.status === 'active';
   const isCompleted = phase.status === 'completed';
@@ -220,9 +227,9 @@ const StatusProgressRow: React.FC<{
           >
             {isCompleted ? (
               <motion.span
-                initial={{ scale: 0.4, opacity: 0 }}
+                initial={reduceMotion ? false : { scale: 0.4, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: 'spring', stiffness: 420, damping: 16 }}
+                transition={reduceMotion ? { duration: 0 } : MOTION_SPRING_SOFT}
               >
                 <Check className="w-4 h-4" style={{ color: GREEN }} strokeWidth={2.8} />
               </motion.span>
@@ -277,8 +284,7 @@ const StatusProgressRow: React.FC<{
                   style={{
                     background: `linear-gradient(90deg, ${BRAND}88, ${BRAND})`,
                   }}
-                  animate={{ x: ['-30%', '300%'] }}
-                  transition={{ duration: 1.15, repeat: Infinity, ease: 'easeInOut' }}
+                  {...indeterminateBarMotion(reduceMotion)}
                 />
               ) : isUpcoming ? (
                 // 未开始：极淡品牌色轨，避免整条死灰
@@ -301,7 +307,7 @@ const StatusProgressRow: React.FC<{
                   }}
                   initial={false}
                   animate={{ width: `${pct}%` }}
-                  transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+                  transition={progressWidthTransition(reduceMotion)}
                 />
               )}
             </div>
@@ -341,6 +347,7 @@ const PhaseNode: React.FC<{
   isHovered: boolean;
   onHover: (v: boolean) => void;
 }> = ({ phaseKey, phase, isHovered, onHover }) => {
+  const reduceMotion = useReducedMotion();
   const isActive = phase.status === 'active';
   const isCompleted = phase.status === 'completed';
   const isFailed = phase.status === 'failed';
@@ -367,16 +374,21 @@ const PhaseNode: React.FC<{
           {isCompleted && (
             <motion.span
               key="check"
-              initial={{ scale: 0.4, opacity: 0 }}
+              initial={reduceMotion ? false : { scale: 0.4, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 420, damping: 16 }}
+              transition={reduceMotion ? { duration: 0 } : MOTION_SPRING_SOFT}
             >
               <Check size={13} color="white" strokeWidth={3} />
             </motion.span>
           )}
           {isFailed && (
-            <motion.span key="x" initial={{ scale: 0.5 }} animate={{ scale: 1 }}>
+            <motion.span
+              key="x"
+              initial={reduceMotion ? false : { scale: 0.5 }}
+              animate={{ scale: 1 }}
+              transition={reduceMotion ? { duration: 0 } : MOTION_SPRING_SOFT}
+            >
               <X size={13} color="white" strokeWidth={3} />
             </motion.span>
           )}
@@ -436,6 +448,7 @@ const MultiPhaseRail: React.FC<{
   phaseMap: Record<ProgressPhase, PhaseProgress>;
   onTooltipVisibleChange?: (visible: boolean) => void;
 }> = ({ phases, phaseMap, onTooltipVisibleChange }) => {
+  const reduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState<ProgressPhase | null>(null);
   const isCompact = phases.length === 2;
 
@@ -486,7 +499,7 @@ const MultiPhaseRail: React.FC<{
                       }}
                       initial={false}
                       animate={{ scaleX: fill }}
-                      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                      transition={progressWidthTransition(reduceMotion)}
                     />
                   </div>
                 </div>

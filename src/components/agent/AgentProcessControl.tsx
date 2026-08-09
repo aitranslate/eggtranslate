@@ -14,6 +14,12 @@ import React, {
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
+  backdropFade,
+  edgeDrawerMotion,
+  MOTION_DURATION,
+  MOTION_EASE,
+} from '@/motion';
+import {
   Brain,
   Check,
   Copy,
@@ -172,10 +178,11 @@ export const AgentProcessControl: React.FC<AgentProcessControlProps> = ({
 
   const summary = status.compactSummary || status.compactBadge || 'Agent';
   const progressPct = agentProgressPercent(status);
-  // 测试环境 / 减弱动效：瞬间完成，避免 AnimatePresence 残留 DOM
-  const dur =
-    reduceMotion || import.meta.env.MODE === 'test' ? 0 : 0.22;
-  const ease = [0.4, 0, 0.2, 1] as const;
+  // 测试环境：强制 reduce，避免 AnimatePresence 残留 DOM
+  const reduce =
+    reduceMotion || import.meta.env.MODE === 'test' ? true : reduceMotion;
+  const maskMotion = backdropFade(reduce);
+  const sheetMotion = edgeDrawerMotion(reduce, 'x');
 
   const drawer = (
     <AnimatePresence>
@@ -186,10 +193,7 @@ export const AgentProcessControl: React.FC<AgentProcessControlProps> = ({
             className="agent-drawer-backdrop"
             aria-label="关闭 Agent 过程"
             onClick={close}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: dur }}
+            {...maskMotion}
           />
           <motion.aside
             className="agent-drawer"
@@ -197,10 +201,7 @@ export const AgentProcessControl: React.FC<AgentProcessControlProps> = ({
             aria-modal="true"
             aria-label="Agent 处理过程"
             id={panelId}
-            initial={reduceMotion ? false : { x: '100%' }}
-            animate={{ x: 0 }}
-            exit={reduceMotion ? undefined : { x: '100%' }}
-            transition={{ duration: dur, ease }}
+            {...sheetMotion}
           >
             <header className="agent-drawer-head">
               <div className="agent-drawer-title">
@@ -340,10 +341,13 @@ export const AgentProcessControl: React.FC<AgentProcessControlProps> = ({
                 <motion.div
                   key={tab}
                   className="agent-drawer-section"
-                  initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                  initial={reduce ? false : { opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={reduceMotion ? undefined : { opacity: 0, y: -4 }}
-                  transition={{ duration: dur * 0.85, ease }}
+                  exit={reduce ? undefined : { opacity: 0, y: -4 }}
+                  transition={{
+                    duration: reduce ? 0 : MOTION_DURATION.base,
+                    ease: MOTION_EASE.out,
+                  }}
                 >
                   {tab === 'overview' && (
                     <>

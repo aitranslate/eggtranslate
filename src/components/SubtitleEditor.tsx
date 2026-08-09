@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef, memo, useEffect, forwardRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { backdropFade, overlayPanelMotion } from '@/motion';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Search, FileText, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { MOBILE_DETAIL_SCROLL_EVENT } from '@/components/mobile/MobileDetailBar';
@@ -390,6 +391,9 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   variant = 'panel',
 }) => {
   const isMobile = useIsMobile();
+  const reduceMotion = useReducedMotion();
+  const maskMotion = backdropFade(reduceMotion);
+  const modalPanel = overlayPanelMotion(reduceMotion);
   const file = useFile(fileId);
   const updateEntry = useFilesStore((state) => state.updateEntry);
   const setTaskLanguages = useFilesStore((state) => state.setTaskLanguages);
@@ -1027,16 +1031,11 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+        {...maskMotion}
         className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
       >
         <motion.div
-          initial={{ scale: 0.92, y: 24, opacity: 0 }}
-          animate={{ scale: 1, y: 0, opacity: 1 }}
-          exit={{ scale: 0.95, y: 8, opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 280, damping: 28 }}
+          {...modalPanel}
           className="relative bg-[var(--wb-panel)] shadow-2xl rounded-2xl overflow-hidden flex flex-col"
           style={{
             width: 'min(90vw, 1100px)',

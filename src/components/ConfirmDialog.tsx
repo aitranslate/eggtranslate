@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { AlertTriangle } from 'lucide-react';
+import { backdropFade, overlayPanelMotion } from '@/motion';
 
 export type ConfirmTone = 'danger' | 'default';
 
@@ -38,6 +39,9 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 }) => {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
+  const mask = backdropFade(reduceMotion);
+  const panel = overlayPanelMotion(reduceMotion);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -72,10 +76,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       {isOpen && (
         <motion.div
           role="presentation"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.12 }}
+          {...mask}
           className="wb-alert-backdrop"
           onClick={onClose}
         >
@@ -85,10 +86,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             aria-modal="true"
             aria-labelledby="wb-alert-title"
             aria-describedby="wb-alert-desc"
-            initial={{ opacity: 0, scale: 0.96, y: 6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: 4 }}
-            transition={{ duration: 0.14, ease: [0.4, 0, 0.2, 1] }}
+            {...panel}
             className="wb-alert"
             onClick={(e) => e.stopPropagation()}
           >

@@ -7,7 +7,8 @@ import {
   Loader2,
   RefreshCw,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { collapseMotion } from '@/motion';
 import toast from 'react-hot-toast';
 import type { LlmProfile } from '@/types';
 import { type LlmProviderId } from '@/constants/llmProviders';
@@ -41,6 +42,8 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
   const [endpointOpen, setEndpointOpen] = useState(
     selectedId === 'custom' || !activeProfile.baseURL
   );
+  const reduceMotion = useReducedMotion();
+  const collapse = collapseMotion(reduceMotion);
 
   const [chatModels, setChatModels] = useState<LlmModelInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
@@ -270,13 +273,7 @@ export const ApiTestForm: React.FC<ApiTestFormProps> = ({
 
         <AnimatePresence initial={false}>
           {endpointOpen && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="overflow-hidden"
-            >
+            <motion.div {...collapse} className="overflow-hidden">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Base URL</label>

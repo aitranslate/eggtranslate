@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useTermsStore } from '@/stores/termsStore';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { collapseMotion, overlayPanelMotion } from '@/motion';
 import { Plus, Trash2, X, Upload, Download, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -64,6 +65,9 @@ export const TermsManager: React.FC<TermsManagerProps> = ({
   }, [terms]);
 
   const { handleError } = useErrorHandler();
+  const reduceMotion = useReducedMotion();
+  const importCollapse = collapseMotion(reduceMotion);
+  const modalPanel = overlayPanelMotion(reduceMotion);
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editOriginal, setEditOriginal] = useState('');
@@ -343,9 +347,7 @@ export const TermsManager: React.FC<TermsManagerProps> = ({
           <AnimatePresence>
             {showImport && (
               <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
+                {...importCollapse}
                 className="overflow-hidden border-b border-[var(--wb-border)]"
               >
                 <div className="p-3 space-y-2 bg-[var(--wb-bg)]">
@@ -518,8 +520,7 @@ export const TermsManager: React.FC<TermsManagerProps> = ({
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
+        {...modalPanel}
         className="bg-white shadow-2xl w-full max-w-[680px] rounded-2xl p-5 max-h-[90vh] overflow-hidden flex flex-col"
       >
         {body}

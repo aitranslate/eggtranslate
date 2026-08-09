@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { stageMotion as stageMotionPreset } from '@/motion';
 import toast from 'react-hot-toast';
 import {
   Settings,
@@ -40,26 +41,9 @@ import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { importSampleSubtitle } from '@/utils/importSampleSubtitle';
 import { SubtitleFileMetadata } from '@/types';
 
-const stageMotionFull = {
-  initial: { opacity: 0, y: 5 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -4 },
-  transition: { duration: 0.15, ease: [0.4, 0, 0.2, 1] as const },
-};
-
-const stageMotionNone = {
-  initial: false as const,
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 1, y: 0 },
-  transition: { duration: 0 },
-};
-
 export const MainApp: React.FC = () => {
   const reduceMotion = useReducedMotion();
-  const stageMotion = useMemo(
-    () => (reduceMotion ? stageMotionNone : stageMotionFull),
-    [reduceMotion]
-  );
+  const stageMotion = useMemo(() => stageMotionPreset(reduceMotion), [reduceMotion]);
   /** 首次打开后保持设置组件挂载，避免关抽屉丢掉未保存草稿 */
   const [settingsMounted, setSettingsMounted] = useState(false);
   const [sampleLoading, setSampleLoading] = useState(false);

@@ -27,6 +27,14 @@
   --wb-radius-panel: 8px;
   --wb-scroll: #c4c9d1;
   --wb-scroll-hover: #a7aeb9;
+  /* Motion tokens（与 src/motion/tokens.ts 对齐；CSS 过渡用） */
+  --wb-motion-micro: 120ms;
+  --wb-motion-base: 150ms;
+  --wb-motion-drawer: 220ms;
+  --wb-motion-expand: 200ms;
+  --wb-motion-progress: 500ms;
+  --wb-ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --wb-ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /*

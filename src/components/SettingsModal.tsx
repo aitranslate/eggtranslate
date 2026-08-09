@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { useTranslationConfigStore, useTranslationConfig } from '@/stores/translationConfigStore';
 import { TranslationSettings } from './SettingsModal/TranslationSettings';
 import { TranscriptionSettings } from './TranscriptionSettings';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { backdropFade, edgeDrawerMotion } from '@/motion';
 import { Save, TestTube, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -160,16 +161,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     []
   );
 
+  const reduceMotion = useReducedMotion();
+  const maskMotion = backdropFade(reduceMotion);
+  const drawerMotion = edgeDrawerMotion(reduceMotion, isMobile ? 'y' : 'x');
+
   const sheet = (
     <AnimatePresence>
       {isOpen && (
         <>
           <motion.div
             className="wb-drawer-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            {...maskMotion}
             onClick={handleClose}
             aria-hidden
           />
@@ -178,10 +180,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             role="dialog"
             aria-modal="true"
             aria-labelledby="wb-settings-title"
-            initial={isMobile ? { y: '100%' } : { x: '100%' }}
-            animate={isMobile ? { y: 0 } : { x: 0 }}
-            exit={isMobile ? { y: '100%' } : { x: '100%' }}
-            transition={{ type: 'tween', duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+            {...drawerMotion}
           >
             <header className="wb-drawer-header">
               <div className="min-w-0">

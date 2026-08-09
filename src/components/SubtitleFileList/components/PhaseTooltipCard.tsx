@@ -1,5 +1,6 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { tooltipMotion } from '@/motion';
 
 interface PhaseTooltipCardProps {
   phaseName: string;
@@ -26,20 +27,20 @@ export const PhaseTooltipCard: React.FC<PhaseTooltipCardProps> = ({
   keytermGroupName,
   isVisible,
 }) => {
+  const reduceMotion = useReducedMotion();
+  const tip = tooltipMotion(reduceMotion);
+
   return (
     <AnimatePresence>
       {isVisible && (
         <motion.div
-          initial={{ opacity: 0, y: 8, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 4, scale: 0.97 }}
-          transition={{ type: 'spring', stiffness: 380, damping: 26 }}
+          {...tip}
           className="phase-tooltip-card"
           style={{
             position: 'absolute',
             top: 'calc(100% + 8px)',
             left: '50%',
-            transform: 'translateX(-50%)',
+            x: '-50%',
             background: 'var(--wb-panel, var(--apple-bg-primary, #fff))',
             color: 'var(--wb-text, var(--apple-text-primary, #1d1d1f))',
             borderRadius: 12,
@@ -89,14 +90,15 @@ export const PhaseTooltipCard: React.FC<PhaseTooltipCardProps> = ({
                     overflow: 'hidden',
                   }}
                 >
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${progress}%` }}
-                    transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                  <div
                     style={{
                       height: '100%',
+                      width: `${progress}%`,
                       background: 'var(--apple-blue)',
                       borderRadius: 2,
+                      transition: reduceMotion
+                        ? undefined
+                        : 'width var(--wb-motion-progress) var(--wb-ease-soft)',
                     }}
                   />
                 </div>

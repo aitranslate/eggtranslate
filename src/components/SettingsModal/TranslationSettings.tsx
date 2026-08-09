@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { collapseMotion } from '@/motion';
 import type { LlmProfile, TranslationConfig } from '@/types';
 import type { LlmProviderId } from '@/constants/llmProviders';
 import { LanguageSelector } from './LanguageSelector';
@@ -37,6 +38,8 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
   compactParams = false,
 }) => {
   const [paramsOpen, setParamsOpen] = useState(sections === 'params' && !compactParams);
+  const reduceMotion = useReducedMotion();
+  const collapse = collapseMotion(reduceMotion);
   const activeProfile = getActiveProfile(config);
   const showHeadings = sections === 'all';
   const showProvider = sections === 'all' || sections === 'provider';
@@ -113,10 +116,7 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
               <AnimatePresence initial={false}>
                 {paramsOpen && (
                   <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.18 }}
+                    {...collapse}
                     className="overflow-hidden"
                   >
                     <ParamsFields config={config} onConfigChange={onConfigChange} inputClass={inputClass} compact />
@@ -152,13 +152,7 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
 
               <AnimatePresence initial={false}>
                 {paramsOpen && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                    className="overflow-hidden"
-                  >
+                  <motion.div {...collapse} className="overflow-hidden">
                     <div className="space-y-3 pt-1">
                       <ParamsFields config={config} onConfigChange={onConfigChange} inputClass={inputClass} />
                     </div>

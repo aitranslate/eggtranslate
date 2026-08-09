@@ -9,9 +9,10 @@
 
 import { useEffect, useCallback, useState, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { FileText, Languages, AlignVerticalJustifyStart, AlignVerticalJustifyEnd, Package } from 'lucide-react';
 import { type ExportFormat, FORMAT_LABELS } from '@/utils/fileExport';
+import { popoverMotion, staggerItemMotion } from '@/motion';
 
 // ============================================
 // 菜单项定义
@@ -66,6 +67,8 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
   triggerRef,
 }) => {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const reduceMotion = useReducedMotion();
+  const menuMotion = popoverMotion(reduceMotion);
 
   // 计算并更新菜单位置（基于触发按钮的视口位置，并钳制在视口内）
   const updatePos = useCallback(() => {
@@ -153,10 +156,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
               transformOrigin: 'top right',
             }}
             className="bg-white border border-gray-200 shadow-xl rounded-xl p-1.5 min-w-[188px]"
-            initial={{ opacity: 0, scale: 0.96, y: -6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: -6 }}
-            transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+            {...menuMotion}
           >
             {/* 文本格式项 */}
             <div role="menu">
@@ -164,6 +164,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
                 const fmt = item.format;
                 const active = currentFormat === fmt;
                 const disabled = isDisabledItem(fmt);
+                const itemMotion = staggerItemMotion(i, reduceMotion);
 
                 return (
                   <motion.button
@@ -175,9 +176,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
                       ${active ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700 hover:bg-blue-50/60 hover:text-blue-600'}
                       ${disabled ? 'opacity-30 pointer-events-none text-gray-300 hover:bg-transparent hover:text-gray-300 cursor-not-allowed' : 'cursor-pointer'}
                     `}
-                    initial={{ opacity: 0, x: -6 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.03, duration: 0.15 }}
+                    {...itemMotion}
                     onClick={() => !disabled && handleSelect(fmt)}
                   >
                     {/* 选中态左侧蓝色竖条 */}
@@ -202,9 +201,7 @@ export const ExportMenu: React.FC<ExportMenuProps> = ({
                 w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors relative cursor-pointer
                 ${currentFormat === 'package' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700 hover:bg-blue-50/60 hover:text-blue-600'}
               `}
-              initial={{ opacity: 0, x: -6 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 4 * 0.03, duration: 0.15 }}
+              {...staggerItemMotion(TEXT_FORMAT_ITEMS.length, reduceMotion)}
               onClick={() => handleSelect('package')}
             >
               {currentFormat === 'package' && (

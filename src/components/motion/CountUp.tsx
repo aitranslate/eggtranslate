@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { animate, motion, useMotionValue, useTransform } from 'framer-motion';
 import { useReducedMotion } from 'framer-motion';
+import { countDuration, MOTION_EASE } from '@/motion';
 
 interface CountUpProps {
   value: number;
@@ -15,7 +16,7 @@ interface CountUpProps {
  */
 export const CountUp: React.FC<CountUpProps> = ({
   value,
-  duration = 1.2,
+  duration,
   format = (n) => Math.round(n).toLocaleString(),
   className,
 }) => {
@@ -24,11 +25,12 @@ export const CountUp: React.FC<CountUpProps> = ({
   const display = useTransform(mv, format);
 
   useEffect(() => {
-    if (reduce) {
+    const d = countDuration(reduce, duration);
+    if (d <= 0) {
       mv.set(value);
       return;
     }
-    const controls = animate(mv, value, { duration, ease: [0.16, 1, 0.3, 1] });
+    const controls = animate(mv, value, { duration: d, ease: MOTION_EASE.soft });
     return () => controls.stop();
   }, [value, duration, reduce, mv]);
 

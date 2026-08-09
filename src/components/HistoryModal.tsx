@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import { useHistoryStore } from '@/stores/historyStore';
 import { calculateHistoryStats, findHistoryEntry } from '@/utils/historyHelpers';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { backdropFade, overlayPanelMotion } from '@/motion';
 import {
   Trash2,
   Calendar,
@@ -41,6 +42,9 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+  const reduceMotion = useReducedMotion();
+  const maskMotion = backdropFade(reduceMotion);
+  const panelMotion = overlayPanelMotion(reduceMotion);
 
   const stats = calculateHistoryStats(history);
 
@@ -277,15 +281,12 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
     <>
       <AnimatePresence>
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          {...maskMotion}
           className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50"
           onClick={onClose}
         >
           <motion.div
-            initial={{ scale: 0.92, y: 24, opacity: 0 }}
-            animate={{ scale: 1, y: 0, opacity: 1 }}
+            {...panelMotion}
             className="bg-white shadow-2xl w-full max-w-[680px] rounded-2xl p-5 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
