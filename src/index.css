@@ -7,50 +7,70 @@
 @tailwind utilities;
 
 @layer base {
-  html, body {
+  /*
+   * 应用壳（非网站）：整页禁止滚动，仅内部面板滚动。
+   * 高度用 100% 链（html→body→#root→.workbench），避免 100vh 与浏览器 UI 叠出双滚动条。
+   */
+  html {
     width: 100%;
     height: 100%;
-    max-width: 100vw;
-    overflow-x: hidden;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 
   #root {
+    width: 100%;
     height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 
   * {
     box-sizing: border-box;
-    max-width: 100%;
   }
 
-  /* ── 客户端基底：细滚动条（WebKit + Firefox） ── */
-  * {
+  /* 仅面板内部滚动条样式（不作用在 document，避免「网页」感） */
+  .workbench,
+  .m-shell {
     scrollbar-width: thin;
     scrollbar-color: var(--wb-scroll, #c4c9d1) transparent;
   }
 
-  *::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+  .workbench ::-webkit-scrollbar,
+  .m-shell ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
   }
 
-  *::-webkit-scrollbar-track {
+  .workbench ::-webkit-scrollbar-track,
+  .m-shell ::-webkit-scrollbar-track {
     background: transparent;
   }
 
-  *::-webkit-scrollbar-thumb {
+  .workbench ::-webkit-scrollbar-thumb,
+  .m-shell ::-webkit-scrollbar-thumb {
     background: var(--wb-scroll, #c4c9d1);
     border-radius: 99px;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
 
-  *::-webkit-scrollbar-thumb:hover {
+  .workbench ::-webkit-scrollbar-thumb:hover,
+  .m-shell ::-webkit-scrollbar-thumb:hover {
     background: var(--wb-scroll-hover, #a7aeb9);
     background-clip: padding-box;
   }
 
-  *::-webkit-scrollbar-corner {
+  .workbench ::-webkit-scrollbar-corner,
+  .m-shell ::-webkit-scrollbar-corner {
     background: transparent;
   }
 

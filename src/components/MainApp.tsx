@@ -210,6 +210,8 @@ export const MainApp: React.FC = () => {
    */
   return (
     <>
+    {/* file input 在 grid 外，避免占槽位挤出状态栏 */}
+    {fileInput}
     <div
       className={`workbench apple-style${isDragging ? ' is-file-drag' : ''}`}
       data-theme={theme}
@@ -217,8 +219,6 @@ export const MainApp: React.FC = () => {
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      {fileInput}
-
       <header className="wb-topbar">
         <div className="wb-brand">
           <button
