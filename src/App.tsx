@@ -27,8 +27,13 @@ function App() {
       <Toaster
         position="top-right"
         toastOptions={{
+          // blank 等默认 2s；loading 必须 Infinity，否则会被下面的全局时长盖掉
+          // （库解析顺序：toast.duration → type.duration → 全局 duration → 库默认）
           duration: 2000,
           style: toastBaseStyle,
+          loading: {
+            duration: Infinity,
+          },
           success: {
             duration: 2000,
             iconTheme: {
