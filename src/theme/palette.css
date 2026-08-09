@@ -10,12 +10,19 @@
  */
 
 :root {
+  /*
+   * 层级（必须可一眼分清，不能糊成一片）：
+   *   bg（灰壳：顶栏/侧栏/状态栏）
+   *   → surface（白内容面：主舞台 / 术语 / 历史 / 编辑器）
+   *   → surface-2（凹槽：chip、hover、输入凹底）
+   * 边界靠 border / border-strong 发丝线，不要靠「全变灰」消掉结构。
+   */
   /* ── Neutrals ── */
-  --palette-bg: #f5f5f7;
+  --palette-bg: #f0f1f4;
   --palette-surface: #ffffff;
-  --palette-surface-2: #e8e8ed;
-  --palette-border: #e3e5ea;
-  --palette-border-strong: #d2d5db;
+  --palette-surface-2: #eef0f3;
+  --palette-border: #d8dbe2;
+  --palette-border-strong: #c5cad3;
   --palette-text: #1f2328;
   --palette-text-2: #5f6670;
   --palette-text-3: #878e99;

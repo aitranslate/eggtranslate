@@ -21,7 +21,7 @@ describe('palette single source', () => {
 
   it('palette defines neutrals brand semantic and aliases', () => {
     const p = read('theme/palette.css');
-    expect(p).toMatch(/--palette-bg:\s*#f5f5f7/);
+    expect(p).toMatch(/--palette-bg:\s*#f0f1f4/);
     expect(p).toMatch(/--palette-brand:\s*#0071e3/);
     expect(p).toMatch(/--wb-bg:\s*var\(--palette-bg\)/);
     expect(p).toMatch(/--apple-blue:\s*var\(--palette-brand\)/);

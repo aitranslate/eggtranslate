@@ -47,7 +47,7 @@
   align-items: center;
   padding: 0 10px 0 14px;
   background: var(--wb-bg);
-  border-bottom: 1px solid var(--wb-border);
+  border-bottom: 1px solid var(--wb-border-strong);
   z-index: 20;
   height: var(--wb-top-h);
 }
@@ -278,14 +278,14 @@
   margin-left: 2px;
 }
 
-/* ── Left sidebar ── */
+/* ── Left sidebar（灰壳；与白舞台用 border-strong 划界） ── */
 .wb-sidebar {
   display: flex;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
   background: var(--wb-bg);
-  border-right: 1px solid var(--wb-border);
+  border-right: 1px solid var(--wb-border-strong);
 }
 
 .wb-tasks {
@@ -1630,13 +1630,13 @@ html.dark .se-row-editing,
     border-radius: 6px;
   }
 }
-/* ── Stage ── */
+/* ── Stage：主内容白面（与灰侧栏对比，形成结构边界） ── */
 .wb-stage {
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--wb-bg);
+  background: var(--wb-panel);
   position: relative;
   overflow: hidden;
 }
@@ -1776,14 +1776,19 @@ html.dark .se-row-editing,
 
 /* 列表/工具条里仍可能用到的轻按钮 */
 
-/* ── Stage panels (glossary / history)：与侧栏同一灰壳，无缝贴边 ── */
+/*
+ * Stage panels（术语 / 历史）：
+ * - 贴边铺满（无外边距「浮卡」）
+ * - 但用白内容面，与灰侧栏/顶栏形成边界
+ * - 内部用发丝线分区，不是整页同色糊在一起
+ */
 .wb-panel {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--wb-bg);
+  background: var(--wb-panel);
 }
 
 .wb-panel-header {
@@ -1795,8 +1800,7 @@ html.dark .se-row-editing,
   height: 44px;
   border-bottom: 1px solid var(--wb-border);
   flex-shrink: 0;
-  /* 与顶栏/侧栏同色，避免白条浮在灰底上 */
-  background: var(--wb-bg);
+  background: var(--wb-panel);
 }
 
 .wb-panel-title {
@@ -1828,20 +1832,20 @@ html.dark .se-row-editing,
   padding: 12px 14px 16px;
 }
 
-/* 历史 / 术语 sheet：铺满 stage，无外边距/圆角白卡，与侧栏发丝线相接即可 */
+/* 历史 / 术语 sheet：贴边铺满；白面 + 内部分区线 */
 .wb-panel-body.is-sheet {
   display: flex;
   flex-direction: column;
   overflow: hidden;
   padding: 0;
-  background: var(--wb-bg);
+  background: var(--wb-panel);
 }
 
 .wb-panel-body.is-sheet .wb-sheet,
 .wb-panel-body.is-sheet .wb-glossary-shell {
   flex: 1;
   min-height: 0;
-  background: var(--wb-bg);
+  background: var(--wb-panel);
   border: none;
   border-radius: 0;
 }
@@ -1849,11 +1853,11 @@ html.dark .se-row-editing,
 .wb-panel-body.is-sheet .wb-glossary-toolbar,
 .wb-panel-body.is-sheet .wb-sheet-toolbar,
 .wb-panel-body.is-sheet .wb-glossary-add {
-  background: var(--wb-bg);
+  background: var(--wb-panel);
 }
 
 .wb-panel-body.is-sheet .wb-stats.in-sheet > div {
-  background: var(--wb-bg);
+  background: var(--wb-panel);
 }
 
 .wb-panel-body.is-sheet .wb-sheet-scroll,
@@ -1861,7 +1865,7 @@ html.dark .se-row-editing,
   max-height: none;
   min-height: 0;
   flex: 1;
-  background: var(--wb-bg);
+  background: var(--wb-panel);
 }
 
 /* 工具栏尾部动作靠右（替代 inline marginLeft / Tailwind important） */
@@ -2020,7 +2024,7 @@ html.dark .se-row-editing,
   padding: 0 10px 0 28px;
   border: 1px solid var(--wb-border);
   border-radius: 7px;
-  background: var(--wb-panel);
+  background: var(--wb-panel-2);
   color: var(--wb-text);
   font-size: 13.5px;
   font-family: inherit;
@@ -2534,15 +2538,14 @@ html.dark .wb-alert {
   }
 }
 
-/* ── Glossary / History sheet ── */
-/* 默认灰壳一体；stage 内由 .is-sheet 去掉边框圆角；输入控件仍可用 --wb-panel 抬一层 */
+/* ── Glossary / History sheet（白内容面；分区靠底边线） ── */
 .wb-glossary-shell,
 .wb-sheet {
   display: flex;
   flex-direction: column;
   min-height: 0;
   flex: 1;
-  background: var(--wb-bg);
+  background: var(--wb-panel);
   border: none;
   border-radius: 0;
   overflow: hidden;
@@ -2556,7 +2559,7 @@ html.dark .wb-alert {
   flex-wrap: wrap;
   padding: 8px 12px;
   border-bottom: 1px solid var(--wb-border);
-  background: var(--wb-bg);
+  background: var(--wb-panel);
 }
 
 /* 收进 sheet 的统计条/列表：去掉自身外框，只保留分区细线 */
@@ -2578,10 +2581,10 @@ html.dark .wb-alert {
   align-items: center;
   padding: 10px 12px;
   border-bottom: 1px solid var(--wb-border);
-  background: var(--wb-bg);
+  background: var(--wb-panel);
 }
 
-/* 添加术语：浅面细边，在灰壳上略抬起便于辨认输入区 */
+/* 添加术语：白底上用 surface-2 凹槽，边界清晰 */
 .wb-glossary-field {
   box-sizing: border-box;
   width: 100%;
@@ -2591,7 +2594,7 @@ html.dark .wb-alert {
   padding: 0 12px;
   border: 1px solid var(--wb-border);
   border-radius: 8px;
-  background: var(--wb-panel);
+  background: var(--wb-panel-2);
   font-family: inherit;
   font-size: 14px;
   font-weight: 400;
@@ -2616,6 +2619,12 @@ html.dark .wb-alert {
   border-color: var(--wb-brand);
   background: var(--wb-panel);
   box-shadow: 0 0 0 3px var(--wb-brand-soft, color-mix(in srgb, var(--wb-brand) 18%, transparent));
+}
+
+/* 工具条按钮在白面上保持描边，避免与背景糊在一起 */
+.wb-panel .wb-tool {
+  background: var(--wb-panel);
+  border-color: var(--wb-border);
 }
 
 .wb-glossary-add-btn {
