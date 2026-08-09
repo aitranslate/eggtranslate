@@ -24,21 +24,16 @@
 }
 
 .workbench {
-  --wb-safe-t: env(safe-area-inset-top, 0px);
-  --wb-safe-b: env(safe-area-inset-bottom, 0px);
-  --wb-safe-l: env(safe-area-inset-left, 0px);
-  --wb-safe-r: env(safe-area-inset-right, 0px);
+  /* 浏览器默认安全区为 0；PWA standalone 见下方 media 覆盖 */
+  --wb-safe-t: 0px;
+  --wb-safe-b: 0px;
+  --wb-safe-l: 0px;
+  --wb-safe-r: 0px;
 
   display: grid;
   grid-template-columns: var(--wb-sidebar-w) minmax(0, 1fr);
-  /*
-   * 顶栏(+顶安全区) | 主区 | 状态栏(+底安全区)
-   * PWA standalone 底部 Home 指示条区域由状态栏背景延伸填满，无白缝。
-   */
-  grid-template-rows:
-    calc(var(--wb-top-h) + var(--wb-safe-t))
-    minmax(0, 1fr)
-    calc(var(--wb-status-h) + var(--wb-safe-b));
+  /* 顶栏 | 主区(可缩) | 状态栏 — 三行固定填满父级，贴底无缝 */
+  grid-template-rows: var(--wb-top-h) minmax(0, 1fr) var(--wb-status-h);
   width: 100%;
   height: 100%;
   max-height: 100%;
@@ -49,9 +44,27 @@
   font-family: var(--apple-font-stack);
   -webkit-font-smoothing: antialiased;
   font-size: 15px;
-  padding-left: var(--wb-safe-l);
-  padding-right: var(--wb-safe-r);
   box-sizing: border-box;
+}
+
+/*
+ * PWA 独立窗口：吃掉刘海/Home 条安全区。
+ * 普通浏览器标签页不启用，避免底栏被垫高或出现底缝。
+ */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  .workbench {
+    --wb-safe-t: env(safe-area-inset-top, 0px);
+    --wb-safe-b: env(safe-area-inset-bottom, 0px);
+    --wb-safe-l: env(safe-area-inset-left, 0px);
+    --wb-safe-r: env(safe-area-inset-right, 0px);
+
+    grid-template-rows:
+      calc(var(--wb-top-h) + var(--wb-safe-t))
+      minmax(0, 1fr)
+      calc(var(--wb-status-h) + var(--wb-safe-b));
+    padding-left: var(--wb-safe-l);
+    padding-right: var(--wb-safe-r);
+  }
 }
 
 /* 隐藏的 file input 不得占 grid 槽位（否则会挤出隐式行，顶飞状态栏） */
@@ -78,15 +91,24 @@
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  /* 内容区高度固定；顶部 padding 吃掉刘海/状态栏安全区 */
-  padding: var(--wb-safe-t, 0px) 10px 0 14px;
+  padding: 0 10px 0 14px;
   background: var(--wb-bg);
   border-bottom: 1px solid var(--wb-border-strong);
   z-index: 20;
-  height: 100%;
-  min-height: 0;
+  height: var(--wb-top-h);
+  min-height: var(--wb-top-h);
+  max-height: var(--wb-top-h);
   box-sizing: border-box;
   flex-shrink: 0;
+}
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  .wb-topbar {
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    padding: var(--wb-safe-t) 10px 0 14px;
+  }
 }
 
 .wb-brand {
@@ -2477,10 +2499,10 @@ html.dark .wb-alert {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  /* 底安全区用同色背景垫高，文案仍在状态栏内容带内 */
-  padding: 0 10px var(--wb-safe-b, 0px);
-  height: 100%;
-  min-height: 0;
+  padding: 0 10px;
+  height: var(--wb-status-h);
+  min-height: var(--wb-status-h);
+  max-height: var(--wb-status-h);
   box-sizing: border-box;
   flex-shrink: 0;
   background: var(--wb-bg);
@@ -2490,6 +2512,16 @@ html.dark .wb-alert {
   z-index: 15;
   min-width: 0;
   overflow: hidden;
+}
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  .wb-statusbar {
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    /* 底安全区同色延伸，文案仍在 26px 内容带内 */
+    padding: 0 10px var(--wb-safe-b);
+  }
 }
 
 .wb-statusbar-left,
@@ -2570,14 +2602,14 @@ html.dark .wb-alert {
 }
 
 @media (max-width: 900px) {
-  /* 窄屏桌面壳（MobileShell 未接管时）：四行仍锁高度，并保留顶/底安全区 */
+  /* 窄屏桌面壳（MobileShell 未接管时）：四行仍锁在 100% 高度内，贴底 */
   .workbench {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows:
-      calc(var(--wb-top-h) + var(--wb-safe-t))
+      var(--wb-top-h)
       minmax(100px, 30%)
       minmax(0, 1fr)
-      calc(var(--wb-status-h) + var(--wb-safe-b));
+      var(--wb-status-h);
     --wb-sidebar-w: 100%;
   }
 
@@ -2605,6 +2637,17 @@ html.dark .wb-alert {
 
   .wb-nav-btn span.wb-nav-label {
     display: none;
+  }
+}
+
+@media (max-width: 900px) and (display-mode: standalone),
+  (max-width: 900px) and (display-mode: fullscreen) {
+  .workbench {
+    grid-template-rows:
+      calc(var(--wb-top-h) + var(--wb-safe-t))
+      minmax(100px, 30%)
+      minmax(0, 1fr)
+      calc(var(--wb-status-h) + var(--wb-safe-b));
   }
 }
 

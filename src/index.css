@@ -8,10 +8,11 @@
 
 @layer base {
   /*
-   * 应用壳（非网站 / PWA standalone）：
+   * 应用壳（浏览器标签页）：
    * - 整页禁止滚动，仅内部面板滚动
-   * - 背景与壳色一致，PWA 底部安全区空隙不露白
-   * - 高度 100% / 100dvh / -webkit-fill-available，独立窗口也贴底
+   * - 高度只用 100% 链，避免 100dvh 与浏览器工具栏叠出底缝/双滚动
+   * - 背景与壳色一致（PWA 启动/安全区空隙也不露白）
+   * PWA 独立窗口的 dvh / safe-area 见下方 display-mode 与 workbench.css
    */
   html {
     width: 100%;
@@ -21,25 +22,9 @@
     background-color: var(--wb-bg, #f0f1f4);
   }
 
-  /* 优先 dvh；旧 WebKit 无 dvh 时用 fill-available 铺满独立窗口 */
-  @supports (height: 100dvh) {
-    html {
-      height: 100dvh;
-    }
-  }
-
-  @supports not (height: 100dvh) {
-    @supports (height: -webkit-fill-available) {
-      html {
-        height: -webkit-fill-available;
-      }
-    }
-  }
-
   body {
     width: 100%;
     height: 100%;
-    min-height: 100%;
     margin: 0;
     overflow: hidden;
     overscroll-behavior: none;
@@ -54,24 +39,11 @@
     background-color: var(--wb-bg, #f0f1f4);
   }
 
-  /* 安装后的独立窗口：显式铺满，避免底栏下方露系统/白底 */
-  @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+  /* 仅安装后的独立窗口用 dvh 铺满（不影响普通网页底栏贴边） */
+  @media (display-mode: standalone), (display-mode: fullscreen) {
     html {
       height: 100%;
-    }
-
-    @supports (height: 100dvh) {
-      html {
-        height: 100dvh;
-      }
-    }
-
-    @supports not (height: 100dvh) {
-      @supports (height: -webkit-fill-available) {
-        html {
-          height: -webkit-fill-available;
-        }
-      }
+      height: 100dvh;
     }
 
     body,
