@@ -90,13 +90,18 @@ export function useFileImport() {
       /** 仅统计成功入库的媒体，避免「SRT 成功 + 媒体失败」仍弹转录 tip */
       let okMedia = 0;
 
-      // loading 默认 duration=Infinity；勿显式写 Infinity，避免同 id 更新 success 时残留
+      // 多文件总进度：loading 必须 Infinity；定稿 success/error 带有限 duration 覆盖
       const progressToastId =
-        total > 1 ? toast.loading(formatImportProgress(0, total)) : null;
+        total > 1
+          ? toast.loading(formatImportProgress(0, total), { duration: Infinity })
+          : null;
 
       for (let i = 0; i < files.length; i++) {
         if (progressToastId) {
-          toast.loading(formatImportProgress(i + 1, total), { id: progressToastId });
+          toast.loading(formatImportProgress(i + 1, total), {
+            id: progressToastId,
+            duration: Infinity,
+          });
         }
         const id = await importOne(files[i]);
         if (id) {

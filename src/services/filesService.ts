@@ -71,9 +71,9 @@ async function addMediaFile(
   defaultKeytermGroupId: string | null,
   langs: { sourceLanguage: string; targetLanguage: string }
 ): Promise<string | null> {
-  // 处理中 toast：loading 默认 duration=Infinity；勿显式写 Infinity，
-  // 否则同 id 更新为 success 时 Infinity 会残留导致永不消失（react-hot-toast 合并行为）
-  const toastId = toast.loading(`正在处理 ${file.name}…`);
+  // 处理中 toast 必须持续显示：显式 Infinity（全局 duration 会盖住 loading 默认值）。
+  // 定稿 success/error 必须带有限 duration，覆盖同 id 上的 Infinity。
+  const toastId = toast.loading(`正在处理 ${file.name}…`, { duration: Infinity });
   // 与元数据解析并行预热 FFmpeg（按需，不在冷启动全站预拉）
   warmupFfmpeg();
 
@@ -88,11 +88,14 @@ async function addMediaFile(
 
     // 2) FFmpeg 抽音轨 → 16k mono MP3 并持久化
     logger.info(`[addFile] 转码开始: ${file.name}`);
-    toast.loading(`正在抽取音频 ${file.name}…`, { id: toastId });
+    toast.loading(`正在抽取音频 ${file.name}…`, { id: toastId, duration: Infinity });
     const mp3Blob = await convertToMP3(file, (p) => {
       const pct = Math.round(Math.min(1, Math.max(0, p)) * 100);
       if (pct >= 2) {
-        toast.loading(`正在抽取音频 ${file.name}… ${pct}%`, { id: toastId });
+        toast.loading(`正在抽取音频 ${file.name}… ${pct}%`, {
+          id: toastId,
+          duration: Infinity,
+        });
       }
     });
     await localforage.setItem(`mp3_data:${result.task.taskId}`, mp3Blob);

@@ -27,12 +27,12 @@ function App() {
       <Toaster
         position="top-right"
         toastOptions={{
-          // blank 等默认 2s；loading 必须 Infinity，否则会被下面的全局时长盖掉
-          // （库解析顺序：toast.duration → type.duration → 全局 duration → 库默认）
+          // blank 默认 2s。loading 在 options + 调用处双重 Infinity（防全局 duration 盖掉）
+          // 同 id 更新 success/error 时必须带有限 duration，否则 Infinity 会残留
           duration: 2000,
           style: toastBaseStyle,
           loading: {
-            duration: Infinity,
+            duration: Number.POSITIVE_INFINITY,
           },
           success: {
             duration: 2000,
