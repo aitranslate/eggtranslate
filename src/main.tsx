@@ -1,6 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ErrorBoundary } from './components/ErrorBoundary.tsx'
+/** 色板必须先于 index.css 独立注入，避免经 Tailwind 处理时 :root token 丢失 */
+import './theme/palette.css'
 import './index.css'
 import './mobile.css'
 import App from './App.tsx'

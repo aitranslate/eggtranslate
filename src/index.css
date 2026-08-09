@@ -1,5 +1,4 @@
-/* 色板源头 → 语义 alias → 组件样式 */
-@import './theme/palette.css';
+/* 色板在 main.tsx 中先于本文件独立 import（见 palette.css 注释） */
 @import './apple-style.css';
 @import './workbench.css';
 
