@@ -13,14 +13,6 @@
   --wb-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Code", Consolas, monospace;
   --wb-radius-ctl: 6px;
   --wb-radius-panel: 8px;
-  /* Motion tokens（与 src/motion/tokens.ts 对齐；CSS 过渡用） */
-  --wb-motion-micro: 120ms;
-  --wb-motion-base: 150ms;
-  --wb-motion-drawer: 220ms;
-  --wb-motion-expand: 200ms;
-  --wb-motion-progress: 500ms;
-  --wb-ease-out: cubic-bezier(0.4, 0, 0.2, 1);
-  --wb-ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .workbench {
@@ -256,19 +248,6 @@
   background: var(--apple-warning, #ff9500);
 }
 
-/* 遗留：文案钮旁的小圆点（若仍有引用） */
-.wb-nav-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--apple-success, #34c759);
-  flex-shrink: 0;
-}
-
-.wb-nav-btn.warn .wb-nav-dot {
-  background: var(--apple-warning, #ff9500);
-}
-
 .wb-nav-badge {
   font-size: 10.5px;
   font-weight: 600;
@@ -379,8 +358,6 @@
  * .is-danger：删除/清空保持浅红 hover（不变）
  */
 .wb-icon-btn,
-.wb-tasks-import,
-.wb-tasks-export-btn,
 .wb-proj-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -402,8 +379,6 @@
 
 /* 中性 hover = 右上角主题/音效同一套 */
 .wb-icon-btn:hover:not(:disabled),
-.wb-tasks-import:hover:not(:disabled),
-.wb-tasks-export-btn:hover:not(:disabled),
 .wb-proj-icon-btn:hover:not(:disabled) {
   background: var(--wb-panel-2);
   color: var(--wb-text);
@@ -422,7 +397,6 @@
 
 /* 删除 / 清空：危险 hover 保留 */
 .wb-icon-btn.is-danger:hover:not(:disabled),
-.wb-tasks-export-btn.is-danger:hover:not(:disabled),
 .wb-icon-btn.is-ghost.is-danger:hover:not(:disabled),
 .wb-proj-icon-btn.danger:hover:not(:disabled),
 .wb-proj-icon-btn.is-danger:hover:not(:disabled) {
@@ -431,8 +405,6 @@
 }
 
 .wb-icon-btn:disabled,
-.wb-tasks-import:disabled,
-.wb-tasks-export-btn:disabled,
 .wb-proj-icon-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
@@ -475,55 +447,6 @@
   flex-direction: column;
   gap: 1px;
   padding: 0 4px 8px;
-}
-
-.wb-proj-list-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 26px;
-  padding: 0 8px;
-  border-radius: 6px;
-  border: 1px solid var(--wb-border);
-  background: var(--wb-panel-2);
-  color: var(--wb-text-2);
-  font-size: 12.5px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-}
-
-.wb-proj-list-btn:hover {
-  background: var(--wb-panel);
-  color: var(--wb-text);
-  border-color: var(--wb-border-strong);
-}
-
-.wb-proj-list-btn.primary {
-  background: var(--wb-brand);
-  border-color: transparent;
-  color: var(--palette-on-brand);
-}
-
-.wb-proj-list-btn.primary:hover {
-  background: var(--apple-blue-hover, #0077ed);
-  color: var(--palette-on-brand);
-}
-
-/* 暗色：主 CTA 用 soft，避免侧栏大蓝块 */
-.workbench[data-theme='dark'] .wb-proj-list-btn.primary,
-.workbench[data-theme='dark'] .wb-proj-tool.primary:not(:disabled) {
-  background: var(--wb-panel);
-  color: var(--wb-text-2);
-  border: 1px solid var(--wb-border);
-}
-
-.workbench[data-theme='dark'] .wb-proj-list-btn.primary:hover,
-.workbench[data-theme='dark'] .wb-proj-tool.primary:hover:not(:disabled) {
-  background: var(--wb-panel-2);
-  color: var(--wb-text);
-  border-color: var(--wb-border-strong);
 }
 
 .wb-proj {
@@ -569,8 +492,6 @@ html.dark .wb-proj.is-selected,
   box-shadow: inset 0 0 0 1px var(--wb-border-strong);
 }
 
-html.dark .wb-proj-list-btn.primary,
-.workbench[data-theme='dark'] .wb-proj-list-btn.primary,
 html.dark .wb-proj-tool.primary,
 .workbench[data-theme='dark'] .wb-proj-tool.primary {
   background: var(--wb-panel) !important;
@@ -579,8 +500,6 @@ html.dark .wb-proj-tool.primary,
   box-shadow: none !important;
 }
 
-html.dark .wb-proj-list-btn.primary:hover,
-.workbench[data-theme='dark'] .wb-proj-list-btn.primary:hover,
 html.dark .wb-proj-tool.primary:hover:not(:disabled),
 .workbench[data-theme='dark'] .wb-proj-tool.primary:hover:not(:disabled) {
   background: var(--wb-panel-2) !important;
@@ -2586,10 +2505,6 @@ html.dark .wb-alert {
     grid-column: 1;
     grid-row: 4;
   }
-
-  .wb-nav-btn span.wb-nav-label {
-    display: none;
-  }
 }
 
 /* ── Glossary / History sheet（白内容面；分区靠底边线） ── */
@@ -3698,25 +3613,6 @@ html.dark .wb-chip-btn.is-active,
   border-color: color-mix(in srgb, var(--apple-warning, #ff9500) 40%, var(--wb-border));
 }
 
-/* 兼容旧类名：action / steps 复用 */
-.agent-brain-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.agent-brain-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13.5px;
-  font-weight: 650;
-  white-space: nowrap;
-  min-width: 0;
-}
-
 .agent-brain-close {
   width: 30px;
   height: 30px;
@@ -3808,21 +3704,6 @@ html.dark .wb-chip-btn.is-active,
   white-space: nowrap;
   flex-shrink: 0;
   padding-left: 4px;
-}
-
-.agent-brain-meta {
-  font-size: 12px;
-  color: var(--wb-text-3);
-  margin-bottom: 10px;
-  line-height: 1.4;
-}
-
-.agent-brain-style {
-  margin-top: 2px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 .agent-brain-events {

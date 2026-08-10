@@ -16,7 +16,6 @@ import {
   startTranslateTask,
 } from '@/services/startTask';
 import { SubtitleFileMetadata } from '@/types';
-import { SubtitleFileItemMemo as SubtitleFileItem } from './components/SubtitleFileItem';
 import { SidebarTaskRowMemo as SidebarTaskRow } from './components/SidebarTaskRow';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -28,11 +27,8 @@ const SIDEBAR_ROW_ESTIMATE = 88;
 
 interface SubtitleFileListProps {
   className?: string;
-  /** @deprecated 请用 onSelectFile；保留兼容 */
-  onEditFile?: (file: SubtitleFileMetadata) => void;
   onSelectFile?: (file: SubtitleFileMetadata) => void;
   selectedFileId?: string | null;
-  variant?: 'default' | 'sidebar';
   /** 侧栏：导入文件（与批量操作同一行） */
   onImport?: () => void;
   /** 侧栏导入快捷键提示，如 ⌘+O */
@@ -41,10 +37,8 @@ interface SubtitleFileListProps {
 
 export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   className,
-  onEditFile,
   onSelectFile,
   selectedFileId = null,
-  variant = 'default',
   onImport,
   importShortcut,
 }) => {
@@ -59,8 +53,7 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
     return map;
   }, [taskQueue]);
 
-  const useSidebarVirtual =
-    variant === 'sidebar' && files.length > SIDEBAR_VIRTUAL_THRESHOLD;
+  const useSidebarVirtual = files.length > SIDEBAR_VIRTUAL_THRESHOLD;
 
   const rowVirtualizer = useVirtualizer({
     count: useSidebarVirtual ? files.length : 0,
@@ -77,10 +70,9 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
 
   const handleOpen = useCallback(
     (file: SubtitleFileMetadata) => {
-      if (onSelectFile) onSelectFile(file);
-      else onEditFile?.(file);
+      onSelectFile?.(file);
     },
-    [onSelectFile, onEditFile]
+    [onSelectFile]
   );
 
   const handleStartAll = useCallback(() => {
@@ -169,120 +161,76 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
   }, [files, handleError]);
 
   const hasAnyTranslated = files.some(f => (f.translatedCount ?? 0) > 0);
-  const isSidebar = variant === 'sidebar';
   const hasFiles = files.length > 0;
-
-  // 非侧栏且无文件时不渲染
-  if (!isSidebar && !hasFiles) {
-    return null;
-  }
 
   const importTitle = importShortcut ? `导入文件（${importShortcut}）` : '导入文件';
 
   return (
-    <div className={className ?? (isSidebar ? 'wb-task-list-root' : undefined)}>
+    <div className={className ?? 'wb-task-list-root'}>
       {/* 侧栏：标题 + 操作同一行  [+] [开始] [导出] [清空] — 全是图标钮 */}
-      {isSidebar && (
-        <div className="wb-tasks-head">
-          <div className="wb-tasks-head-main">
-            <h2>项目</h2>
-            {hasFiles && <span className="wb-tasks-count">{files.length}</span>}
-          </div>
-          <div className="wb-tasks-actions" role="toolbar" aria-label="项目操作">
-            {onImport && (
+      <div className="wb-tasks-head">
+        <div className="wb-tasks-head-main">
+          <h2>项目</h2>
+          {hasFiles && <span className="wb-tasks-count">{files.length}</span>}
+        </div>
+        <div className="wb-tasks-actions" role="toolbar" aria-label="项目操作">
+          {onImport && (
+            <button
+              type="button"
+              className="wb-icon-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onImport();
+              }}
+              title={importTitle}
+              aria-label="导入文件"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
+            </button>
+          )}
+          {hasFiles && (
+            <>
               <button
                 type="button"
-                className="wb-icon-btn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onImport();
+                  handleStartAll();
                 }}
-                title={importTitle}
-                aria-label="导入文件"
+                className="wb-icon-btn"
+                title="全部开始"
+                aria-label="全部开始"
               >
-                <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
+                <Play className="h-3.5 w-3.5" />
               </button>
-            )}
-            {hasFiles && (
-              <>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleStartAll();
-                  }}
-                  className="wb-icon-btn"
-                  title="全部开始"
-                  aria-label="全部开始"
-                >
-                  <Play className="h-3.5 w-3.5" />
-                </button>
-                <ExportButton
-                  variant="icon"
-                  className="wb-icon-btn"
-                  disabled={!hasFiles}
-                  hasTranslation={hasAnyTranslated}
-                  onSelect={handleExportAll}
-                  title="批量导出"
-                />
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleClearAll();
-                  }}
-                  className="wb-icon-btn is-danger"
-                  title="清空全部"
-                  aria-label="清空全部"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </>
-            )}
-          </div>
+              <ExportButton
+                variant="icon"
+                className="wb-icon-btn"
+                disabled={!hasFiles}
+                hasTranslation={hasAnyTranslated}
+                onSelect={handleExportAll}
+                title="批量导出"
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleClearAll();
+                }}
+                className="wb-icon-btn is-danger"
+                title="清空全部"
+                aria-label="清空全部"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
         </div>
-      )}
+      </div>
 
-      {!isSidebar && (
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="apple-heading-medium">文件列表</h3>
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="text-sm text-[var(--wb-text-2)]">共 {files.length} 个文件</div>
-            <button
-              type="button"
-              onClick={handleStartAll}
-              disabled={files.length === 0}
-              className="apple-button apple-button-sm"
-            >
-              <Play className="h-4 w-4" />
-              <span>全部开始</span>
-            </button>
-            <ExportButton
-              variant="button"
-              disabled={files.length === 0}
-              hasTranslation={hasAnyTranslated}
-              onSelect={handleExportAll}
-            />
-            <button
-              type="button"
-              onClick={handleClearAll}
-              disabled={files.length === 0}
-              className="apple-button apple-button-sm apple-button-secondary"
-            >
-              <Trash2 className="h-4 w-4" />
-              <span>清空</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {isSidebar && !hasFiles ? (
+      {!hasFiles ? (
         <div className="wb-task-list-empty">暂无项目</div>
       ) : (
-        <div
-          className={isSidebar ? 'wb-task-list' : undefined}
-          ref={isSidebar ? listScrollRef : undefined}
-        >
+        <div className="wb-task-list" ref={listScrollRef}>
           {useSidebarVirtual ? (
             <div
               className="wb-proj-list"
@@ -336,45 +284,17 @@ export const SubtitleFileList: React.FC<SubtitleFileListProps> = ({
               })}
             </div>
           ) : (
-            <div className={isSidebar ? 'wb-proj-list' : 'space-y-4'}>
+            <div className="wb-proj-list">
               {files.map((file) => {
                 const queuePosition = queueMeta.get(file.id) ?? 0;
                 const isActive = activeTaskId === file.id;
                 const isQueued = queuePosition > 0 && !isActive;
-
-                if (isSidebar) {
-                  return (
-                    <SidebarTaskRow
-                      key={file.id}
-                      file={file}
-                      selected={selectedFileId === file.id}
-                      onSelect={handleOpen}
-                      onStartTranslation={async () => {
-                        startTranslateTask(file.id);
-                      }}
-                      onExportFormat={handleExportFile}
-                      onDelete={handleDeleteFile}
-                      onTranscribeAndTranslate={async () => {
-                        startFullTask(file.id);
-                      }}
-                      onTranscribe={async () => {
-                        startTranscribeTask(file.id);
-                      }}
-                      onDequeue={() => dequeueTask(file.id)}
-                      isQueued={isQueued}
-                      queuePosition={queuePosition}
-                      isActive={isActive}
-                    />
-                  );
-                }
-
                 return (
-                  <SubtitleFileItem
+                  <SidebarTaskRow
                     key={file.id}
                     file={file}
                     selected={selectedFileId === file.id}
                     onSelect={handleOpen}
-                    onEdit={handleOpen}
                     onStartTranslation={async () => {
                       startTranslateTask(file.id);
                     }}

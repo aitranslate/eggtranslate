@@ -336,7 +336,6 @@ export const MainApp: React.FC = () => {
         <div className="wb-tasks" onClick={handleTasksAreaClick}>
           {/* 侧栏头+列表由 SubtitleFileList 统一：项目 | [+] [▶] [导出] [清空] */}
           <SubtitleFileList
-            variant="sidebar"
             selectedFileId={selectedFileId}
             onSelectFile={handleSelectTask}
             onImport={openFilePicker}

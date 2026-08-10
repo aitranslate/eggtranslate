@@ -11,39 +11,19 @@
   /* 控件高度节奏 */
   --apple-control-h: 36px;
   --apple-control-h-sm: 32px;
-  --apple-control-h-lg: 40px;
 
   /* 字体系统 */
   --apple-font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Display",
     "SF Pro Text", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 
-  /* 间距系统 */
-  --apple-section-spacing: 120px;
-  --apple-section-spacing-mobile: 80px;
-  --apple-content-max-width: 980px;
-  --apple-content-padding: 24px;
-
   /* 圆角系统：桌面客户端控件，小圆角 */
   --apple-radius-control: 7px; /* 输入框、次要按钮 */
   --apple-radius-button: 7px; /* 主按钮 */
-  --apple-radius-card: 10px;
-  --apple-radius-card-large: 12px;
-  --apple-radius-pill: 999px; /* 仅徽章/chip 使用 */
 
   /* 动画（与 src/motion/tokens.ts / --wb-motion-* 对齐） */
-  --apple-transition-fast: 120ms cubic-bezier(0.4, 0, 0.2, 1);
-  --apple-transition-smooth: 220ms cubic-bezier(0.4, 0, 0.2, 1);
-  --apple-ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --apple-ease-out: cubic-bezier(0.4, 0, 0.2, 1);
-  --apple-ease-in: cubic-bezier(0.4, 0, 1, 1);
   --apple-duration-quick: 120ms;
   --apple-duration-base: 150ms;
-  --apple-duration-slow: 220ms;
-
-  /* 阴影系统 */
-  --apple-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
-  --apple-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
-  --apple-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 
 /* ===== 基础重置 ===== */
@@ -58,41 +38,7 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ===== 容器系统 ===== */
-.apple-container {
-  max-width: var(--apple-content-max-width);
-  margin: 0 auto;
-  padding: 0 var(--apple-content-padding);
-}
-
-.apple-section {
-  padding: var(--apple-section-spacing) 0;
-}
-
-@media (max-width: 768px) {
-  :root {
-    --apple-section-spacing: var(--apple-section-spacing-mobile);
-    --apple-content-padding: 20px;
-  }
-}
-
 /* ===== 排版系统 ===== */
-.apple-heading-hero {
-  font-size: clamp(40px, 5vw, 56px);
-  line-height: 1.07143;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  color: var(--apple-text-primary);
-}
-
-.apple-heading-large {
-  font-size: clamp(32px, 4vw, 48px);
-  line-height: 1.08349;
-  font-weight: 600;
-  letter-spacing: 0.007em;
-  color: var(--apple-text-primary);
-}
-
 .apple-heading-medium {
   font-size: clamp(24px, 3vw, 32px);
   line-height: 1.1;
@@ -106,30 +52,6 @@
   font-weight: 600;
   letter-spacing: 0.011em;
   color: var(--apple-text-primary);
-}
-
-.apple-body-large {
-  font-size: 21px;
-  line-height: 1.381;
-  font-weight: 400;
-  letter-spacing: -0.031em;
-  color: var(--apple-text-secondary);
-}
-
-.apple-body {
-  font-size: 17px;
-  line-height: 1.47059;
-  font-weight: 400;
-  letter-spacing: -0.022em;
-  color: var(--apple-text-secondary);
-}
-
-.apple-body-small {
-  font-size: 14px;
-  line-height: 1.42859;
-  font-weight: 400;
-  letter-spacing: -0.016em;
-  color: var(--apple-text-secondary);
 }
 
 /* ===== 按钮系统（桌面客户端：紧凑、小圆角） ===== */
@@ -188,13 +110,6 @@
   font-size: 14px;
   border-radius: var(--apple-radius-control);
   gap: 5px;
-}
-
-.apple-button-lg {
-  height: var(--apple-control-h-lg);
-  min-height: var(--apple-control-h-lg);
-  padding: 0 18px;
-  font-size: 15px;
 }
 
 /* ===== 输入框系统（方案 A：白底 + 细边，focus 不换底） ===== */
@@ -298,130 +213,3 @@
   color: #ff3b30;
   box-shadow: none;
 }
-
-/* 仅图标：小方圆，不是大圆球 */
-.apple-icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: none;
-  border-radius: var(--apple-radius-control);
-  background: transparent;
-  color: var(--apple-text-secondary);
-  cursor: pointer;
-  transition:
-    background-color var(--apple-duration-base) var(--apple-ease-out),
-    color var(--apple-duration-base) var(--apple-ease-out);
-}
-
-.apple-icon-button:hover {
-  background-color: var(--apple-bg-secondary);
-  color: var(--apple-text-primary);
-}
-
-/* ===== 卡片系统 ===== */
-.apple-card {
-  background-color: var(--apple-bg-primary);
-  border-radius: var(--apple-radius-card);
-  box-shadow: var(--apple-shadow-sm);
-  transition: box-shadow var(--apple-transition-fast);
-  overflow: hidden;
-}
-
-.apple-card:hover {
-  box-shadow: var(--apple-shadow-md);
-}
-
-.apple-card-large {
-  border-radius: var(--apple-radius-card-large);
-  box-shadow: var(--apple-shadow-md);
-}
-
-.apple-card-large:hover {
-  box-shadow: var(--apple-shadow-lg);
-}
-
-/* ===== 导航栏 ===== */
-.apple-navbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  background-color: rgba(255, 255, 255, 0.8);
-  backdrop-filter: saturate(180%) blur(12px);
-  -webkit-backdrop-filter: saturate(180%) blur(12px);
-  border-bottom: 1px solid var(--apple-border-lighter);
-  contain: layout paint;
-}
-
-.apple-navbar-content {
-  max-width: var(--apple-content-max-width);
-  margin: 0 auto;
-  padding: 0 var(--apple-content-padding);
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-/* ===== 动画系统 ===== */
-
-/* 滚动淡入上浮动画 */
-@keyframes apple-fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.apple-animate-on-scroll {
-  opacity: 0;
-  animation: apple-fade-in-up 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.apple-animate-on-scroll.animated {
-  opacity: 1;
-}
-
-/* 延迟类 */
-.apple-delay-100 { animation-delay: 0.1s; }
-.apple-delay-200 { animation-delay: 0.2s; }
-.apple-delay-300 { animation-delay: 0.3s; }
-.apple-delay-400 { animation-delay: 0.4s; }
-.apple-delay-500 { animation-delay: 0.5s; }
-
-/* 尊重用户的减少动画偏好 */
-@media (prefers-reduced-motion: reduce) {
-  .apple-animate-on-scroll {
-    opacity: 1;
-    animation: none;
-  }
-
-  .apple-button:hover {
-    box-shadow: none;
-  }
-}
-
-/* ===== 辅助类 ===== */
-.apple-text-center { text-align: center; }
-.apple-text-gradient {
-  background: linear-gradient(90deg, #1d1d1f 0%, #424245 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-.apple-flex-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.apple-w-full { width: 100%; }
-.apple-h-full { height: 100%; }

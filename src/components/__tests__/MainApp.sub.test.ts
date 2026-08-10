@@ -24,7 +24,7 @@ describe('MainApp workbench shell', () => {
     expect(src).toContain('workbench');
     expect(src).toContain('useWorkspaceStore');
     expect(src).toContain('selectedFileId');
-    expect(src).toContain('variant="sidebar"');
+    expect(src).toContain('SubtitleFileList');
     expect(src).toContain('StatusBar');
     expect(src).toContain('工作区');
   });

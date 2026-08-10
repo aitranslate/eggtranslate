@@ -1,13 +1,11 @@
 import React from 'react';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
-export type ButtonSize = 'sm' | 'md' | 'lg';
+export type ButtonSize = 'sm' | 'md';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
-  /** 仅图标：方形 36px，用 ghost 色 */
-  iconOnly?: boolean;
 }
 
 const variantClass: Record<ButtonVariant, string> = {
@@ -20,7 +18,6 @@ const variantClass: Record<ButtonVariant, string> = {
 const sizeClass: Record<ButtonSize, string> = {
   sm: 'apple-button-sm',
   md: '',
-  lg: 'apple-button-lg',
 };
 
 function cx(...parts: Array<string | false | null | undefined>) {
@@ -32,41 +29,12 @@ function cx(...parts: Array<string | false | null | undefined>) {
  * 主色仅蓝；success 绿不作 CTA
  */
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  (
-    {
-      variant = 'primary',
-      size = 'md',
-      iconOnly = false,
-      className,
-      type = 'button',
-      children,
-      ...rest
-    },
-    ref
-  ) => {
-    if (iconOnly) {
-      return (
-        <button
-          ref={ref}
-          type={type}
-          className={cx('apple-icon-button', className)}
-          {...rest}
-        >
-          {children}
-        </button>
-      );
-    }
-
+  ({ variant = 'primary', size = 'md', className, type = 'button', children, ...rest }, ref) => {
     return (
       <button
         ref={ref}
         type={type}
-        className={cx(
-          'apple-button',
-          sizeClass[size],
-          variantClass[variant],
-          className
-        )}
+        className={cx('apple-button', sizeClass[size], variantClass[variant], className)}
         {...rest}
       >
         {children}

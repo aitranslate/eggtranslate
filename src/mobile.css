@@ -435,11 +435,6 @@
   flex-shrink: 0;
 }
 
-.m-task-dot.tone-run,
-.m-task-state.tone-run {
-  color: var(--wb-brand);
-}
-
 .m-task-dot.tone-run {
   background: var(--wb-brand);
 }
@@ -448,25 +443,12 @@
   background: var(--apple-success, #34c759);
 }
 
-.m-task-state.tone-done {
-  color: var(--apple-success, #34c759);
-}
-
 .m-task-dot.tone-fail {
   background: var(--apple-danger, #ff3b30);
 }
 
-.m-task-state.tone-fail {
-  color: color-mix(in srgb, var(--apple-danger, #ff3b30) 78%, var(--wb-text));
-  font-weight: 550;
-}
-
 .m-task-dot.tone-wait {
   background: var(--apple-warning, #ff9500);
-}
-
-.m-task-state.tone-wait {
-  color: var(--apple-warning, #ff9500);
 }
 
 .m-task-meta {
