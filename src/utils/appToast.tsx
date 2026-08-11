@@ -47,16 +47,11 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   return copyText(text);
 }
 
-/** 错误 Toast（默认 5s，长文案更久；点击本体关闭，右侧复制钮 stopPropagation） */
+/** 错误 Toast（默认 3s；点击本体关闭，右侧复制钮 stopPropagation） */
 export function toastError(
   message: string,
   options?: { duration?: number; id?: string }
 ) {
-  // 长错误多留时间，方便点复制
-  const autoMs =
-    options?.duration ??
-    (message.length > 80 ? 10_000 : message.length > 40 ? 6_000 : 5_000);
-
   return toast.custom(
     (t) => (
       <div
@@ -89,7 +84,7 @@ export function toastError(
     ),
     {
       id: options?.id,
-      duration: autoMs,
+      duration: options?.duration ?? 3000,
       position: 'top-right',
     }
   );

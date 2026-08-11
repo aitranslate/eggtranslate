@@ -120,10 +120,7 @@ async function addMediaFile(
     const appError = toAppError(error, '导入失败');
     logger.error(appError.message, appError);
     // 用带「复制」按钮的错误 toast 替换 loading（同 id）
-    toastError(`导入失败：${file.name}（${appError.message}）`, {
-      id: toastId,
-      duration: 12_000,
-    });
+    toastError(`导入失败：${file.name}（${appError.message}）`, { id: toastId });
     return null;
   }
 }
