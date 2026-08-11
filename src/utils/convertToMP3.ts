@@ -143,15 +143,28 @@ function encodeInWorker(
   });
 }
 
+/** 与 prepareAsrAudio 对齐：过大文件禁止整包进内存 */
+const MAX_CONVERT_BYTES = 64 * 1024 * 1024;
+
 /**
- * 浏览器可原生解码的音视频 → 16k mono MP3。
- * 失败请走 prepareAsrAudio 的抽轨/直传路径。
+ * 浏览器可原生解码的**较小**音视频 → 16k mono MP3。
+ * 失败 / 过大 / 视频请走 prepareAsrAudio 的抽轨/直传路径。
  */
 export async function convertToMP3(
   file: File,
   onProgress?: (progress: number) => void
 ): Promise<Blob> {
   return enqueue(async () => {
+    if (file.size > MAX_CONVERT_BYTES) {
+      throw new Error(
+        `文件过大（>${(MAX_CONVERT_BYTES / 1024 / 1024) | 0}MB），跳过浏览器重编码`
+      );
+    }
+    const t = (file.type || '').toLowerCase();
+    if (t.startsWith('video/')) {
+      throw new Error('视频文件跳过浏览器重编码');
+    }
+
     const AudioContextCtor = getAudioContextCtor();
     const audioCtx = new AudioContextCtor();
     const t0 =
