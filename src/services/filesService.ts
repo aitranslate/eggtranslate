@@ -11,7 +11,7 @@ import { useQueueStore } from '@/stores/queueStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { loadFromFile, removeMp3Data } from './SubtitleFileManager';
-import { convertToMP3, warmupFfmpeg } from '@/utils/convertToMP3';
+import { convertToMP3, warmupMp3Encoder } from '@/utils/convertToMP3';
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { playAppSound } from '@/utils/appSound';
@@ -29,7 +29,7 @@ export async function addFile(file: File): Promise<string | null> {
   const { defaultKeytermGroupId } = useTranscriptionStore.getState();
   const langs = defaultTaskLanguages();
 
-  // 音视频：唯一转码点（FFmpeg 抽音轨 → 16k mono MP3）
+  // 音视频：唯一转码点（浏览器解码 → 16k mono MP3）
   const isSrt = /\.srt$/i.test(file.name) || file.type === 'application/x-subrip';
   const isMedia =
     !isSrt &&
@@ -74,8 +74,8 @@ async function addMediaFile(
   // 处理中 toast 必须持续显示：显式 Infinity（全局 duration 会盖住 loading 默认值）。
   // 定稿 success/error 必须带有限 duration，覆盖同 id 上的 Infinity。
   const toastId = toast.loading(`正在处理 ${file.name}…`, { duration: Infinity });
-  // 与元数据解析并行预热 FFmpeg（按需，不在冷启动全站预拉）
-  warmupFfmpeg();
+  // 与元数据解析并行预热 MP3 Worker（按需，不在冷启动全站预拉）
+  warmupMp3Encoder();
 
   try {
     // 1) 解析元数据（不持有原始 File 进 store：转码后只留 IDB 里的 MP3）
@@ -86,13 +86,13 @@ async function addMediaFile(
       defaultTargetLanguage: langs.targetLanguage,
     });
 
-    // 2) FFmpeg 抽音轨 → 16k mono MP3 并持久化
+    // 2) 原生解码 + Worker 编码 → 16k mono MP3 并持久化
     logger.info(`[addFile] 转码开始: ${file.name}`);
-    toast.loading(`正在抽取音频 ${file.name}…`, { id: toastId, duration: Infinity });
+    toast.loading(`正在处理音频 ${file.name}…`, { id: toastId, duration: Infinity });
     const mp3Blob = await convertToMP3(file, (p) => {
       const pct = Math.round(Math.min(1, Math.max(0, p)) * 100);
       if (pct >= 2) {
-        toast.loading(`正在抽取音频 ${file.name}… ${pct}%`, {
+        toast.loading(`正在处理音频 ${file.name}… ${pct}%`, {
           id: toastId,
           duration: Infinity,
         });

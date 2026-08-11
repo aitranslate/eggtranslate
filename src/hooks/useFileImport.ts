@@ -27,9 +27,9 @@ import {
 } from '@/utils/taskGuards';
 
 /**
- * 字幕 + 任意音视频。
+ * 字幕 + 常见音视频。
  * accept 用 MIME 通配 + 常见扩展（仅影响系统文件选择器过滤，UI 不罗列格式）。
- * 媒体一律走 FFmpeg 抽音轨，用户无需关心容器格式。
+ * 媒体走浏览器原生解码 → 16k mono MP3，用户无需关心容器细节。
  */
 export const IMPORT_ACCEPT =
   '.srt,audio/*,video/*,.mkv,.avi,.mov,.wmv,.flv,.ts,.m4v,.webm,.ogg,.flac,.aac,.opus,.wma,.3gp,.mpeg,.mpg,.m4a,.wav,.mp3,.mp4';

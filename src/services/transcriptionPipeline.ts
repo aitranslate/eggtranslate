@@ -1,6 +1,6 @@
 /**
  * 转录流程：已就绪 MP3 → AssemblyAI → 字幕条目
- * 转码在 addFile 完成，这里不再做 FFmpeg。
+ * 转码在 addFile 完成，这里只上传/转录。
  */
 
 import { SubtitleEntry } from '@/types';

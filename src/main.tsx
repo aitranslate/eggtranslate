@@ -10,8 +10,6 @@ import { logger } from '@/utils/logger'
 import { rehydrateAppStores } from '@/stores/bootstrap'
 import { initThemeFromStorage } from '@/stores/themeStore'
 import { initSoundFromStorage } from '@/stores/soundStore'
-import { isFfmpegCacheName } from '@/utils/convertToMP3'
-
 initThemeFromStorage()
 initSoundFromStorage()
 
@@ -34,9 +32,8 @@ async function initializeApp() {
 }
 
 /**
- * 曾启用 PWA/SW：注销旧 worker，并只删除非 FFmpeg 的 Cache Storage。
- * 绝不能 wipe `egg-ffmpeg-core*`，否则 Cache API 缓存形同虚设、每次冷启动重下 ~30MB。
- * FFmpeg 预热改在首次媒体导入路径（addMediaFile），纯 SRT 用户不预拉 WASM。
+ * 曾启用 PWA/SW 与 FFmpeg Cache：注销旧 worker，并清理遗留 Cache Storage
+ * （含历史 egg-ffmpeg-core*，已不再使用 FFmpeg.wasm）。
  */
 async function cleanupLegacyServiceWorkers(): Promise<void> {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
@@ -45,11 +42,7 @@ async function cleanupLegacyServiceWorkers(): Promise<void> {
     await Promise.all(regs.map((r) => r.unregister()))
     if (typeof caches !== 'undefined') {
       const keys = await caches.keys()
-      await Promise.all(
-        keys
-          .filter((k) => !isFfmpegCacheName(k))
-          .map((k) => caches.delete(k)),
-      )
+      await Promise.all(keys.map((k) => caches.delete(k)))
     }
   } catch (error) {
     logger.warn('注销旧 Service Worker 失败（可忽略）', error)
@@ -59,7 +52,7 @@ async function cleanupLegacyServiceWorkers(): Promise<void> {
 initializeApp()
   .then(() => {
     renderApp()
-    // 不阻塞首屏：后台卸掉历史 SW（保留 FFmpeg cache）
+    // 不阻塞首屏：后台卸掉历史 SW / 废弃缓存
     void cleanupLegacyServiceWorkers()
   })
   .catch((error) => {

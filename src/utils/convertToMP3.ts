@@ -1,33 +1,35 @@
 /**
- * FFmpeg.wasm：任意音视频 → 16kHz 单声道 MP3（只抽音轨）
+ * 浏览器原生解码 + Worker 编码：常见音视频 → 16 kHz 单声道 MP3
  *
- * 唯一转码入口。调用方：filesService.addFile。
- * 转录链路只消费 IndexedDB 里的结果，不再二次转码。
- * core/wasm 经 Cache API 缓存，二次访问少下 ~30MB。
+ * - 主线程：AudioContext.decodeAudioData（浏览器原生 demux/解码，快）
+ * - Worker：降采样 + lamejs MP3 编码（不堵 UI）
+ * - 串行队列：多文件导入不抢内存
+ * - 立体声：各声道平均混成 mono
+ *
+ * 调用方：filesService.addFile。转录只消费 IndexedDB 里的结果。
  */
-import { FFmpeg, FFFSType } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { logger } from '@/utils/logger';
+import { MP3_TARGET_SR, mixToMono } from '@/utils/mp3AudioMath';
 
-const TARGET_SR = 16000;
-const TARGET_BITRATE = '64k';
+export { mixToMono } from '@/utils/mp3AudioMath';
 
-/** 单线程 core：Cloudflare Pages 无需 COOP/COEP */
-const CORE_BASE =
-  'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm';
+/** 解码约占进度前 20%，编码 20%→100% */
+const DECODE_PROGRESS_END = 0.2;
 
-/** Cache Storage 名：启动清理必须保留此前缀，否则每次冷启动重下 ~30MB */
-export const FFMPEG_CACHE_NAME = 'egg-ffmpeg-core-v1';
-
-/** 是否为 FFmpeg core 缓存（清理旧 SW/precache 时跳过） */
-export function isFfmpegCacheName(cacheName: string): boolean {
-  return cacheName === FFMPEG_CACHE_NAME || cacheName.startsWith('egg-ffmpeg-core');
+type AudioContextCtor = typeof AudioContext;
+interface AudioContextWindow {
+  AudioContext?: AudioContextCtor;
+  webkitAudioContext?: AudioContextCtor;
 }
 
-let ffmpegInstance: FFmpeg | null = null;
-let loadPromise: Promise<FFmpeg> | null = null;
-/** 串行 exec，避免多文件抢同一 WASM 实例 */
+type WorkerProgress = { type: 'progress'; requestId: number; progress: number };
+type WorkerDone = { type: 'done'; requestId: number; buffer: ArrayBuffer };
+type WorkerError = { type: 'error'; requestId: number; message: string };
+type WorkerMsg = WorkerProgress | WorkerDone | WorkerError;
+
 let queue: Promise<unknown> = Promise.resolve();
+let sharedWorker: Worker | null = null;
+let nextRequestId = 1;
 
 function enqueue<T>(fn: () => Promise<T>): Promise<T> {
   const run = queue.then(fn, fn);
@@ -38,201 +40,195 @@ function enqueue<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-function extOf(name: string): string {
-  const m = /\.([a-z0-9]+)$/i.exec(name || '');
-  return m ? m[1].toLowerCase() : 'bin';
+function getAudioContextCtor(): AudioContextCtor {
+  const w = window as unknown as AudioContextWindow;
+  const Ctor = w.AudioContext || w.webkitAudioContext;
+  if (!Ctor) {
+    throw new Error('当前浏览器不支持音频解码（缺少 AudioContext）');
+  }
+  return Ctor;
 }
 
-function safeInputName(file: File): string {
-  return `input.${extOf(file.name) || 'bin'}`;
+function getEncoderWorker(): Worker {
+  if (sharedWorker) return sharedWorker;
+  sharedWorker = new Worker(new URL('./mp3Worker.ts', import.meta.url), {
+    type: 'module',
+  });
+  sharedWorker.onerror = (err) => {
+    logger.warn('[mp3] Worker 异常，下次将重建', err.message);
+    try {
+      sharedWorker?.terminate();
+    } catch {
+      /* ignore */
+    }
+    sharedWorker = null;
+  };
+  return sharedWorker;
 }
 
 /**
- * 优先 Cache Storage，失败再网络；供 toBlobURL 使用的同源 blob。
+ * 预热：尽早加载 Worker + lamejs 模块图，避免首次导入卡在拉包。
  */
-async function cachedBlobURL(url: string, mime: string): Promise<string> {
+export function warmupMp3Encoder(): void {
+  if (typeof window === 'undefined') return;
   try {
-    if (typeof caches !== 'undefined') {
-      const cache = await caches.open(FFMPEG_CACHE_NAME);
-      let res = await cache.match(url);
-      if (!res) {
-        res = await fetch(url);
-        if (res.ok) {
-          await cache.put(url, res.clone());
+    getEncoderWorker();
+  } catch (e) {
+    logger.warn('MP3 编码器预热失败（可忽略）', e);
+  }
+}
+
+/** @deprecated 兼容旧 import 名 */
+export const warmupFfmpeg = warmupMp3Encoder;
+
+function friendlyDecodeError(error: unknown, fileName: string): Error {
+  const raw = error instanceof Error ? error.message : String(error);
+  const name = error instanceof DOMException ? error.name : '';
+  // 已是我们包装过的友好文案，直接抛出
+  if (error instanceof Error && /无法解码|内存不足|音频为空/.test(error.message)) {
+    return error;
+  }
+  if (
+    name === 'EncodingError' ||
+    name === 'NotSupportedError' ||
+    /decode|encoding|notsupported|unable to decode|unable to demux/i.test(raw)
+  ) {
+    return new Error(
+      `无法解码「${fileName}」。请确认浏览器能播放该文件，或先导出为 MP3/M4A/WAV 后再导入。`
+    );
+  }
+  if (/memory|out of memory|oom|allocation/i.test(raw)) {
+    return new Error('文件过大，浏览器内存不足。请先导出音频或压缩后再导入。');
+  }
+  return error instanceof Error ? error : new Error(raw || '音视频转码失败');
+}
+
+function encodeInWorker(
+  mono: Float32Array,
+  sourceSampleRate: number,
+  onProgress?: (progress: number) => void
+): Promise<Blob> {
+  const worker = getEncoderWorker();
+  const requestId = nextRequestId++;
+
+  return new Promise<Blob>((resolve, reject) => {
+    const onMessage = (e: MessageEvent<WorkerMsg>) => {
+      const msg = e.data;
+      if (!msg || msg.requestId !== requestId) return;
+
+      switch (msg.type) {
+        case 'progress': {
+          const p =
+            DECODE_PROGRESS_END +
+            Math.min(1, Math.max(0, msg.progress)) * (1 - DECODE_PROGRESS_END);
+          onProgress?.(p);
+          break;
+        }
+        case 'done': {
+          cleanup();
+          if (!msg.buffer || msg.buffer.byteLength === 0) {
+            reject(new Error('编码结果为空'));
+            return;
+          }
+          onProgress?.(1);
+          resolve(new Blob([msg.buffer], { type: 'audio/mpeg' }));
+          break;
+        }
+        case 'error': {
+          cleanup();
+          reject(new Error(msg.message || 'MP3 编码失败'));
+          break;
         }
       }
-      if (res.ok) {
-        const buf = await res.arrayBuffer();
-        const blob = new Blob([buf], { type: mime });
-        return URL.createObjectURL(blob);
+    };
+
+    const onError = (err: ErrorEvent) => {
+      cleanup();
+      try {
+        sharedWorker?.terminate();
+      } catch {
+        /* ignore */
       }
-    }
-  } catch (e) {
-    logger.warn('[ffmpeg] Cache API 不可用，直连 CDN', e);
-  }
-  return toBlobURL(url, mime);
-}
+      sharedWorker = null;
+      reject(new Error(err.message || 'MP3 编码 Worker 崩溃'));
+    };
 
-async function getFFmpeg(): Promise<FFmpeg> {
-  if (ffmpegInstance?.loaded) return ffmpegInstance;
-  if (loadPromise) return loadPromise;
+    const cleanup = () => {
+      worker.removeEventListener('message', onMessage as EventListener);
+      worker.removeEventListener('error', onError);
+    };
 
-  loadPromise = (async () => {
-    const ffmpeg = new FFmpeg();
-    // 转码热路径不打 log 到 React；仅 DEV 且可选
-    if (import.meta.env.DEV) {
-      ffmpeg.on('log', ({ message }) => {
-        logger.info('[ffmpeg]', message);
-      });
-    }
+    worker.addEventListener('message', onMessage as EventListener);
+    worker.addEventListener('error', onError);
 
-    await ffmpeg.load({
-      coreURL: await cachedBlobURL(`${CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await cachedBlobURL(
-        `${CORE_BASE}/ffmpeg-core.wasm`,
-        'application/wasm'
-      ),
-    });
-
-    ffmpegInstance = ffmpeg;
-    return ffmpeg;
-  })().catch((err) => {
-    loadPromise = null;
-    ffmpegInstance = null;
-    throw err;
-  });
-
-  return loadPromise;
-}
-
-/** 空闲预热：拉取/命中缓存 ffmpeg-core */
-export function warmupFfmpeg(): void {
-  if (typeof window === 'undefined') return;
-  void getFFmpeg().catch((e) => {
-    logger.warn('FFmpeg 预热失败（可忽略，首次转码时重试）', e);
+    worker.postMessage(
+      {
+        type: 'encode',
+        requestId,
+        data: mono,
+        sourceSampleRate,
+        targetSampleRate: MP3_TARGET_SR,
+      },
+      [mono.buffer]
+    );
   });
 }
 
 /**
- * 任意常见音视频 → 16kHz mono MP3 Blob。
- * 统一重编码，保证采样率/声道与转录链路一致。
+ * 常见音视频 → 16 kHz mono MP3 Blob（浏览器原生解码）。
  */
 export async function convertToMP3(
   file: File,
   onProgress?: (progress: number) => void
 ): Promise<Blob> {
   return enqueue(async () => {
-    const ffmpeg = await getFFmpeg();
-    const inputName = safeInputName(file);
-    const outputName = 'output.mp3';
-    const mountDir = '/work';
-    let mounted = false;
-    let wroteInput = false;
-
-    const onProg = ({ progress }: { progress: number }) => {
-      if (typeof progress === 'number' && Number.isFinite(progress)) {
-        onProgress?.(Math.min(1, Math.max(0, progress)));
-      }
-    };
-    ffmpeg.on('progress', onProg);
+    const AudioContextCtor = getAudioContextCtor();
+    const audioCtx = new AudioContextCtor();
+    const t0 =
+      typeof performance !== 'undefined' ? performance.now() : Date.now();
 
     try {
-      await safeDelete(ffmpeg, outputName);
-      await safeUnmount(ffmpeg, mountDir);
-
-      let inputPath = inputName;
-
-      try {
-        await ffmpeg.createDir(mountDir).catch(() => undefined);
-        await ffmpeg.mount(
-          FFFSType.WORKERFS,
-          { blobs: [{ name: inputName, data: file }] },
-          mountDir
-        );
-        inputPath = `${mountDir}/${inputName}`;
-        mounted = true;
-        logger.info(
-          `[ffmpeg] WORKERFS: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`
-        );
-      } catch (mountErr) {
-        logger.warn('[ffmpeg] WORKERFS 不可用，回退 writeFile', mountErr);
-        await ffmpeg.writeFile(inputName, await fetchFile(file));
-        inputPath = inputName;
-        wroteInput = true;
-      }
-
       onProgress?.(0.02);
 
-      const code = await ffmpeg.exec([
-        '-i',
-        inputPath,
-        '-vn',
-        '-ac',
-        '1',
-        '-ar',
-        String(TARGET_SR),
-        '-c:a',
-        'libmp3lame',
-        '-b:a',
-        TARGET_BITRATE,
-        '-y',
-        outputName,
-      ]);
+      const arrayBuffer = await file.arrayBuffer();
+      onProgress?.(0.08);
 
-      if (code !== 0) {
-        throw new Error(
-          `音视频转码失败（ffmpeg exit ${code}）。请确认文件含音轨且未损坏。`
-        );
+      let audioBuffer: AudioBuffer;
+      try {
+        audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      } catch (decodeErr) {
+        throw friendlyDecodeError(decodeErr, file.name);
       }
 
-      const data = await ffmpeg.readFile(outputName);
-      const bytes =
-        data instanceof Uint8Array
-          ? data
-          : new TextEncoder().encode(String(data));
-
-      if (!bytes.byteLength) {
-        throw new Error('转码结果为空，可能文件没有音轨');
+      if (!audioBuffer.length || audioBuffer.duration <= 0) {
+        throw new Error('音频为空或时长为 0，请检查文件是否含有效音轨');
       }
 
-      onProgress?.(1);
+      onProgress?.(DECODE_PROGRESS_END);
+
+      const mono = mixToMono(audioBuffer);
+      const sourceSampleRate = audioBuffer.sampleRate;
+      const durationSec = audioBuffer.duration;
+
+      const blob = await encodeInWorker(mono, sourceSampleRate, onProgress);
+
+      const ms =
+        (typeof performance !== 'undefined' ? performance.now() : Date.now()) -
+        t0;
       logger.info(
-        `[ffmpeg] 完成: ${(file.size / 1024 / 1024).toFixed(1)}MB → ${(bytes.byteLength / 1024 / 1024).toFixed(2)}MB MP3`
+        `[mp3] 完成: ${file.name} ${(file.size / 1024 / 1024).toFixed(1)}MB → ${(blob.size / 1024 / 1024).toFixed(2)}MB，${(ms / 1000).toFixed(1)}s，${durationSec.toFixed(1)}s 素材`
       );
 
-      const copy = new Uint8Array(bytes.byteLength);
-      copy.set(bytes);
-      return new Blob([copy], { type: 'audio/mpeg' });
+      return blob;
     } catch (error) {
-      logger.error('FFmpeg 转码失败:', error);
-      const msg = error instanceof Error ? error.message : '音视频转码失败';
-      if (/memory|out of memory|OOM|allocation/i.test(msg)) {
-        throw new Error(
-          '文件过大，浏览器内存不足。请先导出音频后再导入，或压缩视频体积。'
-        );
-      }
-      throw error instanceof Error ? error : new Error(msg);
+      logger.error('转码失败:', error);
+      throw friendlyDecodeError(error, file.name);
     } finally {
-      ffmpeg.off('progress', onProg);
-      await safeDelete(ffmpeg, outputName);
-      if (wroteInput) await safeDelete(ffmpeg, inputName);
-      if (mounted) await safeUnmount(ffmpeg, mountDir);
+      try {
+        await audioCtx.close();
+      } catch {
+        /* ignore */
+      }
     }
   });
-}
-
-async function safeDelete(ffmpeg: FFmpeg, name: string): Promise<void> {
-  try {
-    await ffmpeg.deleteFile(name);
-  } catch {
-    /* ignore */
-  }
-}
-
-async function safeUnmount(ffmpeg: FFmpeg, mountDir: string): Promise<void> {
-  try {
-    await ffmpeg.unmount(mountDir);
-  } catch {
-    /* ignore */
-  }
 }

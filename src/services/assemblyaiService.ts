@@ -8,7 +8,7 @@ import { logger } from "@/utils/logger";
 /**
  * AssemblyAI 转录服务
  * 只负责：上传已就绪的 16k mono MP3 → 拉词级时间戳 → DP 断句。
- * 转码不在这里做（统一在 addFile → convertToMP3 / FFmpeg）。
+ * 转码不在这里做（统一在 addFile → convertToMP3）。
  */
 class AssemblyAIService {
   private getKeys(): string[] {

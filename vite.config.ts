@@ -23,11 +23,10 @@ export default defineConfig(({ command }) => ({
     }),
   ],
   /**
-   * FFmpeg 核心从 CDN 按需加载；localforage 预构建避免冷启动 reload。
+   * localforage 预构建避免冷启动 reload；MP3 Worker 走独立 chunk。
    */
   optimizeDeps: {
-    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util', '@ffmpeg/core'],
-    include: ['localforage'],
+    include: ['localforage', '@breezystack/lamejs'],
   },
   worker: {
     format: 'es',
@@ -38,6 +37,7 @@ export default defineConfig(({ command }) => ({
     warmup: {
       clientFiles: [
         './src/utils/convertToMP3.ts',
+        './src/utils/mp3Worker.ts',
         './src/services/filesService.ts',
       ],
     },
@@ -88,7 +88,8 @@ export default defineConfig(({ command }) => ({
               norm.includes('/jszip/') ||
               norm.endsWith('/jszip') ||
               norm.includes('sentence-splitter') ||
-              norm.includes('@ffmpeg')
+              norm.includes('lamejs') ||
+              norm.includes('@breezystack')
             ) {
               return undefined;
             }

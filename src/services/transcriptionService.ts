@@ -1,6 +1,6 @@
 /**
  * 转录 Service
- * 取 IndexedDB 中 addFile/FFmpeg 已就绪的 MP3 → AssemblyAI → 写字幕。
+ * 取 IndexedDB 中 addFile 已就绪的 MP3 → AssemblyAI → 写字幕。
  * 不再做转码。
  */
 

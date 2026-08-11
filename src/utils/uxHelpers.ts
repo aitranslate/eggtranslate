@@ -9,7 +9,7 @@ import type { ExportFormat } from '@/utils/fileExport';
 
 /** 不支持格式时的用户文案 */
 export function unsupportedImportMessage(): string {
-  return '不支持的文件。请导入字幕（.srt）或任意音视频文件（将自动抽取音频）。';
+  return '不支持的文件。请导入字幕（.srt）或常见音视频（将自动处理为音频）。';
 }
 
 /** 多文件导入进度文案，如「导入中 2/5…」 */
