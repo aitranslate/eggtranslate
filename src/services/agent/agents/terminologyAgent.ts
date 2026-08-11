@@ -269,8 +269,8 @@ export async function runTerminologyToolAgent(options: {
     tokensUsed += r.tokensUsed;
   }
 
-  let glossary = unionGlossaries(gloParts);
-  let styleGuide = mergeStyleGuides(styles);
+  const glossary = unionGlossaries(gloParts);
+  const styleGuide = mergeStyleGuides(styles);
 
   const plain = transcriptPlainFromEntries(entries);
   const defaultStyle = `Translate ${config.sourceLanguage} subtitles into natural ${config.targetLanguage}. Keep names and recurring terms consistent.`;

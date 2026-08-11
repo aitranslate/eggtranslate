@@ -1,19 +1,17 @@
 /**
  * 为 AssemblyAI 准备上传用音频（设计原则）
  *
- * 1. 小体积、浏览器能解的音频 → 压成 16k mono MP3
- * 2. 视频 / 大文件 → **禁止**整文件进内存解码；流式 demux 只抽 AAC
- * 3. 纯音频解不了 → 原文件直传（不读入 RAM）
- * 4. 绝不上传视频轨
+ * 1. 音频文件 → 原样直传（不转码；AssemblyAI 服务端自行处理）
+ * 2. 视频 / ISOBMFF → 流式抽 AAC 音轨（只为省上传流量；抽不到则原文件直传）
+ * 3. 抽不到音轨、且 AssemblyAI 服务端也不支持的容器 → 明确报错
  */
 import { logger } from '@/utils/logger';
-import { convertToMP3 } from '@/utils/convertToMP3';
 import {
   extractAacAdtsFromIsoBmff,
   shouldTryIsoBmffDemux,
 } from '@/utils/mediaDemux';
 
-export type AsrAudioVia = 'mp3-reencode' | 'demux-aac' | 'original-audio';
+export type AsrAudioVia = 'demux-aac' | 'original-audio';
 
 export interface AsrAudioResult {
   blob: Blob;
@@ -27,9 +25,6 @@ export interface AsrAudioMeta {
   fileName: string;
   via: AsrAudioVia;
 }
-
-/** 超过此体积不再尝试浏览器 PCM 重编码（避免 arrayBuffer + decode 爆内存） */
-export const MAX_REENCODE_BYTES = 64 * 1024 * 1024;
 
 function isLikelyAudioOnly(file: File): boolean {
   const t = (file.type || '').toLowerCase();
@@ -46,43 +41,21 @@ function isLikelyVideo(file: File): boolean {
   return /\.(mp4|mov|m4v|webm|mkv|avi|wmv|flv|ts|mpeg|mpg|3gp)$/i.test(n);
 }
 
-function shouldAttemptReencode(file: File): boolean {
-  if (isLikelyVideo(file)) return false;
-  if (file.size > MAX_REENCODE_BYTES) return false;
-  return true;
-}
+/**
+ * AssemblyAI 官方明确不支持的容器（除非成功抽到音轨，否则无法兜底）。
+ * 对照 https://www.assemblyai.com/docs/faq/what-audio-and-video-file-types-are-supported-by-your-api
+ * mp4 / mov / m4v / webm / ts / m4a / aac / mp3 / wav / flac / ogg / opus / wma / aiff 均支持。
+ */
+const UNSUPPORTED_CONTAINER = /\.(mkv|avi|wmv|mpeg|mpg)$/i;
 
 /**
- * 导入阶段唯一入口：得到「给 ASR 上传」的音频 Blob（尽量小，且不含视频）。
+ * 导入阶段唯一入口：得到「给 ASR 上传」的音频 Blob。
+ * 只抽音轨、绝不转码、绝不持有视频轨。
  */
 export async function prepareAsrAudio(
   file: File,
   onProgress?: (progress: number) => void
 ): Promise<AsrAudioResult> {
-  // ① 仅对「小文件 + 非视频」尝试 MP3 重编码
-  if (shouldAttemptReencode(file)) {
-    try {
-      onProgress?.(0.02);
-      const mp3 = await convertToMP3(file, (p) => onProgress?.(p));
-      return {
-        blob: mp3,
-        mime: 'audio/mpeg',
-        fileName: 'audio.mp3',
-        via: 'mp3-reencode',
-      };
-    } catch (reencodeErr) {
-      logger.info(
-        `[asr-prepare] 跳过 MP3 重编码: ${file.name}`,
-        reencodeErr instanceof Error ? reencodeErr.message : reencodeErr
-      );
-    }
-  } else {
-    logger.info(
-      `[asr-prepare] 跳过重编码（视频或 >${(MAX_REENCODE_BYTES / 1024 / 1024) | 0}MB）: ${file.name} ${(file.size / 1024 / 1024).toFixed(1)}MB`
-    );
-  }
-
-  // ② 视频 / ISOBMFF：流式 demux AAC，绝不 file.arrayBuffer() 整包
   onProgress?.(0.05);
   const headCap = Math.min(16, file.size);
   const headBuf =
@@ -90,6 +63,7 @@ export async function prepareAsrAudio(
       ? new Uint8Array(await file.slice(0, headCap).arrayBuffer())
       : new Uint8Array();
 
+  // ① 视频 / ISOBMFF：流式抽 AAC 音轨（省上传流量；绝不 file.arrayBuffer() 整包）
   if (isLikelyVideo(file) || shouldTryIsoBmffDemux(file, headBuf)) {
     try {
       const extracted = await extractAacAdtsFromIsoBmff(file, {
@@ -107,31 +81,30 @@ export async function prepareAsrAudio(
           via: 'demux-aac',
         };
       }
-      logger.info(`[asr-prepare] demux 未得到 AAC 音轨: ${file.name}`);
+      logger.info(`[asr-prepare] 无 AAC 音轨可抽，改原文件直传: ${file.name}`);
     } catch (demuxErr) {
       logger.warn(
-        `[asr-prepare] demux 失败: ${file.name}`,
+        `[asr-prepare] demux 失败，改原文件直传: ${file.name}`,
         demuxErr instanceof Error ? demuxErr.message : demuxErr
       );
     }
   }
 
-  // ③ 纯音频：原 File 直传（零拷贝引用，不读入 RAM）
-  if (isLikelyAudioOnly(file)) {
-    onProgress?.(1);
-    const mime = file.type || 'application/octet-stream';
-    logger.info(
-      `[asr-prepare] 原音频直传: ${file.name} ${(file.size / 1024 / 1024).toFixed(2)}MB`
+  // ② 兜底：原文件直传（不转码；AssemblyAI 服务端自行抽音轨 / 转码）
+  if (UNSUPPORTED_CONTAINER.test(file.name || '')) {
+    throw new Error(
+      `「${file.name}」格式（mkv/avi/wmv/mpeg/mpg）AssemblyAI 不支持，无法直接上传。请转成 MP4/MOV/WebM 或常见音频格式后再导入。`
     );
-    return {
-      blob: file,
-      mime,
-      fileName: file.name || 'audio.bin',
-      via: 'original-audio',
-    };
   }
-
-  throw new Error(
-    '无法得到可上传的音频（未抽到 AAC 音轨）。请导出 MP3/M4A/AAC 后再导入，或换含 AAC 音轨的 MP4。'
+  onProgress?.(1);
+  const mime = file.type || 'application/octet-stream';
+  logger.info(
+    `[asr-prepare] 原文件直传: ${file.name} ${(file.size / 1024 / 1024).toFixed(2)}MB`
   );
+  return {
+    blob: file,
+    mime,
+    fileName: file.name || 'audio.bin',
+    via: 'original-audio',
+  };
 }

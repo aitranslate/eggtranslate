@@ -46,12 +46,10 @@ export async function removeAsrAudio(taskId: string): Promise<void> {
 
 export function formatAsrViaLabel(via?: AsrAudioVia): string {
   switch (via) {
-    case 'mp3-reencode':
-      return '已压缩为 MP3';
     case 'demux-aac':
-      return '已抽取 AAC 音轨';
+      return '已抽 AAC 音轨';
     case 'original-audio':
-      return '原音频直传';
+      return '原文件直传';
     default:
       return '音频已就绪';
   }

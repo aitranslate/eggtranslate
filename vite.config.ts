@@ -23,10 +23,10 @@ export default defineConfig(({ command }) => ({
     }),
   ],
   /**
-   * localforage 预构建避免冷启动 reload；MP3 Worker 走独立 chunk。
+   * localforage 预构建避免冷启动 reload。
    */
   optimizeDeps: {
-    include: ['localforage', '@breezystack/lamejs'],
+    include: ['localforage'],
   },
   worker: {
     format: 'es',
@@ -36,8 +36,6 @@ export default defineConfig(({ command }) => ({
     port: 5173,
     warmup: {
       clientFiles: [
-        './src/utils/convertToMP3.ts',
-        './src/utils/mp3Worker.ts',
         './src/services/filesService.ts',
       ],
     },
@@ -87,9 +85,7 @@ export default defineConfig(({ command }) => ({
               norm.includes('assemblyai') ||
               norm.includes('/jszip/') ||
               norm.endsWith('/jszip') ||
-              norm.includes('sentence-splitter') ||
-              norm.includes('lamejs') ||
-              norm.includes('@breezystack')
+              norm.includes('sentence-splitter')
             ) {
               return undefined;
             }

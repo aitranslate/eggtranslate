@@ -11,7 +11,6 @@ import { useQueueStore } from '@/stores/queueStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { loadFromFile, removeMp3Data } from './SubtitleFileManager';
-import { warmupMp3Encoder } from '@/utils/convertToMP3';
 import { prepareAsrAudio } from '@/utils/prepareAsrAudio';
 import { formatAsrViaLabel, saveAsrAudio } from '@/utils/asrAudioStorage';
 import { toAppError } from '@/utils/errors';
@@ -76,9 +75,6 @@ async function addMediaFile(
   // 处理中 toast 必须持续显示：显式 Infinity（全局 duration 会盖住 loading 默认值）。
   // 定稿 success/error 必须带有限 duration，覆盖同 id 上的 Infinity。
   const toastId = toast.loading(`正在处理 ${file.name}…`, { duration: Infinity });
-  // 与元数据解析并行预热 MP3 Worker（按需；走 demux/直传时无害）
-  warmupMp3Encoder();
-
   try {
     // 1) 解析元数据（不持有原始 File 进 store：只缓存 ASR 音频）
     const result = await loadFromFile(file, {
@@ -88,7 +84,7 @@ async function addMediaFile(
       defaultTargetLanguage: langs.targetLanguage,
     });
 
-    // 2) 准备上传音频：MP3 重编码 / 抽 AAC / 原音频（绝不存视频轨）
+    // 2) 准备上传音频：抽 AAC 音轨 / 原文件直传（绝不存视频轨）
     logger.info(`[addFile] 准备 ASR 音频: ${file.name}`);
     toast.loading(`正在处理音频 ${file.name}…`, { id: toastId, duration: Infinity });
     const asrAudio = await prepareAsrAudio(file, (p) => {
