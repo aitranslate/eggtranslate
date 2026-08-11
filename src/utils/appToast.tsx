@@ -47,8 +47,16 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   return copyText(text);
 }
 
-/** 错误 Toast（默认 3s；点击本体关闭，复制钮 stopPropagation） */
-export function toastError(message: string, options?: { duration?: number }) {
+/** 错误 Toast（默认 5s，长文案更久；点击本体关闭，右侧复制钮 stopPropagation） */
+export function toastError(
+  message: string,
+  options?: { duration?: number; id?: string }
+) {
+  // 长错误多留时间，方便点复制
+  const autoMs =
+    options?.duration ??
+    (message.length > 80 ? 10_000 : message.length > 40 ? 6_000 : 5_000);
+
   return toast.custom(
     (t) => (
       <div
@@ -71,14 +79,18 @@ export function toastError(message: string, options?: { duration?: number }) {
               toast.success('已复制', { duration: 1200 });
             }
           }}
-          className="shrink-0 self-center -mr-0.5 p-1 rounded-md text-[var(--wb-text-3,var(--apple-text-tertiary,#a1a1a6))] hover:bg-[var(--wb-panel-2,var(--apple-bg-secondary,#f5f5f7))] transition-colors cursor-pointer"
-          title="复制"
+          className="shrink-0 self-center -mr-0.5 p-1.5 rounded-md text-[var(--wb-text-2,var(--apple-text-secondary,#6e6e73))] hover:text-[var(--wb-text)] hover:bg-[var(--wb-panel-2,var(--apple-bg-secondary,#f5f5f7))] transition-colors cursor-pointer"
+          title="复制错误信息"
           aria-label="复制错误信息"
         >
-          <Copy className="w-3.5 h-3.5" />
+          <Copy className="w-4 h-4" />
         </button>
       </div>
     ),
-    { duration: options?.duration ?? 3000, position: 'top-right' }
+    {
+      id: options?.id,
+      duration: autoMs,
+      position: 'top-right',
+    }
   );
 }

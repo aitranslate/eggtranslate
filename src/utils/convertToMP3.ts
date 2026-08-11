@@ -2,26 +2,22 @@
  * 浏览器原生解码 + 轻量 demux 回落 + Worker 编码
  * → 常见音视频 16 kHz 单声道 MP3
  *
- * 路径：
- * 1) decodeAudioData 直解（最快，覆盖常见音视频）
- * 2) 失败且为 MP4/M4A/MOV 等 → mp4box 只抽 AAC 音轨为 ADTS 再解
- *    （解决 AV1/H.265 等「视频轨拖累 demux」的问题，远轻于 FFmpeg）
- * 3) Worker + lamejs 编码
- *
- * 调用方：filesService.addFile。转录只消费 IndexedDB 里的结果。
+ * 1) decodeAudioData 直解
+ * 2) 失败且为 MP4/M4A/MOV → mp4box 抽 AAC → WebCodecs/ADTS 再解
+ * 3) Worker + lamejs → 16k mono MP3
  */
 import { logger } from '@/utils/logger';
 import { MP3_TARGET_SR, mixToMono } from '@/utils/mp3AudioMath';
 import {
+  decodeAacPayload,
   extractAudioFromIsoBmff,
   shouldTryIsoBmffDemux,
 } from '@/utils/mediaDemux';
 
 export { mixToMono } from '@/utils/mp3AudioMath';
 
-/** 直解 0–12%，demux 12–20%，编码 20–100% */
 const DECODE_PROGRESS_END = 0.2;
-const DEMUX_PROGRESS_START = 0.1;
+const DEMUX_PROGRESS_START = 0.08;
 const DEMUX_PROGRESS_END = 0.18;
 
 type AudioContextCtor = typeof AudioContext;
@@ -74,9 +70,6 @@ function getEncoderWorker(): Worker {
   return sharedWorker;
 }
 
-/**
- * 预热：尽早加载 Worker + lamejs 模块图，避免首次导入卡在拉包。
- */
 export function warmupMp3Encoder(): void {
   if (typeof window === 'undefined') return;
   try {
@@ -86,7 +79,6 @@ export function warmupMp3Encoder(): void {
   }
 }
 
-/** @deprecated 兼容旧 import 名 */
 export const warmupFfmpeg = warmupMp3Encoder;
 
 function friendlyDecodeError(error: unknown, fileName: string): Error {
@@ -94,9 +86,14 @@ function friendlyDecodeError(error: unknown, fileName: string): Error {
   const name = error instanceof DOMException ? error.name : '';
   if (
     error instanceof Error &&
-    /无法解码|内存不足|音频为空|暂不支持|没有音轨/.test(error.message)
+    /无法解码|内存不足|音频为空|暂不支持|没有音轨|WebCodecs|抽轨/.test(error.message)
   ) {
     return error;
+  }
+  if (/memory|out of memory|oom|allocation/i.test(raw)) {
+    return new Error(
+      '文件过大，浏览器内存不足。请先导出音频（MP3/M4A）再导入，或剪短后再试。'
+    );
   }
   if (
     name === 'EncodingError' ||
@@ -104,11 +101,8 @@ function friendlyDecodeError(error: unknown, fileName: string): Error {
     /decode|encoding|notsupported|unable to decode|unable to demux/i.test(raw)
   ) {
     return new Error(
-      `无法解码「${fileName}」。可先导出为 MP3/M4A/WAV，或换常见 H.264/AAC 视频后再导入。`
+      `无法解码「${fileName}」。可先导出为 MP3/M4A/WAV 后再导入。（${raw.slice(0, 120)}）`
     );
-  }
-  if (/memory|out of memory|oom|allocation/i.test(raw)) {
-    return new Error('文件过大，浏览器内存不足。请先导出音频或压缩后再导入。');
   }
   return error instanceof Error ? error : new Error(raw || '音视频转码失败');
 }
@@ -117,7 +111,6 @@ async function decodeArrayBuffer(
   audioCtx: AudioContext,
   buffer: ArrayBuffer
 ): Promise<AudioBuffer> {
-  // decodeAudioData 在部分浏览器会 detach 输入 buffer，传入拷贝更安全
   const copy = buffer.slice(0);
   return audioCtx.decodeAudioData(copy);
 }
@@ -193,9 +186,6 @@ function encodeInWorker(
   });
 }
 
-/**
- * 直解失败时：对 ISOBMFF 尝试只抽 AAC 再解。
- */
 async function decodeWithDemuxFallback(
   audioCtx: AudioContext,
   arrayBuffer: ArrayBuffer,
@@ -210,10 +200,8 @@ async function decodeWithDemuxFallback(
       throw directErr;
     }
 
-    logger.info(
-      `[mp3] 直解失败，尝试轻量 demux 抽音轨: ${file.name}`,
-      directErr instanceof Error ? directErr.message : directErr
-    );
+    const directMsg = directErr instanceof Error ? directErr.message : String(directErr);
+    logger.info(`[mp3] 直解失败，尝试轻量 demux: ${file.name} — ${directMsg}`);
     onProgress?.(DEMUX_PROGRESS_START);
 
     let extracted;
@@ -222,35 +210,42 @@ async function decodeWithDemuxFallback(
         onProgress: (r) => {
           onProgress?.(
             DEMUX_PROGRESS_START +
-              Math.min(1, Math.max(0, r)) * (DEMUX_PROGRESS_END - DEMUX_PROGRESS_START)
+              0.4 * (DEMUX_PROGRESS_END - DEMUX_PROGRESS_START) * Math.min(1, Math.max(0, r))
           );
         },
       });
     } catch (demuxErr) {
-      logger.warn('[mp3] demux 失败', demuxErr);
-      throw directErr;
+      const m = demuxErr instanceof Error ? demuxErr.message : String(demuxErr);
+      logger.warn('[mp3] demux 异常', demuxErr);
+      throw new Error(`抽轨失败：${m}；直解：${directMsg.slice(0, 80)}`);
     }
 
-    if (!extracted) {
-      throw directErr;
+    if (!extracted?.aac?.frames?.length) {
+      throw new Error(
+        `未能抽出 AAC 音轨（直解：${directMsg.slice(0, 80)}）。请导出 MP3/M4A 后导入。`
+      );
     }
 
     try {
-      const audioBuffer = await decodeArrayBuffer(audioCtx, extracted.buffer);
+      const audioBuffer = await decodeAacPayload(extracted.aac, audioCtx, (r) => {
+        onProgress?.(
+          DEMUX_PROGRESS_START +
+            0.4 * (DEMUX_PROGRESS_END - DEMUX_PROGRESS_START) +
+            0.6 * (DEMUX_PROGRESS_END - DEMUX_PROGRESS_START) * Math.min(1, Math.max(0, r))
+        );
+      });
       logger.info(
-        `[mp3] demux 后再解码成功 (${extracted.via}, ${extracted.codec})`
+        `[mp3] demux 解码成功 (${extracted.via}, ${extracted.codec}, ${extracted.aac.frames.length} 帧)`
       );
       return audioBuffer;
     } catch (secondErr) {
-      logger.warn('[mp3] demux 后仍无法解码', secondErr);
-      throw secondErr;
+      const m = secondErr instanceof Error ? secondErr.message : String(secondErr);
+      logger.warn('[mp3] demux 后解码失败', secondErr);
+      throw new Error(`音轨已抽出但解码失败：${m}`);
     }
   }
 }
 
-/**
- * 常见音视频 → 16 kHz mono MP3 Blob。
- */
 export async function convertToMP3(
   file: File,
   onProgress?: (progress: number) => void
@@ -262,10 +257,18 @@ export async function convertToMP3(
       typeof performance !== 'undefined' ? performance.now() : Date.now();
 
     try {
-      onProgress?.(0.02);
+      // 部分移动浏览器 AudioContext 默认 suspended
+      if (audioCtx.state === 'suspended') {
+        try {
+          await audioCtx.resume();
+        } catch {
+          /* ignore */
+        }
+      }
 
+      onProgress?.(0.02);
       const arrayBuffer = await file.arrayBuffer();
-      onProgress?.(0.08);
+      onProgress?.(0.06);
 
       const audioBuffer = await decodeWithDemuxFallback(
         audioCtx,

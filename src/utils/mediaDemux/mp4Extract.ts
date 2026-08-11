@@ -1,22 +1,22 @@
 /**
- * 轻量 ISOBMFF（mp4/m4a/mov/…）音轨抽取 → 可 decodeAudioData 的缓冲。
+ * 轻量 ISOBMFF（mp4/m4a/mov/…）音轨抽取。
  * 使用 mp4box.js demux，不碰视频轨、不上 FFmpeg。
  */
 import { createFile, MP4BoxBuffer, type Sample, type Track } from 'mp4box';
 import { logger } from '@/utils/logger';
-import {
-  buildAdtsFrame,
-  concatUint8,
-  parseAudioSpecificConfig,
-  sampleRateToIndex,
-  type AacAdtsConfig,
-} from './adts';
+import { buildAdtsConfigFromAsc, type AacTrackPayload } from './aacDecode';
+import { extractAudioSpecificConfig } from './esds';
+
+export { extractAudioSpecificConfig } from './esds';
 
 export interface ExtractedAudio {
-  buffer: ArrayBuffer;
+  /** 旧路径兼容：ADTS 全量（短音频） */
+  buffer?: ArrayBuffer;
   mime: string;
   codec: string;
-  via: 'aac-adts';
+  via: 'aac-adts' | 'aac-frames';
+  /** 新路径：帧列表 + 配置，供 WebCodecs */
+  aac?: AacTrackPayload;
 }
 
 function looksLikeIsoBmff(name: string, type: string, magic?: Uint8Array): boolean {
@@ -39,108 +39,18 @@ function looksLikeIsoBmff(name: string, type: string, magic?: Uint8Array): boole
   return false;
 }
 
-/** 从 mp4a sample description / esds 取出 DecoderSpecificInfo（AudioSpecificConfig） */
-export function extractAudioSpecificConfig(description: unknown): Uint8Array | null {
-  if (!description || typeof description !== 'object') return null;
-  const desc = description as {
-    esds?: {
-      esd?: {
-        descs?: Array<{
-          tag?: number;
-          data?: Uint8Array;
-          descs?: Array<{ tag?: number; data?: Uint8Array; descs?: unknown[] }>;
-        }>;
-      };
-      data?: Uint8Array;
-    };
-  };
-
-  const walk = (nodes: unknown): Uint8Array | null => {
-    if (!Array.isArray(nodes)) return null;
-    for (const node of nodes) {
-      if (!node || typeof node !== 'object') continue;
-      const n = node as {
-        tag?: number;
-        data?: Uint8Array;
-        descs?: unknown[];
-      };
-      if (n.tag === 5 && n.data && n.data.byteLength > 0) {
-        return n.data instanceof Uint8Array ? n.data : new Uint8Array(n.data as ArrayBuffer);
-      }
-      const nested = walk(n.descs);
-      if (nested) return nested;
-    }
-    return null;
-  };
-
-  if (desc.esds?.esd?.descs) {
-    const fromTree = walk(desc.esds.esd.descs);
-    if (fromTree) return fromTree;
-  }
-
-  const raw = desc.esds?.data;
-  if (raw && raw.byteLength > 4) {
-    for (let i = 0; i < raw.byteLength - 2; i++) {
-      if (raw[i] !== 0x05) continue;
-      let j = i + 1;
-      while (j < raw.byteLength && raw[j] === 0x80) j++;
-      if (j >= raw.byteLength) break;
-      const len = raw[j];
-      const start = j + 1;
-      if (len > 0 && start + len <= raw.byteLength) {
-        return raw.subarray(start, start + len);
-      }
-    }
-  }
-  return null;
-}
-
 function isAacCodec(codec: string): boolean {
   const c = (codec || '').toLowerCase();
   if (c.startsWith('mp4a.40.')) {
-    const ot = c.slice('mp4a.40.'.length);
-    if (ot === '34') return false; // MP3-in-MP4
+    if (c.slice('mp4a.40.'.length) === '34') return false;
     return true;
   }
   return c === 'aac' || c.includes('mp4a.40');
 }
 
-function resolveAdtsConfig(track: Track, description: unknown): AacAdtsConfig {
-  const asc = extractAudioSpecificConfig(description);
-  if (asc && asc.byteLength >= 2) {
-    try {
-      const cfg = parseAudioSpecificConfig(asc);
-      if (cfg.sampleRateIndex > 12 && track.audio?.sample_rate) {
-        cfg.sampleRateIndex = sampleRateToIndex(track.audio.sample_rate);
-      }
-      if ((!cfg.channelConfig || cfg.channelConfig > 7) && track.audio?.channel_count) {
-        cfg.channelConfig = Math.min(7, track.audio.channel_count);
-      }
-      return cfg;
-    } catch (e) {
-      logger.warn('[demux] 解析 AudioSpecificConfig 失败，回退 track 元数据', e);
-    }
-  }
-
-  const rate = track.audio?.sample_rate || 44100;
-  const ch = track.audio?.channel_count || 2;
-  let aot = 2;
-  const m = /^mp4a\.40\.(\d+)$/i.exec(track.codec || '');
-  if (m) {
-    const n = parseInt(m[1], 10) || 2;
-    // SBR/PS 的 ADTS core 仍用 AAC-LC
-    aot = n === 5 || n === 29 ? 2 : Math.min(4, Math.max(1, n));
-  }
-
-  return {
-    audioObjectType: aot,
-    sampleRateIndex: sampleRateToIndex(rate),
-    channelConfig: Math.min(7, Math.max(1, ch)),
-  };
-}
-
 /**
- * 从完整 ISOBMFF 缓冲抽取 AAC 音轨 → ADTS。
+ * 从完整 ISOBMFF 缓冲抽取 AAC 帧。
+ * 完成条件：收到全部 nb_samples，或 flush 后短时内不再增长。
  */
 export async function extractAudioFromIsoBmff(
   arrayBuffer: ArrayBuffer,
@@ -150,51 +60,55 @@ export async function extractAudioFromIsoBmff(
 ): Promise<ExtractedAudio | null> {
   return new Promise((resolve, reject) => {
     let settled = false;
-    const settle = (value: ExtractedAudio | null) => {
+    const settle = (v: ExtractedAudio | null) => {
       if (settled) return;
       settled = true;
-      resolve(value);
+      resolve(v);
     };
-    const fail = (err: unknown) => {
+    const fail = (e: unknown) => {
       if (settled) return;
       settled = true;
-      reject(err instanceof Error ? err : new Error(String(err)));
+      reject(e instanceof Error ? e : new Error(String(e)));
     };
 
     const mp4 = createFile(true);
     let audioTrack: Track | null = null;
-    let adtsCfg: AacAdtsConfig | null = null;
-    const frames: Uint8Array[] = [];
-    let gotSamples = 0;
     let expected = 0;
     let codec = '';
+    let sampleRate = 44100;
+    let channels = 2;
+    let description: Uint8Array | null = null;
+    const frames: Uint8Array[] = [];
+    let gotSamples = 0;
+    let lastGotAt = Date.now();
+
+    const buildResult = (): ExtractedAudio | null => {
+      if (!frames.length || !description) return null;
+      const adtsConfig = buildAdtsConfigFromAsc(description, sampleRate, channels);
+      const aac: AacTrackPayload = {
+        frames,
+        description,
+        codec: codec || 'mp4a.40.2',
+        sampleRate,
+        numberOfChannels: channels,
+        adtsConfig,
+      };
+      logger.info(
+        `[demux] AAC 抽取完成: ${gotSamples} 帧, ${sampleRate}Hz / ${channels}ch (${codec})`
+      );
+      return {
+        mime: 'audio/aac',
+        codec,
+        via: 'aac-frames',
+        aac,
+      };
+    };
 
     const tryComplete = (force = false) => {
       if (settled) return;
       if (!force && expected > 0 && gotSamples < expected) return;
-      if (!frames.length) {
-        settle(null);
-        return;
-      }
-      try {
-        options?.onProgress?.(1);
-        const merged = concatUint8(frames);
-        const copy = merged.buffer.slice(
-          merged.byteOffset,
-          merged.byteOffset + merged.byteLength
-        );
-        logger.info(
-          `[demux] AAC 抽取完成: ${gotSamples} 帧 → ${(copy.byteLength / 1024 / 1024).toFixed(2)}MB ADTS (${codec})`
-        );
-        settle({
-          buffer: copy,
-          mime: 'audio/aac',
-          codec,
-          via: 'aac-adts',
-        });
-      } catch (e) {
-        fail(e);
-      }
+      const result = buildResult();
+      settle(result);
     };
 
     mp4.onError = (module, message) => {
@@ -203,13 +117,15 @@ export async function extractAudioFromIsoBmff(
 
     mp4.onReady = (info) => {
       const tracks = info.audioTracks || [];
-      if (tracks.length === 0) {
+      if (!tracks.length) {
         settle(null);
         return;
       }
       audioTrack = tracks.find((t) => isAacCodec(t.codec)) || tracks[0];
       codec = audioTrack.codec || '';
       expected = audioTrack.nb_samples || 0;
+      sampleRate = audioTrack.audio?.sample_rate || 44100;
+      channels = audioTrack.audio?.channel_count || 2;
 
       if (!isAacCodec(codec)) {
         logger.info(`[demux] 音轨编码暂不支持轻量抽取: ${codec}`);
@@ -217,9 +133,8 @@ export async function extractAudioFromIsoBmff(
         return;
       }
 
-      // 大批次减少回调次数；mp4box 会按轨道实际样本吐出
       mp4.setExtractionOptions(audioTrack.id, undefined, {
-        nbSamples: Math.max(100, Math.min(1000, expected || 1000)),
+        nbSamples: Math.max(200, Math.min(2000, expected || 500)),
       });
       mp4.start();
     };
@@ -228,21 +143,23 @@ export async function extractAudioFromIsoBmff(
       if (!audioTrack || settled) return;
       for (const sample of samples) {
         if (!sample.data || sample.data.byteLength === 0) continue;
-        if (!adtsCfg) {
-          adtsCfg = resolveAdtsConfig(audioTrack, sample.description);
+        if (!description) {
+          description = extractAudioSpecificConfig(sample.description);
+          if (!description) {
+            // 最小 ASC：AAC-LC + rate + ch（由 adtsConfig 回退）
+            description = new Uint8Array([0x12, 0x10]);
+          }
         }
-        try {
-          frames.push(buildAdtsFrame(sample.data, adtsCfg));
-        } catch (e) {
-          fail(e);
-          return;
-        }
+        // 拷贝帧数据，避免 mp4box 复用底层缓冲
+        frames.push(sample.data.slice());
         gotSamples++;
+        lastGotAt = Date.now();
       }
       if (expected > 0) {
         options?.onProgress?.(Math.min(0.99, gotSamples / expected));
       }
       if (expected > 0 && gotSamples >= expected) {
+        options?.onProgress?.(1);
         tryComplete(true);
       }
     };
@@ -256,16 +173,32 @@ export async function extractAudioFromIsoBmff(
       return;
     }
 
-    // flush 同步路径上可能已收齐；否则短暂等待尾包
-    queueMicrotask(() => {
+    // 收齐：已满 expected，或 flush 后 200ms 无新样本
+    const waitStart = Date.now();
+    const maxWaitMs = Math.min(120_000, Math.max(5_000, arrayBuffer.byteLength / 50));
+
+    const poll = () => {
       if (settled) return;
-      if (frames.length && (expected === 0 || gotSamples >= expected)) {
+      if (expected > 0 && gotSamples >= expected) {
         tryComplete(true);
         return;
       }
-      setTimeout(() => {
-        if (!settled) tryComplete(true);
-      }, 50);
+      const idle = Date.now() - lastGotAt;
+      const waited = Date.now() - waitStart;
+      if (gotSamples > 0 && idle > 250) {
+        tryComplete(true);
+        return;
+      }
+      if (waited > maxWaitMs) {
+        if (gotSamples > 0) tryComplete(true);
+        else settle(null);
+        return;
+      }
+      setTimeout(poll, 50);
+    };
+
+    queueMicrotask(() => {
+      if (!settled) poll();
     });
   });
 }

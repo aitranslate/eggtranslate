@@ -5,7 +5,7 @@ import {
   sampleRateToIndex,
   ADTS_SAMPLE_RATES,
 } from '../mediaDemux/adts';
-import { extractAudioSpecificConfig } from '../mediaDemux/mp4Extract';
+import { extractAudioSpecificConfig } from '../mediaDemux/esds';
 
 describe('parseAudioSpecificConfig', () => {
   it('parses AAC-LC 44100 stereo (common ASC)', () => {

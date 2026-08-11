@@ -16,6 +16,7 @@ import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { playAppSound } from '@/utils/appSound';
 import { isMediaImportFileName } from '@/utils/taskGuards';
+import { toastError } from '@/utils/appToast';
 import localforage from 'localforage';
 import toast from 'react-hot-toast';
 
@@ -61,7 +62,7 @@ async function addSubtitleFile(
   } catch (error) {
     const appError = toAppError(error, '文件加载失败');
     logger.error(appError.message, appError);
-    toast.error(`文件加载失败: ${appError.message}`);
+    toastError(`文件加载失败: ${appError.message}`);
     throw error;
   }
 }
@@ -118,7 +119,11 @@ async function addMediaFile(
   } catch (error) {
     const appError = toAppError(error, '导入失败');
     logger.error(appError.message, appError);
-    toast.error(`导入失败：${file.name}（${appError.message}）`, { id: toastId, duration: 3000 });
+    // 用带「复制」按钮的错误 toast 替换 loading（同 id）
+    toastError(`导入失败：${file.name}（${appError.message}）`, {
+      id: toastId,
+      duration: 12_000,
+    });
     return null;
   }
 }

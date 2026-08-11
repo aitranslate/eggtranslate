@@ -1,6 +1,5 @@
 /**
  * 轻量媒体 demux 入口（非 FFmpeg）
- * 当前：ISOBMFF(mp4/m4a/mov/…) → AAC ADTS
  */
 export {
   extractAudioFromIsoBmff,
@@ -8,6 +7,8 @@ export {
   extractAudioSpecificConfig,
 } from './mp4Extract';
 export type { ExtractedAudio } from './mp4Extract';
+export { decodeAacPayload } from './aacDecode';
+export type { AacTrackPayload } from './aacDecode';
 export {
   parseAudioSpecificConfig,
   buildAdtsFrame,
