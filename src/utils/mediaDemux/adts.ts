@@ -116,3 +116,21 @@ export function concatUint8(chunks: Uint8Array[]): Uint8Array {
   }
   return out;
 }
+
+/** 从 ASC 或采样率/声道回退构建 ADTS 配置 */
+export function buildAdtsConfigFromAsc(
+  asc: Uint8Array,
+  fallbackRate: number,
+  fallbackCh: number
+): AacAdtsConfig {
+  try {
+    if (asc.byteLength >= 2) return parseAudioSpecificConfig(asc);
+  } catch {
+    /* fallthrough */
+  }
+  return {
+    audioObjectType: 2,
+    sampleRateIndex: sampleRateToIndex(fallbackRate),
+    channelConfig: Math.min(7, Math.max(1, fallbackCh)),
+  };
+}

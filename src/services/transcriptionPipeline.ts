@@ -17,7 +17,7 @@ export interface ProgressCallbacks {
 }
 
 /**
- * @param audioFile - addFile 缓存的 16k mono MP3
+ * @param audioFile - addFile 缓存的 ASR 音频（MP3 / AAC / 原音频）
  * @param keyterms - 热词
  * @param callbacks - 进度回调
  */

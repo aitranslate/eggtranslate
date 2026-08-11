@@ -162,10 +162,11 @@ export async function loadFromFile(
 }
 
 /**
- * 清理 MP3 数据（独立于 persist 中间件管理）
+ * 清理 ASR 音频缓存（兼容旧 mp3_data key）
  */
 export async function removeMp3Data(taskId: string): Promise<void> {
-  await localforage.removeItem(`mp3_data:${taskId}`);
+  const { removeAsrAudio } = await import('@/utils/asrAudioStorage');
+  await removeAsrAudio(taskId);
 }
 
 // ============================================

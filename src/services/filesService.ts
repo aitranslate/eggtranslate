@@ -11,13 +11,14 @@ import { useQueueStore } from '@/stores/queueStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { loadFromFile, removeMp3Data } from './SubtitleFileManager';
-import { convertToMP3, warmupMp3Encoder } from '@/utils/convertToMP3';
+import { warmupMp3Encoder } from '@/utils/convertToMP3';
+import { prepareAsrAudio } from '@/utils/prepareAsrAudio';
+import { formatAsrViaLabel, saveAsrAudio } from '@/utils/asrAudioStorage';
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { playAppSound } from '@/utils/appSound';
 import { isMediaImportFileName } from '@/utils/taskGuards';
 import { toastError } from '@/utils/appToast';
-import localforage from 'localforage';
 import toast from 'react-hot-toast';
 
 function defaultTaskLanguages() {
@@ -30,7 +31,7 @@ export async function addFile(file: File): Promise<string | null> {
   const { defaultKeytermGroupId } = useTranscriptionStore.getState();
   const langs = defaultTaskLanguages();
 
-  // 音视频：唯一转码点（浏览器解码 → 16k mono MP3）
+  // 音视频：准备 ASR 音频（能压 MP3 则压；否则抽轨/原音频，不传视频）
   const isSrt = /\.srt$/i.test(file.name) || file.type === 'application/x-subrip';
   const isMedia =
     !isSrt &&
@@ -75,11 +76,11 @@ async function addMediaFile(
   // 处理中 toast 必须持续显示：显式 Infinity（全局 duration 会盖住 loading 默认值）。
   // 定稿 success/error 必须带有限 duration，覆盖同 id 上的 Infinity。
   const toastId = toast.loading(`正在处理 ${file.name}…`, { duration: Infinity });
-  // 与元数据解析并行预热 MP3 Worker（按需，不在冷启动全站预拉）
+  // 与元数据解析并行预热 MP3 Worker（按需；走 demux/直传时无害）
   warmupMp3Encoder();
 
   try {
-    // 1) 解析元数据（不持有原始 File 进 store：转码后只留 IDB 里的 MP3）
+    // 1) 解析元数据（不持有原始 File 进 store：只缓存 ASR 音频）
     const result = await loadFromFile(file, {
       existingFilesCount: useFilesStore.getState().tasks.length,
       defaultKeytermGroupId,
@@ -87,10 +88,10 @@ async function addMediaFile(
       defaultTargetLanguage: langs.targetLanguage,
     });
 
-    // 2) 原生解码 + Worker 编码 → 16k mono MP3 并持久化
-    logger.info(`[addFile] 转码开始: ${file.name}`);
+    // 2) 准备上传音频：MP3 重编码 / 抽 AAC / 原音频（绝不存视频轨）
+    logger.info(`[addFile] 准备 ASR 音频: ${file.name}`);
     toast.loading(`正在处理音频 ${file.name}…`, { id: toastId, duration: Infinity });
-    const mp3Blob = await convertToMP3(file, (p) => {
+    const asrAudio = await prepareAsrAudio(file, (p) => {
       const pct = Math.round(Math.min(1, Math.max(0, p)) * 100);
       if (pct >= 2) {
         toast.loading(`正在处理音频 ${file.name}… ${pct}%`, {
@@ -99,10 +100,12 @@ async function addMediaFile(
         });
       }
     });
-    await localforage.setItem(`mp3_data:${result.task.taskId}`, mp3Blob);
-    logger.info(`[addFile] 转码完成: ${file.name}, ${(mp3Blob.size / 1024 / 1024).toFixed(2)}MB`);
+    await saveAsrAudio(result.task.taskId, asrAudio);
+    logger.info(
+      `[addFile] 音频就绪 (${asrAudio.via}): ${file.name} → ${(asrAudio.blob.size / 1024 / 1024).toFixed(2)}MB ${asrAudio.mime}`
+    );
 
-    // 3) 加入 store：不挂 fileRef，避免大视频整段占堆；转录只读 mp3_data
+    // 3) 加入 store：转录只读缓存音频
     const finalTask = {
       ...result.task,
       phases: {
@@ -111,15 +114,16 @@ async function addMediaFile(
       },
     };
     useFilesStore.getState().addTask(finalTask);
-    // 双保险：addTask 已 flush，这里再 await 确保 MP3 key 与任务列表一致落盘
     await flushFilesStorePersist();
 
-    toast.success(`已添加：${file.name}`, { id: toastId, duration: 2000 });
+    toast.success(`已添加：${file.name}（${formatAsrViaLabel(asrAudio.via)}）`, {
+      id: toastId,
+      duration: 2000,
+    });
     return result.metadata.id;
   } catch (error) {
     const appError = toAppError(error, '导入失败');
     logger.error(appError.message, appError);
-    // 用带「复制」按钮的错误 toast 替换 loading（同 id）
     toastError(`导入失败：${file.name}（${appError.message}）`, { id: toastId });
     return null;
   }

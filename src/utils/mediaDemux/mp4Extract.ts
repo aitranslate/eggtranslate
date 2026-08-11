@@ -4,18 +4,17 @@
  */
 import { createFile, MP4BoxBuffer, type Sample, type Track } from 'mp4box';
 import { logger } from '@/utils/logger';
-import { buildAdtsConfigFromAsc, type AacTrackPayload } from './aacDecode';
+import { buildAdtsConfigFromAsc } from './adts';
+import type { AacTrackPayload } from './aacTypes';
 import { extractAudioSpecificConfig } from './esds';
 
 export { extractAudioSpecificConfig } from './esds';
 
 export interface ExtractedAudio {
-  /** 旧路径兼容：ADTS 全量（短音频） */
-  buffer?: ArrayBuffer;
   mime: string;
   codec: string;
-  via: 'aac-adts' | 'aac-frames';
-  /** 新路径：帧列表 + 配置，供 WebCodecs */
+  via: 'aac-frames';
+  /** 未解码的 AAC 帧，供 ADTS 封装后直传 ASR */
   aac?: AacTrackPayload;
 }
 

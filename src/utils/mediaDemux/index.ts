@@ -1,5 +1,5 @@
 /**
- * 轻量媒体 demux 入口（非 FFmpeg）
+ * 轻量媒体 demux：只抽音轨，不做解码/重编码
  */
 export {
   extractAudioFromIsoBmff,
@@ -7,8 +7,7 @@ export {
   extractAudioSpecificConfig,
 } from './mp4Extract';
 export type { ExtractedAudio } from './mp4Extract';
-export { decodeAacPayload } from './aacDecode';
-export type { AacTrackPayload } from './aacDecode';
+export type { AacTrackPayload } from './aacTypes';
 export {
   parseAudioSpecificConfig,
   buildAdtsFrame,

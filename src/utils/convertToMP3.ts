@@ -1,24 +1,15 @@
 /**
- * 浏览器原生解码 + 轻量 demux 回落 + Worker 编码
- * → 常见音视频 16 kHz 单声道 MP3
+ * 浏览器原生解码 + Worker 编码 → 16 kHz 单声道 MP3
  *
- * 1) decodeAudioData 直解
- * 2) 失败且为 MP4/M4A/MOV → mp4box 抽 AAC → WebCodecs/ADTS 再解
- * 3) Worker + lamejs → 16k mono MP3
+ * 只负责「浏览器能 decodeAudioData 的文件」。
+ * 解不了的视频/容器不在这里硬解 —— 见 prepareAsrAudio（抽轨直传 / 原音频直传）。
  */
 import { logger } from '@/utils/logger';
 import { MP3_TARGET_SR, mixToMono } from '@/utils/mp3AudioMath';
-import {
-  decodeAacPayload,
-  extractAudioFromIsoBmff,
-  shouldTryIsoBmffDemux,
-} from '@/utils/mediaDemux';
 
 export { mixToMono } from '@/utils/mp3AudioMath';
 
 const DECODE_PROGRESS_END = 0.2;
-const DEMUX_PROGRESS_START = 0.08;
-const DEMUX_PROGRESS_END = 0.18;
 
 type AudioContextCtor = typeof AudioContext;
 interface AudioContextWindow {
@@ -80,40 +71,6 @@ export function warmupMp3Encoder(): void {
 }
 
 export const warmupFfmpeg = warmupMp3Encoder;
-
-function friendlyDecodeError(error: unknown, fileName: string): Error {
-  const raw = error instanceof Error ? error.message : String(error);
-  const name = error instanceof DOMException ? error.name : '';
-  if (
-    error instanceof Error &&
-    /无法解码|内存不足|音频为空|暂不支持|没有音轨|WebCodecs|抽轨/.test(error.message)
-  ) {
-    return error;
-  }
-  if (/memory|out of memory|oom|allocation/i.test(raw)) {
-    return new Error(
-      '文件过大，浏览器内存不足。请先导出音频（MP3/M4A）再导入，或剪短后再试。'
-    );
-  }
-  if (
-    name === 'EncodingError' ||
-    name === 'NotSupportedError' ||
-    /decode|encoding|notsupported|unable to decode|unable to demux/i.test(raw)
-  ) {
-    return new Error(
-      `无法解码「${fileName}」。可先导出为 MP3/M4A/WAV 后再导入。（${raw.slice(0, 120)}）`
-    );
-  }
-  return error instanceof Error ? error : new Error(raw || '音视频转码失败');
-}
-
-async function decodeArrayBuffer(
-  audioCtx: AudioContext,
-  buffer: ArrayBuffer
-): Promise<AudioBuffer> {
-  const copy = buffer.slice(0);
-  return audioCtx.decodeAudioData(copy);
-}
 
 function encodeInWorker(
   mono: Float32Array,
@@ -186,66 +143,10 @@ function encodeInWorker(
   });
 }
 
-async function decodeWithDemuxFallback(
-  audioCtx: AudioContext,
-  arrayBuffer: ArrayBuffer,
-  file: File,
-  onProgress?: (progress: number) => void
-): Promise<AudioBuffer> {
-  try {
-    return await decodeArrayBuffer(audioCtx, arrayBuffer);
-  } catch (directErr) {
-    const head = new Uint8Array(arrayBuffer, 0, Math.min(16, arrayBuffer.byteLength));
-    if (!shouldTryIsoBmffDemux(file, head)) {
-      throw directErr;
-    }
-
-    const directMsg = directErr instanceof Error ? directErr.message : String(directErr);
-    logger.info(`[mp3] 直解失败，尝试轻量 demux: ${file.name} — ${directMsg}`);
-    onProgress?.(DEMUX_PROGRESS_START);
-
-    let extracted;
-    try {
-      extracted = await extractAudioFromIsoBmff(arrayBuffer, {
-        onProgress: (r) => {
-          onProgress?.(
-            DEMUX_PROGRESS_START +
-              0.4 * (DEMUX_PROGRESS_END - DEMUX_PROGRESS_START) * Math.min(1, Math.max(0, r))
-          );
-        },
-      });
-    } catch (demuxErr) {
-      const m = demuxErr instanceof Error ? demuxErr.message : String(demuxErr);
-      logger.warn('[mp3] demux 异常', demuxErr);
-      throw new Error(`抽轨失败：${m}；直解：${directMsg.slice(0, 80)}`);
-    }
-
-    if (!extracted?.aac?.frames?.length) {
-      throw new Error(
-        `未能抽出 AAC 音轨（直解：${directMsg.slice(0, 80)}）。请导出 MP3/M4A 后导入。`
-      );
-    }
-
-    try {
-      const audioBuffer = await decodeAacPayload(extracted.aac, audioCtx, (r) => {
-        onProgress?.(
-          DEMUX_PROGRESS_START +
-            0.4 * (DEMUX_PROGRESS_END - DEMUX_PROGRESS_START) +
-            0.6 * (DEMUX_PROGRESS_END - DEMUX_PROGRESS_START) * Math.min(1, Math.max(0, r))
-        );
-      });
-      logger.info(
-        `[mp3] demux 解码成功 (${extracted.via}, ${extracted.codec}, ${extracted.aac.frames.length} 帧)`
-      );
-      return audioBuffer;
-    } catch (secondErr) {
-      const m = secondErr instanceof Error ? secondErr.message : String(secondErr);
-      logger.warn('[mp3] demux 后解码失败', secondErr);
-      throw new Error(`音轨已抽出但解码失败：${m}`);
-    }
-  }
-}
-
+/**
+ * 浏览器可原生解码的音视频 → 16k mono MP3。
+ * 失败请走 prepareAsrAudio 的抽轨/直传路径。
+ */
 export async function convertToMP3(
   file: File,
   onProgress?: (progress: number) => void
@@ -257,7 +158,6 @@ export async function convertToMP3(
       typeof performance !== 'undefined' ? performance.now() : Date.now();
 
     try {
-      // 部分移动浏览器 AudioContext 默认 suspended
       if (audioCtx.state === 'suspended') {
         try {
           await audioCtx.resume();
@@ -268,17 +168,13 @@ export async function convertToMP3(
 
       onProgress?.(0.02);
       const arrayBuffer = await file.arrayBuffer();
-      onProgress?.(0.06);
+      onProgress?.(0.08);
 
-      const audioBuffer = await decodeWithDemuxFallback(
-        audioCtx,
-        arrayBuffer,
-        file,
-        onProgress
-      );
+      const copy = arrayBuffer.slice(0);
+      const audioBuffer = await audioCtx.decodeAudioData(copy);
 
       if (!audioBuffer.length || audioBuffer.duration <= 0) {
-        throw new Error('音频为空或时长为 0，请检查文件是否含有效音轨');
+        throw new Error('音频为空或时长为 0');
       }
 
       onProgress?.(DECODE_PROGRESS_END);
@@ -286,20 +182,19 @@ export async function convertToMP3(
       const mono = mixToMono(audioBuffer);
       const sourceSampleRate = audioBuffer.sampleRate;
       const durationSec = audioBuffer.duration;
-
       const blob = await encodeInWorker(mono, sourceSampleRate, onProgress);
 
       const ms =
         (typeof performance !== 'undefined' ? performance.now() : Date.now()) -
         t0;
       logger.info(
-        `[mp3] 完成: ${file.name} ${(file.size / 1024 / 1024).toFixed(1)}MB → ${(blob.size / 1024 / 1024).toFixed(2)}MB，${(ms / 1000).toFixed(1)}s，${durationSec.toFixed(1)}s 素材`
+        `[mp3] 重编码完成: ${file.name} ${(file.size / 1024 / 1024).toFixed(1)}MB → ${(blob.size / 1024 / 1024).toFixed(2)}MB，${(ms / 1000).toFixed(1)}s，${durationSec.toFixed(1)}s 素材`
       );
-
       return blob;
     } catch (error) {
-      logger.error('转码失败:', error);
-      throw friendlyDecodeError(error, file.name);
+      const raw = error instanceof Error ? error.message : String(error);
+      logger.info(`[mp3] 原生重编码不可用: ${file.name} — ${raw}`);
+      throw error instanceof Error ? error : new Error(raw);
     } finally {
       try {
         await audioCtx.close();

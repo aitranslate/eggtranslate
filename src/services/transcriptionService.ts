@@ -1,7 +1,7 @@
 /**
  * 转录 Service
- * 取 IndexedDB 中 addFile 已就绪的 MP3 → AssemblyAI → 写字幕。
- * 不再做转码。
+ * 取 IndexedDB 中 addFile 已就绪的 ASR 音频（MP3 / AAC 抽轨 / 原音频）
+ * → AssemblyAI → 写字幕。不再在转录阶段转码。
  */
 
 import { useFilesStore } from '@/stores/filesStore';
@@ -9,8 +9,8 @@ import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { runTranscriptionPipeline } from './transcriptionPipeline';
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
+import { loadAsrAudioFile } from '@/utils/asrAudioStorage';
 import toast from 'react-hot-toast';
-import localforage from 'localforage';
 
 export async function startTranscription(fileId: string): Promise<void> {
   const file = useFilesStore.getState().getFile(fileId);
@@ -27,12 +27,11 @@ export async function startTranscription(fileId: string): Promise<void> {
   useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'active', progress: -1, tokens: 0 });
 
   try {
-    // MP3 必须在 addFile 阶段就转好并持久化。
-    // 找不到说明状态不一致（不该出现），直接报错让用户重传。
-    const mp3Blob = await localforage.getItem<Blob>(`mp3_data:${file.taskId}`);
-    if (!mp3Blob) {
+    // 音频必须在 addFile 阶段准备好（小 MP3 / 抽轨 AAC / 原音频）。
+    const asrFile = await loadAsrAudioFile(file.taskId);
+    if (!asrFile) {
       useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed', progress: 0 });
-      toast.error('MP3 缓存丢失，请重新上传文件');
+      toast.error('音频缓存丢失，请重新上传文件');
       return;
     }
 
@@ -65,9 +64,11 @@ export async function startTranscription(fileId: string): Promise<void> {
       });
     }
 
-    const mp3File = new File([mp3Blob], 'audio.mp3', { type: 'audio/mpeg' });
+    logger.info(
+      `[transcription] 上传 ${asrFile.name} ${(asrFile.size / 1024 / 1024).toFixed(2)}MB (${asrFile.type})`
+    );
 
-    const result = await runTranscriptionPipeline(mp3File, allKeyterms, {
+    const result = await runTranscriptionPipeline(asrFile, allKeyterms, {
       onTranscribing: () => {
         useFilesStore.getState().updatePhase(fileId, 'transcribing', {
           status: 'active',

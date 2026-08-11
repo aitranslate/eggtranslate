@@ -7,8 +7,8 @@ import { logger } from "@/utils/logger";
 
 /**
  * AssemblyAI 转录服务
- * 只负责：上传已就绪的 16k mono MP3 → 拉词级时间戳 → DP 断句。
- * 转码不在这里做（统一在 addFile → convertToMP3）。
+ * 只负责：上传 addFile 准备好的音频（MP3 / AAC 抽轨 / 原音频）
+ * → 拉词级时间戳 → DP 断句。客户端不做浏览器重解码兜底。
  */
 class AssemblyAIService {
   private getKeys(): string[] {
@@ -31,7 +31,7 @@ class AssemblyAIService {
   }
 
   /**
-   * @param audioFile 已由 addFile 转好的 16kHz mono MP3
+   * @param audioFile addFile 缓存的音频（尽量小；不含视频）
    * @param options 热词等
    * @param onProgress 进度：transcribing | segmenting | completed
    */
