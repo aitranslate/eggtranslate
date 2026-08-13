@@ -24,7 +24,7 @@ export const AiSegmentationSettings: React.FC<AiSegmentationSettingsProps> = ({
           onChange={(e) => setEnabled(e.target.checked)}
           data-testid="ai-segmentation-toggle"
         />
-        <span className="text-xs text-[var(--wb-text-2)]">让断句效果更好</span>
+        <span className="text-xs text-[var(--wb-text-2)]">由 AI 辅助断句</span>
       </label>
     </div>
   );
