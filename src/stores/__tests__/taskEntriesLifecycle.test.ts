@@ -232,6 +232,25 @@ describe('recoverInterruptedPhases still pure', () => {
     );
     expect(recovered.phases.transcribing.status).toBe('failed');
   });
+
+  it('marks active segmenting → failed', () => {
+    const recovered = recoverInterruptedPhases(
+      makeTask({
+        entryCount: 0,
+        subtitle_entries: [],
+        phases: {
+          workflow: 'full',
+          converting: { status: 'completed', progress: 100, tokens: 0 },
+          transcribing: { status: 'completed', progress: 100, tokens: 0 },
+          segmenting: { status: 'active', progress: 80, tokens: 9 },
+          translating: { status: 'upcoming', progress: 0, tokens: 0 },
+        },
+      })
+    );
+    expect(recovered.phases.segmenting?.status).toBe('failed');
+    expect(recovered.phases.segmenting?.tokens).toBe(9);
+    expect(recovered.phases.transcribing.status).toBe('failed');
+  });
 });
 
 describe('fileId helper sanity', () => {

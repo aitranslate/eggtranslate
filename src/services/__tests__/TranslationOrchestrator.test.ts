@@ -305,9 +305,37 @@ describe('saveTranslationHistory', () => {
     expect((addHistory.mock.calls[0][0] as Omit<TranslationHistoryEntry, 'timestamp'>).totalTokens).toBe(77);
   });
 
-  it('当 actualCompleted = 0 时不调用 addHistory', async () => {
+  it('仅有原文字幕（未翻译）也写入历史，completedCount 为原文条数', async () => {
     const entries = [makeEntry(1), makeEntry(2)]; // 全 pending
-    const task = makeTask({ taskId: 't1', subtitle_entries: entries });
+    const task = makeTask({
+      taskId: 't1',
+      subtitle_filename: 'talk.mp3',
+      subtitle_entries: entries,
+      phases: {
+        workflow: 'transcribe',
+        converting: { status: 'completed', progress: 100, tokens: 0 },
+        transcribing: { status: 'completed', progress: 100, tokens: 0 },
+        segmenting: { status: 'completed', progress: 100, tokens: 40 },
+        translating: { status: 'upcoming', progress: 0, tokens: 0 },
+      },
+    });
+    useFilesStore.setState({ tasks: [task] });
+
+    const addHistory = vi.fn().mockResolvedValue(undefined);
+    const promise = saveTranslationHistory('t1', 'talk.mp3', 0, addHistory);
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(addHistory).toHaveBeenCalledTimes(1);
+    const arg = addHistory.mock.calls[0][0] as Omit<TranslationHistoryEntry, 'timestamp'>;
+    expect(arg.completedCount).toBe(2);
+    expect(arg.totalTokens).toBe(40);
+    expect(arg.subtitle_entries).toBe(entries);
+    expect(arg.subtitle_entries.every((e) => !e.translatedText)).toBe(true);
+  });
+
+  it('没有任何字幕条目时不调用 addHistory', async () => {
+    const task = makeTask({ taskId: 't1', subtitle_entries: [] });
     useFilesStore.setState({ tasks: [task] });
 
     const addHistory = vi.fn().mockResolvedValue(undefined);

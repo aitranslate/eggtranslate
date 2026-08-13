@@ -1,6 +1,10 @@
 import React, { useState, useCallback } from 'react';
 import { useHistoryStore } from '@/stores/historyStore';
-import { calculateHistoryStats, findHistoryEntry } from '@/utils/historyHelpers';
+import {
+  calculateHistoryStats,
+  findHistoryEntry,
+  resolveHistoryStatus,
+} from '@/utils/historyHelpers';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { backdropFade, overlayPanelMotion } from '@/motion';
 import {
@@ -196,12 +200,19 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
               </div>
             ) : (
               <div className="wb-hist-list in-sheet">
-                {filteredHistory.map((entry) => (
+                {filteredHistory.map((entry) => {
+                  const status = resolveHistoryStatus(entry);
+                  return (
                   <div key={entry.taskId} className="wb-hist-row">
                     <div className="min-w-0">
-                      <div className="wb-hist-name" title={entry.filename}>
-                        <FileText className="inline-block w-3.5 h-3.5 mr-1.5 opacity-50 align-[-2px]" />
-                        {entry.filename}
+                      <div className="wb-hist-name-row">
+                        <div className="wb-hist-name" title={entry.filename}>
+                          <FileText className="inline-block w-3.5 h-3.5 mr-1.5 opacity-50 align-[-2px]" />
+                          {entry.filename}
+                        </div>
+                        <span className={`wb-hist-status is-${status.kind}`}>
+                          {status.label}
+                        </span>
                       </div>
                       <div className="wb-hist-meta">
                         <span className="inline-flex items-center gap-1">
@@ -232,7 +243,8 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -20,9 +20,11 @@ export const useHistoryStore = create<HistoryState>()(
 
       addHistory: async (entry) => {
         const fullEntry: TranslationHistoryEntry = { ...entry, timestamp: Date.now() };
-        // 新在前；超出 HISTORY_MAX_ENTRIES 丢弃最旧
+        const prev = get().history;
+        // 同一任务：转录先入库、翻译后再写入 → 覆盖并顶到最前，避免两条
+        const withoutSame = prev.filter((e) => e.taskId !== entry.taskId);
         set({
-          history: capHistoryEntries([fullEntry, ...get().history], HISTORY_MAX_ENTRIES),
+          history: capHistoryEntries([fullEntry, ...withoutSame], HISTORY_MAX_ENTRIES),
         });
       },
 

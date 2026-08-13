@@ -402,34 +402,35 @@ export async function saveTranslationHistory(
   addHistoryEntry: (entry: Omit<TranslationHistoryEntry, 'timestamp'>) => Promise<void>
 ): Promise<void> {
   try {
-    await new Promise(resolve => setTimeout(resolve, API_CONSTANTS.HISTORY_SAVE_DELAY_MS));
-
+    // 先拍快照再延迟写入：避免转录完成后立刻开译时读到半成品
     const currentTask = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
+    if (!currentTask) return;
 
-    if (currentTask) {
-      // 统一口径：翻译 + 转录 + AI 断句 三阶段 tokens
-      const finalTokens =
-        (currentTask.phases?.translating?.tokens || 0) +
-        (currentTask.phases?.transcribing?.tokens || 0) +
-        (currentTask.phases?.segmenting?.tokens || 0) ||
-        tokensUsed ||
-        0;
-      const actualCompleted =
-        currentTask.subtitle_entries?.filter(
-          (entry: SubtitleEntry) => entry.translationStatus === 'completed'
-        ).length || 0;
+    const entries = currentTask.subtitle_entries ?? [];
+    if (entries.length === 0) return;
 
-      if (actualCompleted > 0) {
-        await addHistoryEntry({
-          taskId,
-          filename,
-          completedCount: actualCompleted,
-          totalTokens: finalTokens,
-          phases: currentTask.phases,
-          subtitle_entries: currentTask.subtitle_entries
-        });
-      }
-    }
+    const finalTokens =
+      (currentTask.phases?.translating?.tokens || 0) +
+      (currentTask.phases?.transcribing?.tokens || 0) +
+      (currentTask.phases?.segmenting?.tokens || 0) ||
+      tokensUsed ||
+      0;
+    const translatedCount = entries.filter(
+      (entry: SubtitleEntry) => entry.translationStatus === 'completed'
+    ).length;
+    // 有译文记已译条数；仅转录记原文字幕条数
+    const completedCount = translatedCount > 0 ? translatedCount : entries.length;
+    const snapshot = {
+      taskId,
+      filename,
+      completedCount,
+      totalTokens: finalTokens,
+      phases: currentTask.phases,
+      subtitle_entries: entries,
+    };
+
+    await new Promise((resolve) => setTimeout(resolve, API_CONSTANTS.HISTORY_SAVE_DELAY_MS));
+    await addHistoryEntry(snapshot);
   } catch (error) {
     const appError = toAppError(error, '保存历史记录失败');
     logger.error(appError.message, appError);

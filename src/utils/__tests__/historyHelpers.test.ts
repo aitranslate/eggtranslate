@@ -3,6 +3,7 @@ import {
   findHistoryEntry,
   calculateHistoryStats,
   capHistoryEntries,
+  resolveHistoryStatus,
   HISTORY_MAX_ENTRIES,
 } from '../historyHelpers';
 import type { FilePhases, TranslationHistoryEntry } from '@/types';
@@ -96,5 +97,36 @@ describe('capHistoryEntries', () => {
 
   it('returns empty for non-positive max', () => {
     expect(capHistoryEntries([makeEntry()], 0)).toEqual([]);
+  });
+});
+
+describe('resolveHistoryStatus', () => {
+  const upcoming = { status: 'upcoming' as const, progress: 0, tokens: 0 };
+  const completed = { status: 'completed' as const, progress: 100, tokens: 0 };
+
+  it('translating completed → 翻译完成', () => {
+    expect(
+      resolveHistoryStatus({
+        phases: {
+          workflow: 'full',
+          converting: completed,
+          transcribing: completed,
+          translating: completed,
+        },
+      })
+    ).toEqual({ label: '翻译完成', kind: 'translated' });
+  });
+
+  it('transcribed only → 转录完成', () => {
+    expect(
+      resolveHistoryStatus({
+        phases: {
+          workflow: 'transcribe',
+          converting: completed,
+          transcribing: completed,
+          translating: upcoming,
+        },
+      })
+    ).toEqual({ label: '转录完成', kind: 'transcribed' });
   });
 });

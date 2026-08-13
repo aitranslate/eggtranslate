@@ -17,7 +17,12 @@ vi.mock('localforage', () => ({
 }));
 
 import { runTranscriptionPipeline } from '../transcriptionPipeline';
+import { saveTranslationHistory } from '../TranslationOrchestrator';
 import localforage from 'localforage';
+
+vi.mock('../TranslationOrchestrator', () => ({
+  saveTranslationHistory: vi.fn().mockResolvedValue(undefined),
+}));
 
 const makeFile = (overrides: {
   id?: string;
@@ -89,6 +94,7 @@ describe('transcriptionService.startTranscription', () => {
       keytermGroups: [],
     });
     vi.clearAllMocks();
+    vi.mocked(saveTranslationHistory).mockResolvedValue(undefined);
   });
 
   it('returns early when file not found', async () => {
@@ -341,9 +347,15 @@ describe('transcriptionService.startTranscription', () => {
         expect(mid.phases.transcribing.status).toBe('completed');
         expect(mid.phases.segmenting?.status).toBe('active');
         callbacks.onAiProgress?.(3, 20);
+        callbacks.onAiTokens?.(40);
+        // 进度会再次触发 onSegmenting；不得把已累加 token 清零
+        callbacks.onSegmenting?.();
+        callbacks.onAiTokens?.(15);
         mid = useFilesStore.getState().tasks[0];
         expect(mid.phases.segmenting?.entryCount).toBe(3);
         expect(mid.phases.segmenting?.totalEntries).toBe(20);
+        // 实时累加，不必等整段结束
+        expect(mid.phases.segmenting?.tokens).toBe(55);
         return { entries: [], language: 'en', tokensUsed: 123 };
       }
     );
@@ -354,6 +366,50 @@ describe('transcriptionService.startTranscription', () => {
     expect(after.phases.transcribing.status).toBe('completed');
     expect(after.phases.segmenting?.status).toBe('completed');
     expect(after.phases.segmenting?.tokens).toBe(123);
+  });
+
+  it('转录生成字幕后写入历史（未译也可入库）', async () => {
+    useFilesStore.setState({
+      tasks: [makeTask(makeFile({ convertingStatus: 'completed' }))],
+    });
+    useTranscriptionStore.setState({ apiKeys: 'test-key' });
+    vi.mocked(localforage.getItem).mockResolvedValue(new Blob(['mp3']));
+
+    const entries = [
+      {
+        id: 1,
+        startTime: '00:00:00,000',
+        endTime: '00:00:01,000',
+        text: 'hello',
+        translatedText: '',
+        translationStatus: 'pending' as const,
+      },
+    ];
+    vi.mocked(runTranscriptionPipeline).mockResolvedValue({
+      entries,
+      language: 'en',
+    });
+
+    await startTranscription('file_t1');
+
+    expect(saveTranslationHistory).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(saveTranslationHistory).mock.calls[0][0]).toBe('t1');
+    expect(vi.mocked(saveTranslationHistory).mock.calls[0][1]).toBe('file_t1.mp3');
+  });
+
+  it('转录结果为空条目时不写历史', async () => {
+    useFilesStore.setState({
+      tasks: [makeTask(makeFile({ convertingStatus: 'completed' }))],
+    });
+    useTranscriptionStore.setState({ apiKeys: 'test-key' });
+    vi.mocked(localforage.getItem).mockResolvedValue(new Blob(['mp3']));
+    vi.mocked(runTranscriptionPipeline).mockResolvedValue({
+      entries: [],
+      language: 'en',
+    });
+
+    await startTranscription('file_t1');
+    expect(saveTranslationHistory).not.toHaveBeenCalled();
   });
 
   it('AI 断句关闭的任务：不产生 segmenting 阶段（行为同旧版）', async () => {

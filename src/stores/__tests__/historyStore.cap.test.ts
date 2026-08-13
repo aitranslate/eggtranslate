@@ -40,4 +40,37 @@ describe('historyStore addHistory cap', () => {
     expect(history[0].taskId).toBe(`task-${HISTORY_MAX_ENTRIES + 2}`);
     expect(history.some((h) => h.taskId === 'task-0')).toBe(false);
   });
+
+  it('same taskId upserts and moves to front (transcribe then translate)', async () => {
+    await useHistoryStore.getState().addHistory({
+      taskId: 'same',
+      filename: 'a.mp3',
+      completedCount: 10,
+      totalTokens: 12,
+      phases,
+      subtitle_entries: [],
+    });
+    await useHistoryStore.getState().addHistory({
+      taskId: 'other',
+      filename: 'b.srt',
+      completedCount: 1,
+      totalTokens: 1,
+      phases,
+      subtitle_entries: [],
+    });
+    await useHistoryStore.getState().addHistory({
+      taskId: 'same',
+      filename: 'a.mp3',
+      completedCount: 10,
+      totalTokens: 88,
+      phases,
+      subtitle_entries: [],
+    });
+
+    const { history } = useHistoryStore.getState();
+    expect(history.filter((h) => h.taskId === 'same')).toHaveLength(1);
+    expect(history[0].taskId).toBe('same');
+    expect(history[0].totalTokens).toBe(88);
+    expect(history[1].taskId).toBe('other');
+  });
 });

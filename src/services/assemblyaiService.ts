@@ -35,12 +35,14 @@ class AssemblyAIService {
    * @param options 热词等；useAiSegmentation 为任务级 AI 断句开关
    * @param onProgress 进度：transcribing | segmenting | completed
    * @param onAiProgress AI 断句兜底进度（已处理/总触发，仅开启时回调）
+   * @param onAiTokens 每次真实 LLM 调用的 token 增量（缓存命中为 0，不回调）
    */
   async transcribeWithSmartSegmentation(
     audioFile: File,
     options: { keyterms?: string[]; useAiSegmentation?: boolean } = {},
     onProgress?: (status: string, percent: number) => void,
-    onAiProgress?: (resolved: number, total: number) => void
+    onAiProgress?: (resolved: number, total: number) => void,
+    onAiTokens?: (delta: number) => void
   ): Promise<{ sentences: AssemblyAISentence[]; language: string; tokensUsed?: number }> {
     try {
       const client = await this.createClient();
@@ -100,7 +102,10 @@ class AssemblyAIService {
             onProgress?.("segmenting", 80 + Math.round((20 * resolved) / total));
           },
           onAiResolved: (_text, _accepted, tokensUsed) => {
-            aiTokensUsed += tokensUsed;
+            if (tokensUsed > 0) {
+              aiTokensUsed += tokensUsed;
+              onAiTokens?.(tokensUsed);
+            }
           },
         });
       } else {

@@ -94,7 +94,7 @@ export function recoverInterruptedPhases(task: SingleTask): SingleTask {
   if (!task.phases) return task;
   let taskChanged = false;
   const newPhases = { ...task.phases };
-  for (const phase of ["converting", "transcribing", "translating"] as const) {
+  for (const phase of ["converting", "transcribing", "segmenting", "translating"] as const) {
     if (newPhases[phase]?.status === "active") {
       newPhases[phase] = {
         status: "failed",
@@ -103,6 +103,20 @@ export function recoverInterruptedPhases(task: SingleTask): SingleTask {
       } as PhaseProgress;
       taskChanged = true;
     }
+  }
+  // 断句中刷新：识别已标完成但字幕未入库 → 识别一并失败，才能重转录
+  const noEntries =
+    (task.entryCount ?? 0) === 0 && (task.subtitle_entries?.length ?? 0) === 0;
+  if (
+    newPhases.segmenting?.status === "failed" &&
+    newPhases.transcribing?.status === "completed" &&
+    noEntries
+  ) {
+    newPhases.transcribing = {
+      ...newPhases.transcribing,
+      status: "failed",
+    };
+    taskChanged = true;
   }
   return taskChanged ? { ...task, phases: newPhases } : task;
 }
@@ -153,7 +167,7 @@ function applyPhasePatch(
     const prev = t.phases[phase];
     const next: PhaseProgress = { ...prev, ...patch };
     if (typeof tokensDelta === "number" && tokensDelta !== 0) {
-      next.tokens = Math.max(0, (prev.tokens || 0) + tokensDelta);
+      next.tokens = Math.max(0, (prev?.tokens || 0) + tokensDelta);
     }
     if (
       typeof patch.progress === "number" &&

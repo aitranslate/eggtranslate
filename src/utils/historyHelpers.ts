@@ -46,3 +46,20 @@ export function calculateHistoryStats(history: TranslationHistoryEntry[]): Histo
     totalTokens: history.reduce((sum, e) => sum + e.totalTokens, 0)
   };
 }
+
+export type HistoryStatusKind = 'translated' | 'transcribed';
+
+export interface HistoryStatus {
+  label: string;
+  kind: HistoryStatusKind;
+}
+
+/** 只看 phases：翻译阶段完成 → 翻译完成；否则转录完成。 */
+export function resolveHistoryStatus(
+  entry: Pick<TranslationHistoryEntry, 'phases'>
+): HistoryStatus {
+  if (entry.phases.translating.status === 'completed') {
+    return { label: '翻译完成', kind: 'translated' };
+  }
+  return { label: '转录完成', kind: 'transcribed' };
+}

@@ -61,7 +61,8 @@ describe('aiSentenceBreakerService', () => {
     });
     const breaker = createAiSentenceBreaker();
     await expect(breaker('prompt A')).resolves.toEqual({ content: 'hello [BR] world', tokensUsed: 10 });
-    await expect(breaker('prompt A')).resolves.toEqual({ content: 'hello [BR] world', tokensUsed: 10 });
+    // 缓存命中不计 token，避免状态栏 / 阶段累计双计
+    await expect(breaker('prompt A')).resolves.toEqual({ content: 'hello [BR] world', tokensUsed: 0 });
     expect(mockedCallLLM).toHaveBeenCalledTimes(1);
   });
 

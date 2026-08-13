@@ -39,7 +39,8 @@ function abortAfter(ms: number): { signal: AbortSignal; clear: () => void } {
 export function createAiSentenceBreaker(): AiBreaker {
   return async (prompt: string): Promise<AiBreakResult> => {
     const hit = responseCache.get(prompt);
-    if (hit) return hit;
+    // 命中缓存不再计 token：本次没有真正打 LLM
+    if (hit) return { content: hit.content, tokensUsed: 0 };
 
     const config = useTranslationConfigStore.getState().config;
     const llm = getActiveLlmConfig(config);

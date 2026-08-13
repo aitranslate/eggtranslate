@@ -153,6 +153,10 @@ export async function startTranslation(
     controller = await deps.beginSession(file.taskId);
 
     const entries = deps.getTaskEntries(file.taskId);
+    if (entries.length === 0) {
+      logger.info('没有可翻译的字幕，跳过');
+      return null;
+    }
 
     // 恢复翻译进度（断点续跑时保持已有进度）
     const restoredProgress = file.phases.translating.progress > 0 ? file.phases.translating.progress : 0;

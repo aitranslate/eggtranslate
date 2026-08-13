@@ -5,8 +5,10 @@
  */
 
 import { useFilesStore } from '@/stores/filesStore';
+import { useHistoryStore } from '@/stores/historyStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { runTranscriptionPipeline } from './transcriptionPipeline';
+import { saveTranslationHistory } from './TranslationOrchestrator';
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { loadAsrAudioFile } from '@/utils/asrAudioStorage';
@@ -93,7 +95,7 @@ export async function startTranscription(fileId: string): Promise<void> {
         },
         // ASR 返回、断句开始：识别完成 → AI 断句阶段激活
         onSegmenting: () => {
-          if (!aiEnabled) return;
+          if (!aiEnabled || segmentingActive) return;
           segmentingActive = true;
           useFilesStore.getState().updatePhase(fileId, 'transcribing', {
             status: 'completed',
@@ -110,6 +112,13 @@ export async function startTranscription(fileId: string): Promise<void> {
           useFilesStore.getState().updatePhase(fileId, 'segmenting', {
             entryCount: resolved,
             totalEntries: total,
+          });
+        },
+        // 与翻译相同：每次真实 LLM 调用立刻 tokensDelta，状态栏右下角即时累加
+        onAiTokens: (delta) => {
+          if (delta <= 0) return;
+          useFilesStore.getState().updatePhase(fileId, 'segmenting', {
+            tokensDelta: delta,
           });
         },
       },
@@ -154,6 +163,16 @@ export async function startTranscription(fileId: string): Promise<void> {
     useFilesStore.getState().replaceTaskEntries(file.taskId, result.entries);
 
     toast.success(`转录完成！生成 ${result.entries.length} 条字幕`);
+
+    // 转录完成即入库：仅原文也可从历史导出；之后翻译完成会按 taskId 覆盖同一条
+    if (result.entries.length > 0) {
+      void saveTranslationHistory(
+        file.taskId,
+        file.name,
+        result.tokensUsed ?? 0,
+        (entry) => useHistoryStore.getState().addHistory(entry)
+      );
+    }
   } catch (error) {
     const appError = toAppError(error, '转录失败');
     logger.error(appError.message, appError);

@@ -14,6 +14,8 @@ export interface ProgressCallbacks {
   onProgress?: (percent: number) => void;
   /** AI 断句兜底进度：已处理句数 / 总触发句数（仅开启 AI 断句时回调）。 */
   onAiProgress?: (resolved: number, total: number) => void;
+  /** 每次真实 LLM 断句调用的 token 增量（与翻译 tokensDelta 同源）。 */
+  onAiTokens?: (delta: number) => void;
   onCompleted?: () => void;
   onError?: (error: string) => void;
 }
@@ -51,7 +53,8 @@ export const runTranscriptionPipeline = async (
             callbacks.onCompleted?.();
           }
         },
-        (resolved, total) => callbacks.onAiProgress?.(resolved, total)
+        (resolved, total) => callbacks.onAiProgress?.(resolved, total),
+        (delta) => callbacks.onAiTokens?.(delta)
       );
 
     const entries: SubtitleEntry[] = [];

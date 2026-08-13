@@ -2889,6 +2889,13 @@ html.dark .wb-term-inline:focus,
   background: var(--wb-panel-2);
 }
 
+.wb-hist-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .wb-hist-name {
   font-size: 14px;
   font-weight: 550;
@@ -2897,6 +2904,27 @@ html.dark .wb-term-inline:focus,
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.wb-hist-status {
+  flex-shrink: 0;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 18px;
+}
+
+.wb-hist-status.is-translated {
+  color: color-mix(in srgb, var(--apple-success) 80%, var(--wb-text));
+  background: var(--apple-success-soft, #ecfdf5);
+}
+
+.wb-hist-status.is-transcribed {
+  color: var(--wb-brand);
+  background: var(--wb-brand-soft);
 }
 
 .wb-hist-meta {
