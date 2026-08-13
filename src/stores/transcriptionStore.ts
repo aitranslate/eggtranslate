@@ -19,9 +19,12 @@ interface TranscriptionStore {
   defaultKeytermGroupId: string | null;
   setDefaultKeytermGroupId: (id: string | null) => void;
   subtitleLengthPreset: SubtitleLengthPreset;
+  /** AI 断句兜底：规则断句找不到好切点时交给 LLM（翻译配置的 activeProfile） */
+  aiSegmentationEnabled: boolean;
   updateKeytermGroups: (groups: KeytermGroup[]) => Promise<void>;
   setApiKeys: (keys: string) => void;
   setSubtitleLengthPreset: (preset: SubtitleLengthPreset) => void;
+  setAiSegmentationEnabled: (enabled: boolean) => void;
 }
 
 const DEFAULT_GROUPS: KeytermGroup[] = [
@@ -35,6 +38,7 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
       keytermGroups: DEFAULT_GROUPS,
       defaultKeytermGroupId: null,
       subtitleLengthPreset: 'standard',
+      aiSegmentationEnabled: false,
 
       updateKeytermGroups: async (groups) => {
         set({ keytermGroups: groups });
@@ -52,6 +56,10 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
       setSubtitleLengthPreset: (preset) => {
         set({ subtitleLengthPreset: preset });
       },
+
+      setAiSegmentationEnabled: (enabled) => {
+        set({ aiSegmentationEnabled: enabled });
+      },
     }),
     {
       name: 'transcription-storage',
@@ -61,6 +69,7 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
         keytermGroups: state.keytermGroups,
         subtitleLengthPreset: state.subtitleLengthPreset,
         defaultKeytermGroupId: state.defaultKeytermGroupId,
+        aiSegmentationEnabled: state.aiSegmentationEnabled,
       }),
     }
   )
@@ -72,3 +81,5 @@ export const useApiKeys = () => useTranscriptionStore((state) => state.apiKeys);
 export const useSetApiKeys = () => useTranscriptionStore((state) => state.setApiKeys);
 export const useSubtitleLengthPreset = () => useTranscriptionStore((state) => state.subtitleLengthPreset);
 export const useSetSubtitleLengthPreset = () => useTranscriptionStore((state) => state.setSubtitleLengthPreset);
+export const useAiSegmentationEnabled = () => useTranscriptionStore((state) => state.aiSegmentationEnabled);
+export const useSetAiSegmentationEnabled = () => useTranscriptionStore((state) => state.setAiSegmentationEnabled);

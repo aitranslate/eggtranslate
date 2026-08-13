@@ -80,10 +80,23 @@ class AssemblyAIService {
       onProgress?.("segmenting", 80);
       const preset =
         useTranscriptionStore.getState().subtitleLengthPreset || "standard";
-      const { segmentWords } = await import("@/services/sentenceSegmentation");
-      const segments = segmentWords(words, languageCode, preset, {
-        watchabilityMerge: true,
-      });
+      const { segmentWords, segmentWordsWithAiFallback } = await import("@/services/sentenceSegmentation");
+
+      let segments;
+      if (useTranscriptionStore.getState().aiSegmentationEnabled) {
+        // AI 兜底：仅对「必须切且无好切点」的 span 调 LLM；失败回退规则结果。
+        const { createAiSentenceBreaker } = await import(
+          "@/services/aiSentenceBreakerService"
+        );
+        segments = await segmentWordsWithAiFallback(words, languageCode, preset, {
+          aiBreaker: createAiSentenceBreaker(),
+          watchabilityMerge: true,
+        });
+      } else {
+        segments = segmentWords(words, languageCode, preset, {
+          watchabilityMerge: true,
+        });
+      }
 
       logger.info("DP 断句完成，共", segments.length, "句，语言:", languageCode);
       onProgress?.("completed", 100);
