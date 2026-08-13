@@ -1,7 +1,7 @@
 {
   "name": "eggtranslate",
   "private": true,
-  "version": "2.3.21",
+  "version": "2.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -21,6 +21,7 @@
     "test:e2e:install": "npm install -g agent-browser && agent-browser install"
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@tanstack/react-virtual": "^3.13.26",
     "assemblyai": "^4.36.4",
     "framer-motion": "^12.23.12",
