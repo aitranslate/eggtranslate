@@ -253,7 +253,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <section className="wb-drawer-section">
                 <header className="wb-prefs-section-head">
                   <h3>高级参数</h3>
-                  <p>上下文、批次与限速，一般保持默认即可</p>
+                  <p>上下文、批次与并发，一般保持默认即可</p>
                 </header>
                 <div className="wb-prefs-block">
                   <TranslationSettings

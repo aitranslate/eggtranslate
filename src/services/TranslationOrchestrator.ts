@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { API_CONSTANTS } from '@/constants/api';
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
+import { mapPool } from '@/utils/asyncPool';
 
 export interface BatchInfo {
   batchIndex: number;
@@ -323,27 +324,18 @@ export async function executeTranslation(
     );
   };
 
-  // 按线程数分组处理批次
-  for (let i = 0; i < batchesToTranslate.length; i += config.threadCount) {
-    const currentBatchGroup = batchesToTranslate.slice(i, i + config.threadCount);
-
-    const batchPromises = currentBatchGroup.map(batch =>
+  try {
+    await mapPool(batchesToTranslate, config.threadCount, (batch) =>
       processBatch(
         batch,
         controller,
         callbacks,
-        callbacks.formatTermsForPrompt,  // 传递格式化函数
+        callbacks.formatTermsForPrompt,
         updateProgressCallback
       )
     );
-
-    // 新增：批次失败立即中断
-    try {
-      await Promise.all(batchPromises);
-    } catch (error) {
-      // 任何批次失败 → 抛出错误中断整个翻译
-      throw new Error(`批次翻译失败: ${error instanceof Error ? error.message : String(error)}`);
-    }
+  } catch (error) {
+    throw new Error(`批次翻译失败: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   // 补扫：主循环后仍 pending/missing 的行再跑一轮（流式缺 key 落 missing 后可再凑）
@@ -353,26 +345,18 @@ export async function executeTranslation(
     if (incomplete.length > 0) {
       logger.info(`主循环后补扫 ${incomplete.length} 条未完成译文`);
       const recoveryBatches = createTranslationBatches(latest, config, callbacks);
-      for (let i = 0; i < recoveryBatches.length; i += config.threadCount) {
-        if (controller.signal.aborted) break;
-        const group = recoveryBatches.slice(i, i + config.threadCount);
-        try {
-          await Promise.all(
-            group.map((batch) =>
-              processBatch(
-                batch,
-                controller,
-                callbacks,
-                callbacks.formatTermsForPrompt,
-                updateProgressCallback
-              )
-            )
-          );
-        } catch (error) {
-          // 补扫失败不整单推翻：已有译文保留，缺条维持 missing
-          logger.error('补扫批次失败（保留已译结果）:', error);
-          break;
-        }
+      try {
+        await mapPool(recoveryBatches, config.threadCount, (batch) =>
+          processBatch(
+            batch,
+            controller,
+            callbacks,
+            callbacks.formatTermsForPrompt,
+            updateProgressCallback
+          )
+        );
+      } catch (error) {
+        logger.error('补扫批次失败（保留已译结果）:', error);
       }
     }
   }

@@ -2,6 +2,7 @@ import type { AssemblyAI } from "assemblyai";
 import { ASSEMBLYAI_CONFIG } from "@/constants/assemblyai";
 import { toAppError } from "@/utils/errors";
 import { useTranscriptionStore } from "@/stores/transcriptionStore";
+import { useTranslationConfigStore } from "@/stores/translationConfigStore";
 import type { AssemblyAISentence } from "@/utils/subtitleSegmentation";
 import { logger } from "@/utils/logger";
 
@@ -93,8 +94,11 @@ class AssemblyAIService {
         const { createAiSentenceBreaker } = await import(
           "@/services/aiSentenceBreakerService"
         );
+        const threadCount =
+          useTranslationConfigStore.getState().config.threadCount || 4;
         segments = await segmentWordsWithAiFallback(words, languageCode, preset, {
           aiBreaker: createAiSentenceBreaker(),
+          concurrency: threadCount,
           watchabilityMerge: true,
           // 断句阶段 80→100 进度：按已完成的 AI 句数推进
           onAiProgress: (resolved, total) => {

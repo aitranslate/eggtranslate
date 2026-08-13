@@ -108,7 +108,7 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
                   }`}
                 />
                 <span>
-                  上下文 {config.contextBefore}/{config.contextAfter} · 批次 {config.batchSize} · 线程{' '}
+                  上下文 {config.contextBefore}/{config.contextAfter} · 批次 {config.batchSize} · 并发{' '}
                   {config.threadCount}
                   {config.rpm ? ` · RPM ${config.rpm}` : ''}
                 </span>
@@ -144,7 +144,7 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
                 <h3 className="apple-heading-small">翻译参数</h3>
                 {!paramsOpen && (
                   <span className="text-xs text-[var(--wb-text-3)] font-normal ml-1">
-                    上下文 {config.contextBefore}/{config.contextAfter} · 批次 {config.batchSize} · 线程{' '}
+                    上下文 {config.contextBefore}/{config.contextAfter} · 批次 {config.batchSize} · 并发{' '}
                     {config.threadCount}
                   </span>
                 )}
@@ -218,7 +218,7 @@ function ParamsFields({
           />
         </div>
         <div>
-          <label className={labelCls}>线程数</label>
+          <label className={labelCls}>LLM 并发</label>
           <input
             type="number"
             min="1"
@@ -226,6 +226,8 @@ function ParamsFields({
             value={config.threadCount}
             onChange={(e) => onConfigChange('threadCount', parseInt(e.target.value))}
             className={inputClass}
+            title="批译与 AI 断句共用"
+            aria-label="LLM 并发，批译与 AI 断句共用"
           />
         </div>
       </div>

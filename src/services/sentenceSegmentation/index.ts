@@ -3,6 +3,7 @@
 // AI 兜底（segmentWordsWithAiFallback）：仅对「必须切且无好切点」的 span 调一次 AI 找断点，
 // 失败一律回退 DP 结果 —— 关闭 AI 与开启失败时，行为与 segmentWords 完全一致。
 
+import { mapPool } from '@/utils/asyncPool';
 import { getProfile, joinTokenTexts, tokenize } from './profiles';
 import { splitTextToSentences, mapSentencesToWordRanges } from './hardSplit';
 import { splitSpanByDp } from './softSplit';
@@ -150,7 +151,7 @@ export function segmentWords(
 
 export interface SegmentWordsAiOptions {
   aiBreaker: AiBreaker;
-  /** AI 调用并发，默认 3。 */
+  /** LLM 并发，默认 4（与设置 threadCount 一致）。 */
   concurrency?: number;
   /** 词内拆分半片最短毫秒，默认 MIN_PIECE_MS。 */
   minPieceMs?: number;
@@ -159,23 +160,6 @@ export interface SegmentWordsAiOptions {
   onAiResolved?: (spanText: string, accepted: boolean, tokensUsed: number) => void;
   /** 断句进度：已处理 AI 句数 / 总触发句数（未触发 AI 的文件不会回调）。 */
   onAiProgress?: (resolved: number, total: number) => void;
-}
-
-async function runPool<T>(
-  items: T[],
-  worker: (item: T, index: number) => Promise<void>,
-  concurrency: number,
-): Promise<void> {
-  let idx = 0;
-  const size = Math.min(Math.max(1, concurrency), Math.max(1, items.length));
-  const runners = Array.from({ length: size }, async () => {
-    while (true) {
-      const i = idx++;
-      if (i >= items.length) return;
-      await worker(items[i], i);
-    }
-  });
-  await Promise.all(runners);
 }
 
 /**
@@ -217,39 +201,35 @@ export async function segmentWordsWithAiFallback(
   >();
   let resolvedCount = 0;
 
-  await runPool(
-    aiSpans,
-    async (span) => {
-      const spanText = joinTokenTexts(span.info.tokens.map((t) => t.word), profile);
-      let accepted = false;
-      let tokensUsed = 0;
-      try {
-        const result = await options.aiBreaker(buildAiBreakPrompt(spanText, profile, limit, charLimit));
-        tokensUsed = result.tokensUsed ?? 0;
-        const marked = result.content;
-        if (marked != null) {
-          const marks = mapBreakMarksToCuts(marked, span.info.tokens, profile);
-          if (marks.length > 0) {
-            const { pieces, cuts } = materializeCuts(
-              span.info.tokens,
-              marks,
-              options.minPieceMs ?? MIN_PIECE_MS,
-            );
-            if (cuts.length > 0 && segmentsWithinLimits(pieces, cuts, profile, limit, charLimit)) {
-              aiResults.set(span.idx, { pieces, cuts });
-              accepted = true;
-            }
+  await mapPool(aiSpans, options.concurrency ?? 4, async (span) => {
+    const spanText = joinTokenTexts(span.info.tokens.map((t) => t.word), profile);
+    let accepted = false;
+    let tokensUsed = 0;
+    try {
+      const result = await options.aiBreaker(buildAiBreakPrompt(spanText, profile, limit, charLimit));
+      tokensUsed = result.tokensUsed ?? 0;
+      const marked = result.content;
+      if (marked != null) {
+        const marks = mapBreakMarksToCuts(marked, span.info.tokens, profile);
+        if (marks.length > 0) {
+          const { pieces, cuts } = materializeCuts(
+            span.info.tokens,
+            marks,
+            options.minPieceMs ?? MIN_PIECE_MS,
+          );
+          if (cuts.length > 0 && segmentsWithinLimits(pieces, cuts, profile, limit, charLimit)) {
+            aiResults.set(span.idx, { pieces, cuts });
+            accepted = true;
           }
         }
-      } catch {
-        // AI 任何异常 → 回退 DP
       }
-      resolvedCount++;
-      options.onAiProgress?.(resolvedCount, aiSpans.length);
-      options.onAiResolved?.(spanText, accepted, tokensUsed);
-    },
-    options.concurrency ?? 3,
-  );
+    } catch {
+      // AI 任何异常 → 回退 DP
+    }
+    resolvedCount++;
+    options.onAiProgress?.(resolvedCount, aiSpans.length);
+    options.onAiResolved?.(spanText, accepted, tokensUsed);
+  });
 
   // 第二遍：按 span 顺序产出 DpSegment
   const out: DpSegment[] = [];
