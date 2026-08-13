@@ -34,10 +34,14 @@ export const MobileTaskCard = memo(function MobileTaskCard({
   onOpen,
 }: MobileTaskCardProps) {
   const displayPhases = useMemo(() => {
-    return file.fileType === 'srt'
-      ? ALL_PHASES.filter((p) => p !== 'converting' && p !== 'transcribing')
-      : ALL_PHASES.filter((p) => p !== 'converting');
-  }, [file.fileType]);
+    const base =
+      file.fileType === 'srt'
+        ? ALL_PHASES.filter(
+            (p) => p !== 'converting' && p !== 'transcribing' && p !== 'segmenting'
+          )
+        : ALL_PHASES.filter((p) => p !== 'converting');
+    return base.filter((p) => p !== 'segmenting' || Boolean(file.phases.segmenting));
+  }, [file.fileType, file.phases.segmenting]);
 
   const badge = getCardBadge(file.phases, displayPhases, isQueued, queuePosition);
   const pct =

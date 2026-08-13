@@ -90,10 +90,15 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
   });
 
   const displayPhases = useMemo(() => {
-    return file.fileType === 'srt'
-      ? ALL_PHASES.filter((p) => p !== 'converting' && p !== 'transcribing')
-      : ALL_PHASES.filter((p) => p !== 'converting');
-  }, [file.fileType]);
+    const base =
+      file.fileType === 'srt'
+        ? ALL_PHASES.filter(
+            (p) => p !== 'converting' && p !== 'transcribing' && p !== 'segmenting'
+          )
+        : ALL_PHASES.filter((p) => p !== 'converting');
+    // AI 断句 chip 仅在该任务创建时带 AI 断句阶段才显示
+    return base.filter((p) => p !== 'segmenting' || Boolean(file.phases.segmenting));
+  }, [file.fileType, file.phases.segmenting]);
 
   const allPhasesDone = useMemo(
     () => displayPhases.every((p) => file.phases[p]?.status === 'completed'),
@@ -325,7 +330,15 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
             {displayPhases.map((phase) => {
               const st = file.phases[phase]?.status;
               const err = file.phases[phase]?.errorMessage;
-              const label = phase === 'transcribing' ? '识别' : phaseTranslateLabel;
+              const seg = file.phases.segmenting;
+              const label =
+                phase === 'transcribing'
+                  ? '识别'
+                  : phase === 'segmenting'
+                    ? st === 'active' && seg?.totalEntries && seg.entryCount != null
+                      ? `AI断句 ${seg.entryCount}/${seg.totalEntries}`
+                      : 'AI断句'
+                    : phaseTranslateLabel;
               return (
                 <span
                   key={phase}

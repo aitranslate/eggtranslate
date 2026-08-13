@@ -26,6 +26,8 @@ export async function startTranscription(fileId: string): Promise<void> {
   // 避免出现"按钮 处理中 但 phase 还是 未开始"的不一致状态。
   useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'active', progress: -1, tokens: 0 });
 
+  let segmentingActive = false;
+
   try {
     // 音频必须在 addFile 阶段准备好（小 MP3 / 抽轨 AAC / 原音频）。
     const asrFile = await loadAsrAudioFile(file.taskId);
@@ -68,27 +70,51 @@ export async function startTranscription(fileId: string): Promise<void> {
       `[transcription] 上传 ${asrFile.name} ${(asrFile.size / 1024 / 1024).toFixed(2)}MB (${asrFile.type})`
     );
 
-    const result = await runTranscriptionPipeline(asrFile, allKeyterms, {
-      onTranscribing: () => {
-        useFilesStore.getState().updatePhase(fileId, 'transcribing', {
-          status: 'active',
-          progress: -1,
-          tokens: 0,
-        });
+    // 任务级 AI 断句开关（创建任务时从全局设置快照，之后改设置不影响本任务）
+    const aiEnabled = file.aiSegmentationEnabled === true;
+
+    const result = await runTranscriptionPipeline(
+      asrFile,
+      allKeyterms,
+      {
+        onTranscribing: () => {
+          useFilesStore.getState().updatePhase(fileId, 'transcribing', {
+            status: 'active',
+            progress: -1,
+            tokens: 0,
+          });
+        },
+        onProgress: (percent) => {
+          useFilesStore.getState().updatePhase(
+            fileId,
+            segmentingActive ? 'segmenting' : 'transcribing',
+            { progress: percent }
+          );
+        },
+        // ASR 返回、断句开始：识别完成 → AI 断句阶段激活
+        onSegmenting: () => {
+          if (!aiEnabled) return;
+          segmentingActive = true;
+          useFilesStore.getState().updatePhase(fileId, 'transcribing', {
+            status: 'completed',
+            progress: 100,
+          });
+          useFilesStore.getState().updatePhase(fileId, 'segmenting', {
+            status: 'active',
+            progress: -1,
+            tokens: 0,
+          });
+        },
+        // AI 断句兜底进度：写入 entryCount/totalEntries，UI 显示「AI断句 n/m」
+        onAiProgress: (resolved, total) => {
+          useFilesStore.getState().updatePhase(fileId, 'segmenting', {
+            entryCount: resolved,
+            totalEntries: total,
+          });
+        },
       },
-      onProgress: (percent) => {
-        useFilesStore.getState().updatePhase(fileId, 'transcribing', {
-          progress: percent,
-        });
-      },
-      // AI 断句兜底进度：写入 entryCount/totalEntries，状态栏显示「断句 n/m」
-      onAiProgress: (resolved, total) => {
-        useFilesStore.getState().updatePhase(fileId, 'transcribing', {
-          entryCount: resolved,
-          totalEntries: total,
-        });
-      },
-    });
+      { useAiSegmentation: aiEnabled }
+    );
 
     // 先写 phase 元数据，再 replaceTaskEntries（权威 hydrate + dirty flush）
     useFilesStore.setState((state) => ({
@@ -102,13 +128,24 @@ export async function startTranscription(fileId: string): Promise<void> {
                 transcribing: {
                   status: 'completed',
                   progress: 100,
-                  // AI 断句兜底的 LLM 消耗，统一记录在转录阶段 tokens（历史/状态栏同源）
-                  tokens: result.tokensUsed ?? 0,
+                  tokens: 0,
                   language: result.language,
                   entryCount: result.entries.length,
                   totalEntries: result.entries.length,
                   keytermGroupName: selectedKeytermGroup?.name,
                 },
+                // AI 断句阶段的 LLM 消耗统一记录在此（历史/状态栏同源）
+                ...(aiEnabled
+                  ? {
+                      segmenting: {
+                        status: 'completed' as const,
+                        progress: 100,
+                        tokens: result.tokensUsed ?? 0,
+                        entryCount: result.entries.length,
+                        totalEntries: result.entries.length,
+                      },
+                    }
+                  : {}),
               },
             }
           : t
@@ -125,5 +162,8 @@ export async function startTranscription(fileId: string): Promise<void> {
     // pipeline 抛错时无条件标 transcribing 失败（不论之前是 upcoming 还是 active）
     // converting 由 addFile 阶段负责，这里不动
     useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed', progress: 0 });
+    if (segmentingActive) {
+      useFilesStore.getState().updatePhase(fileId, 'segmenting', { status: 'failed', progress: 0 });
+    }
   }
 }

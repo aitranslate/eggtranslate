@@ -47,13 +47,14 @@ export function hasActivePhase(phases: FilePhases | null | undefined): boolean {
   return (
     phases.converting?.status === 'active' ||
     phases.transcribing?.status === 'active' ||
+    phases.segmenting?.status === 'active' ||
     phases.translating?.status === 'active'
   );
 }
 
 // ---------- 失败信息 ----------
 
-const PHASE_ORDER: ProgressPhase[] = ['translating', 'transcribing', 'converting'];
+const PHASE_ORDER: ProgressPhase[] = ['translating', 'segmenting', 'transcribing', 'converting'];
 
 /** 取第一个失败阶段的 errorMessage（优先翻译 → 转录 → 转码） */
 export function getFailedPhaseError(

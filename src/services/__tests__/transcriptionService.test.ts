@@ -28,6 +28,8 @@ const makeFile = (overrides: {
   convertingStatus?: PhaseProgress['status'];
   workflow?: WorkflowType;
   selectedKeytermGroupId?: string | null;
+  aiSegmentationEnabled?: boolean;
+  segmentingStatus?: PhaseProgress['status'];
 } = {}): SubtitleFileMetadata => {
   const taskId = overrides.taskId ?? 't1';
   const id = overrides.id ?? `file_${taskId}`;
@@ -45,10 +47,20 @@ const makeFile = (overrides: {
     fileRef: overrides.fileRef,
     duration: undefined,
     selectedKeytermGroupId: overrides.selectedKeytermGroupId ?? null,
+    aiSegmentationEnabled: overrides.aiSegmentationEnabled,
     phases: {
       workflow: overrides.workflow ?? 'transcribe',
       converting: { status: overrides.convertingStatus ?? 'upcoming', progress: 0, tokens: 0 },
       transcribing: { status: overrides.transcribingStatus ?? 'upcoming', progress: 0, tokens: 0 },
+      ...(overrides.aiSegmentationEnabled
+        ? {
+            segmenting: {
+              status: overrides.segmentingStatus ?? 'upcoming',
+              progress: 0,
+              tokens: 0,
+            },
+          }
+        : {}),
       translating: { status: 'upcoming', progress: 0, tokens: 0 },
     },
   };
@@ -63,6 +75,7 @@ const makeTask = (file: SubtitleFileMetadata): SingleTask => ({
   fileSize: file.fileSize,
   fileRef: file.fileRef,
   selectedKeytermGroupId: file.selectedKeytermGroupId ?? null,
+  aiSegmentationEnabled: file.aiSegmentationEnabled,
   index: 0,
   entryCount: 0,
   translatedCount: 0,
@@ -307,5 +320,85 @@ describe('transcriptionService.startTranscription', () => {
     const after = useFilesStore.getState().tasks[0];
     expect(after.phases.transcribing.status).toBe('completed');
     expect(after.phases.transcribing.keytermGroupName).toBeUndefined();
+  });
+
+  it('AI 断句任务：识别完成后激活 segmenting 阶段并记录进度与 tokens', async () => {
+    useFilesStore.setState({
+      tasks: [makeTask(makeFile({
+        convertingStatus: 'completed',
+        aiSegmentationEnabled: true,
+      }))],
+    });
+    useTranscriptionStore.setState({ apiKeys: 'test-key' });
+    vi.mocked(localforage.getItem).mockResolvedValue(new Blob(['mp3']));
+
+    vi.mocked(runTranscriptionPipeline).mockImplementation(
+      async (_file, _keyterms, callbacks, options) => {
+        expect(options).toEqual({ useAiSegmentation: true });
+        callbacks.onSegmenting?.();
+        // segmenting 激活后：识别已完成
+        let mid = useFilesStore.getState().tasks[0];
+        expect(mid.phases.transcribing.status).toBe('completed');
+        expect(mid.phases.segmenting?.status).toBe('active');
+        callbacks.onAiProgress?.(3, 20);
+        mid = useFilesStore.getState().tasks[0];
+        expect(mid.phases.segmenting?.entryCount).toBe(3);
+        expect(mid.phases.segmenting?.totalEntries).toBe(20);
+        return { entries: [], language: 'en', tokensUsed: 123 };
+      }
+    );
+
+    await startTranscription('file_t1');
+
+    const after = useFilesStore.getState().tasks[0];
+    expect(after.phases.transcribing.status).toBe('completed');
+    expect(after.phases.segmenting?.status).toBe('completed');
+    expect(after.phases.segmenting?.tokens).toBe(123);
+  });
+
+  it('AI 断句关闭的任务：不产生 segmenting 阶段（行为同旧版）', async () => {
+    useFilesStore.setState({
+      tasks: [makeTask(makeFile({ convertingStatus: 'completed' }))],
+    });
+    useTranscriptionStore.setState({ apiKeys: 'test-key' });
+    vi.mocked(localforage.getItem).mockResolvedValue(new Blob(['mp3']));
+
+    vi.mocked(runTranscriptionPipeline).mockImplementation(
+      async (_file, _keyterms, callbacks, options) => {
+        expect(options).toEqual({ useAiSegmentation: false });
+        callbacks.onSegmenting?.();
+        return { entries: [], language: 'en' };
+      }
+    );
+
+    await startTranscription('file_t1');
+
+    const after = useFilesStore.getState().tasks[0];
+    expect(after.phases.transcribing.status).toBe('completed');
+    expect(after.phases.segmenting).toBeUndefined();
+  });
+
+  it('AI 断句阶段失败 → segmenting 标记 failed', async () => {
+    useFilesStore.setState({
+      tasks: [makeTask(makeFile({
+        convertingStatus: 'completed',
+        aiSegmentationEnabled: true,
+      }))],
+    });
+    useTranscriptionStore.setState({ apiKeys: 'test-key' });
+    vi.mocked(localforage.getItem).mockResolvedValue(new Blob(['mp3']));
+
+    vi.mocked(runTranscriptionPipeline).mockImplementation(
+      async (_file, _keyterms, callbacks) => {
+        callbacks.onSegmenting?.();
+        throw new Error('ai break failed');
+      }
+    );
+
+    await startTranscription('file_t1');
+
+    const after = useFilesStore.getState().tasks[0];
+    expect(after.phases.transcribing.status).toBe('failed');
+    expect(after.phases.segmenting?.status).toBe('failed');
   });
 });

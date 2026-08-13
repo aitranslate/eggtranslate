@@ -16,6 +16,8 @@ export interface LoadFileOptions {
   defaultSourceLanguage?: string;
   /** 创建任务时写入的默认目标语言（来自全局设置） */
   defaultTargetLanguage?: string;
+  /** 创建任务时写入的 AI 断句开关（来自全局设置，音视频任务生效） */
+  defaultAiSegmentationEnabled?: boolean;
 }
 
 export interface LoadFileResult {
@@ -121,11 +123,17 @@ export async function loadFromFile(
       task: newTask
     };
   } else {
+    // 音视频：按全局设置快照决定是否带 AI 断句阶段（之后改设置不影响本任务）
+    const aiEnabled = options.defaultAiSegmentationEnabled === true;
+    const phases = createInitialPhases(false, false);
+    if (aiEnabled) {
+      phases.segmenting = { ...UPCOMING };
+    }
     const newTask: SingleTask = {
       taskId,
       subtitle_entries: [],
       subtitle_filename: file.name,
-      phases: createInitialPhases(false, false),
+      phases,
       index,
       fileType,
       fileSize: file.size,
@@ -133,6 +141,7 @@ export async function loadFromFile(
       selectedKeytermGroupId,
       sourceLanguage,
       targetLanguage,
+      aiSegmentationEnabled: aiEnabled,
       entryCount: 0,
       translatedCount: 0,
     };
@@ -148,12 +157,13 @@ export async function loadFromFile(
         lastModified: file.lastModified,
         entryCount: 0,
         translatedCount: 0,
-        phases: createInitialPhases(false, false),
+        phases,
         tokensUsed: 0,
         entriesVersion: 0,
         selectedKeytermGroupId,
         sourceLanguage,
         targetLanguage,
+        aiSegmentationEnabled: aiEnabled,
         fileRef: file
       },
       task: newTask
@@ -199,6 +209,7 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
     selectedKeytermGroupId: task.selectedKeytermGroupId ?? null,
     sourceLanguage: task.sourceLanguage,
     targetLanguage: task.targetLanguage,
+    aiSegmentationEnabled: task.aiSegmentationEnabled,
     translationPath: task.translationPath,
     agentSnapshot: task.agentSnapshot ?? null,
     fileRef: task.fileRef

@@ -32,13 +32,13 @@ class AssemblyAIService {
 
   /**
    * @param audioFile addFile 缓存的音频（尽量小；不含视频）
-   * @param options 热词等
+   * @param options 热词等；useAiSegmentation 为任务级 AI 断句开关
    * @param onProgress 进度：transcribing | segmenting | completed
    * @param onAiProgress AI 断句兜底进度（已处理/总触发，仅开启时回调）
    */
   async transcribeWithSmartSegmentation(
     audioFile: File,
-    options: { keyterms?: string[] } = {},
+    options: { keyterms?: string[]; useAiSegmentation?: boolean } = {},
     onProgress?: (status: string, percent: number) => void,
     onAiProgress?: (resolved: number, total: number) => void
   ): Promise<{ sentences: AssemblyAISentence[]; language: string; tokensUsed?: number }> {
@@ -86,7 +86,7 @@ class AssemblyAIService {
 
       let segments;
       let aiTokensUsed = 0;
-      if (useTranscriptionStore.getState().aiSegmentationEnabled) {
+      if (options.useAiSegmentation) {
         // AI 兜底：仅对「必须切且无好切点」的 span 调 LLM；失败回退规则结果。
         const { createAiSentenceBreaker } = await import(
           "@/services/aiSentenceBreakerService"

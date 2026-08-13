@@ -455,6 +455,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     return (
       p.converting?.status === 'active' ||
       p.transcribing?.status === 'active' ||
+      p.segmenting?.status === 'active' ||
       p.translating?.status === 'active'
     );
   }, [file?.phases]);

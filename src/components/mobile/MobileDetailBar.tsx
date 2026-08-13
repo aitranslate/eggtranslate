@@ -41,10 +41,14 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
   const isQueued = queuePosition > 0 && !isActive;
 
   const displayPhases = useMemo(() => {
-    return file.fileType === 'srt'
-      ? ALL_PHASES.filter((p) => p !== 'converting' && p !== 'transcribing')
-      : ALL_PHASES.filter((p) => p !== 'converting');
-  }, [file.fileType]);
+    const base =
+      file.fileType === 'srt'
+        ? ALL_PHASES.filter(
+            (p) => p !== 'converting' && p !== 'transcribing' && p !== 'segmenting'
+          )
+        : ALL_PHASES.filter((p) => p !== 'converting');
+    return base.filter((p) => p !== 'segmenting' || Boolean(file.phases.segmenting));
+  }, [file.fileType, file.phases.segmenting]);
 
   const allPhasesDone = useMemo(
     () => displayPhases.every((p) => file.phases[p]?.status === 'completed'),
@@ -63,6 +67,7 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
     isQueued ||
     file.phases.converting.status === 'active' ||
     file.phases.transcribing.status === 'active' ||
+    file.phases.segmenting?.status === 'active' ||
     file.phases.translating.status === 'active';
 
   const canTranscribe = isAudioVideo && !isBusy && canRetranscribe(file) && !allPhasesDone;
@@ -147,6 +152,13 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
     const done = file.translatedCount ?? 0;
     if (isBusy) {
       if (file.phases.transcribing.status === 'active') return '转录中…';
+      if (file.phases.segmenting?.status === 'active') {
+        const seg = file.phases.segmenting;
+        if (seg?.totalEntries && seg.entryCount != null) {
+          return `AI断句 ${seg.entryCount}/${seg.totalEntries}`;
+        }
+        return 'AI断句中…';
+      }
       if (file.phases.translating.status === 'active') return '翻译中…';
       if (isQueued) return `排队 #${queuePosition}`;
       return '处理中…';
@@ -157,6 +169,7 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
     file.entryCount,
     file.translatedCount,
     file.phases.transcribing.status,
+    file.phases.segmenting,
     file.phases.translating.status,
     isBusy,
     isQueued,

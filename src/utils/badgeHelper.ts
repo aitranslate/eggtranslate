@@ -64,6 +64,7 @@ export function getCardBadge(
     const phaseNames: Record<ProgressPhase, string> = {
       converting: '转码',
       transcribing: '转录',
+      segmenting: 'AI断句',
       translating: '翻译'
     };
     return { text: `${phaseNames[lastCompletedPhase]}完成`, color: 'blue' };

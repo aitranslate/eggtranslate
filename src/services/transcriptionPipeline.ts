@@ -26,7 +26,8 @@ export interface ProgressCallbacks {
 export const runTranscriptionPipeline = async (
   audioFile: File,
   keyterms: string[] = [],
-  callbacks: ProgressCallbacks = {}
+  callbacks: ProgressCallbacks = {},
+  options: { useAiSegmentation?: boolean } = {}
 ): Promise<{
   entries: SubtitleEntry[];
   language: string;
@@ -37,7 +38,7 @@ export const runTranscriptionPipeline = async (
     const { sentences, language, tokensUsed } =
       await assemblyaiService.transcribeWithSmartSegmentation(
         audioFile,
-        { keyterms },
+        { keyterms, useAiSegmentation: options.useAiSegmentation },
         (status, percent) => {
           if (status === 'transcribing') {
             callbacks.onProgress?.(percent);

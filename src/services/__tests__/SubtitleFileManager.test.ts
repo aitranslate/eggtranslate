@@ -32,6 +32,7 @@ interface MakeTaskOptions {
   selectedKeytermGroupId?: string | null;
   sourceLanguage?: string;
   targetLanguage?: string;
+  aiSegmentationEnabled?: boolean;
   entryCount?: number;
   translatedCount?: number;
   fileType?: SingleTask['fileType'];
@@ -122,6 +123,15 @@ describe('convertTaskToMetadata', () => {
       const result = convertTaskToMetadata(task);
       expect(result.sourceLanguage).toBe('Japanese');
       expect(result.targetLanguage).toBe('Korean');
+    });
+
+    it('任务级 aiSegmentationEnabled 透传；旧任务缺省为 undefined', () => {
+      expect(
+        convertTaskToMetadata(makeTask({ aiSegmentationEnabled: true })).aiSegmentationEnabled
+      ).toBe(true);
+      expect(
+        convertTaskToMetadata(makeTask()).aiSegmentationEnabled
+      ).toBeUndefined();
     });
 
     it('旧任务无语言字段时 metadata 也为 undefined', () => {

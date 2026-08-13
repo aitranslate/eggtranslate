@@ -23,7 +23,10 @@ export const StatusBar: React.FC = () => {
   const historyTokens = useFilesStore((s) =>
     s.tasks.reduce(
       (sum, t) =>
-        sum + (t.phases?.translating?.tokens || 0) + (t.phases?.transcribing?.tokens || 0),
+        sum +
+        (t.phases?.translating?.tokens || 0) +
+        (t.phases?.transcribing?.tokens || 0) +
+        (t.phases?.segmenting?.tokens || 0),
       0
     )
   );
@@ -38,11 +41,15 @@ export const StatusBar: React.FC = () => {
         }
         return '翻译中';
       }
+      if (t.phases?.segmenting?.status === 'active') {
+        const p = t.phases.segmenting;
+        if (p.totalEntries && p.entryCount != null) {
+          return `AI断句 ${p.entryCount}/${p.totalEntries}`;
+        }
+        return 'AI断句中';
+      }
       if (t.phases?.transcribing?.status === 'active') {
         const p = t.phases.transcribing;
-        if (p.totalEntries && p.entryCount != null) {
-          return `断句 ${p.entryCount}/${p.totalEntries}`;
-        }
         if (p.progress > 0) return `转录 ${Math.round(p.progress)}%`;
         return '转录中';
       }

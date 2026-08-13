@@ -63,6 +63,9 @@ export interface SubtitleFileMetadata {
   sourceLanguage?: string;
   targetLanguage?: string;
 
+  /** 任务级 AI 断句开关（创建时从全局设置拷贝；音视频任务）。 */
+  aiSegmentationEnabled?: boolean;
+
   /** 最近一次翻译路径（agent / batch），与设置开关解耦 */
   translationPath?: TranslationPath;
   /** Agent 终态快照（持久化在任务上） */

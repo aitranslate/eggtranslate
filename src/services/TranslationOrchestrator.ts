@@ -407,10 +407,11 @@ export async function saveTranslationHistory(
     const currentTask = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
 
     if (currentTask) {
-      // 统一口径：翻译 tokens + 转录阶段（含 AI 断句兜底）tokens
+      // 统一口径：翻译 + 转录 + AI 断句 三阶段 tokens
       const finalTokens =
         (currentTask.phases?.translating?.tokens || 0) +
-        (currentTask.phases?.transcribing?.tokens || 0) ||
+        (currentTask.phases?.transcribing?.tokens || 0) +
+        (currentTask.phases?.segmenting?.tokens || 0) ||
         tokensUsed ||
         0;
       const actualCompleted =

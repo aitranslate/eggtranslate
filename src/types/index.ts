@@ -195,6 +195,12 @@ export interface SingleTask {
   sourceLanguage?: string;
   targetLanguage?: string;
 
+  /**
+   * 任务级 AI 断句开关：创建/导入时从全局设置拷贝（音视频任务）。
+   * 之后修改全局设置不影响已有任务；关闭时任务无 segmenting 阶段。
+   */
+  aiSegmentationEnabled?: boolean;
+
   /** 最近一次翻译路径；设置开关不改写历史 */
   translationPath?: TranslationPath;
   /** Agent 上次运行终态（完成/失败摘要），可恢复大脑面板 */
@@ -236,10 +242,10 @@ export interface PhaseProgress {
 }
 
 // ProgressPhase: 阶段名称类型
-export type ProgressPhase = 'converting' | 'transcribing' | 'translating';
+export type ProgressPhase = 'converting' | 'transcribing' | 'segmenting' | 'translating';
 
 // ALL_PHASES: 所有阶段列表
-export const ALL_PHASES: ProgressPhase[] = ['converting', 'transcribing', 'translating'];
+export const ALL_PHASES: ProgressPhase[] = ['converting', 'transcribing', 'segmenting', 'translating'];
 
 // FilePhases: 工作流类型
 export type WorkflowType = 'transcribe' | 'translate' | 'full';
@@ -248,6 +254,8 @@ export interface FilePhases {
   workflow: WorkflowType;  // 工作流类型
   converting: PhaseProgress;
   transcribing: PhaseProgress;
+  /** AI 断句兜底阶段：仅在任务创建时开启了 AI 断句才存在（旧任务无此字段）。 */
+  segmenting?: PhaseProgress;
   translating: PhaseProgress;
 }
 
