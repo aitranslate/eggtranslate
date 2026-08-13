@@ -41,7 +41,7 @@ describe('aiSentenceBreakerService', () => {
     });
   });
 
-  it('未配置 LLM → 不调用直接 null', async () => {
+  it('未配置 LLM → 不调用直接 content=null', async () => {
     mockGetState.mockReturnValue({
       config: {
         profiles: [{ id: 'p1', name: 'p1', baseURL: '', apiKey: '', model: '' }],
@@ -50,30 +50,30 @@ describe('aiSentenceBreakerService', () => {
       },
     });
     const breaker = createAiSentenceBreaker();
-    await expect(breaker('some prompt')).resolves.toBeNull();
+    await expect(breaker('some prompt')).resolves.toEqual({ content: null, tokensUsed: 0 });
     expect(mockedCallLLM).not.toHaveBeenCalled();
   });
 
-  it('成功 → 返回去围栏内容；同 prompt 命中缓存', async () => {
+  it('成功 → 返回去围栏内容与 tokens；同 prompt 命中缓存', async () => {
     mockedCallLLM.mockResolvedValue({
       content: '```text\nhello [BR] world\n```',
       tokensUsed: 10,
     });
     const breaker = createAiSentenceBreaker();
-    await expect(breaker('prompt A')).resolves.toBe('hello [BR] world');
-    await expect(breaker('prompt A')).resolves.toBe('hello [BR] world');
+    await expect(breaker('prompt A')).resolves.toEqual({ content: 'hello [BR] world', tokensUsed: 10 });
+    await expect(breaker('prompt A')).resolves.toEqual({ content: 'hello [BR] world', tokensUsed: 10 });
     expect(mockedCallLLM).toHaveBeenCalledTimes(1);
   });
 
-  it('调用失败 → null（上层回退规则断句）', async () => {
+  it('调用失败 → content=null（上层回退规则断句）', async () => {
     mockedCallLLM.mockRejectedValue(new Error('network down'));
     const breaker = createAiSentenceBreaker();
-    await expect(breaker('prompt B')).resolves.toBeNull();
+    await expect(breaker('prompt B')).resolves.toEqual({ content: null, tokensUsed: 0 });
   });
 
-  it('空内容 → null', async () => {
-    mockedCallLLM.mockResolvedValue({ content: '', tokensUsed: 0 });
+  it('空内容 → content=null（tokens 如实返回）', async () => {
+    mockedCallLLM.mockResolvedValue({ content: '', tokensUsed: 5 });
     const breaker = createAiSentenceBreaker();
-    await expect(breaker('prompt C')).resolves.toBeNull();
+    await expect(breaker('prompt C')).resolves.toEqual({ content: null, tokensUsed: 5 });
   });
 });

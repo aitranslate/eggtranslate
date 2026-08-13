@@ -14,8 +14,14 @@ import { getProfile, joinTokenTexts, type LanguageProfile } from './profiles';
 import { isQualityCutBoundary, splitSpanByDp } from './softSplit';
 import type { Preset, SilenceQuery, WordToken, WordWithTime } from './types';
 
-/** AI 调用回调：入参完整提示词，返回带 [BR] 标记的原文；失败返回 null。 */
-export type AiBreaker = (prompt: string) => Promise<string | null>;
+/** AI 断句单次结果：content 为带 [BR] 标记的原文；tokensUsed 来自 LLM 客户端的 usage。 */
+export interface AiBreakResult {
+  content: string | null;
+  tokensUsed: number;
+}
+
+/** AI 调用回调：入参完整提示词；失败返回 content=null（tokensUsed 仍可能 >0）。 */
+export type AiBreaker = (prompt: string) => Promise<AiBreakResult>;
 
 /** 单个断点：tokenIndex 左侧 token 下标；charOffset=0 表示切在 token 之后。 */
 export interface BreakMark {

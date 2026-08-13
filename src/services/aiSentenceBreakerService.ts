@@ -8,7 +8,7 @@ import { callLLM } from '@/utils/llmApi';
 import { getActiveLlmConfig } from '@/utils/llmProfiles';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { logger } from '@/utils/logger';
-import type { AiBreaker } from '@/services/sentenceSegmentation';
+import type { AiBreakResult, AiBreaker } from '@/services/sentenceSegmentation';
 
 /** 单次 AI 断句调用超时：推理类模型思考较久，给足余量；超时即回退。 */
 const BREAK_CALL_TIMEOUT_MS = 120_000;
@@ -16,7 +16,7 @@ const BREAK_CALL_TIMEOUT_MS = 120_000;
 /** 按 span 文本的响应缓存上限（超出淘汰最旧）。 */
 const CACHE_MAX_ENTRIES = 300;
 
-const responseCache = new Map<string, string | null>();
+const responseCache = new Map<string, AiBreakResult>();
 
 function cleanFencedContent(content: string): string | null {
   const cleaned = content
@@ -33,22 +33,23 @@ function abortAfter(ms: number): { signal: AbortSignal; clear: () => void } {
 }
 
 /**
- * 创建真实 AI 断句回调：入参完整提示词 → 返回带 [BR] 标记的原文或 null。
- * 未配置 LLM / 调用失败 / 超时 → null（上层回退 DP）。
+ * 创建真实 AI 断句回调：入参完整提示词 → 返回带 [BR] 标记的原文与本次 tokens。
+ * 未配置 LLM / 调用失败 / 超时 → content=null（上层回退 DP），tokensUsed 如实返回。
  */
 export function createAiSentenceBreaker(): AiBreaker {
-  return async (prompt: string): Promise<string | null> => {
+  return async (prompt: string): Promise<AiBreakResult> => {
     const hit = responseCache.get(prompt);
-    if (hit !== undefined) return hit;
+    if (hit) return hit;
 
     const config = useTranslationConfigStore.getState().config;
     const llm = getActiveLlmConfig(config);
     if (!llm.baseURL?.trim() || !llm.model?.trim()) {
-      responseCache.set(prompt, null);
-      return null;
+      const miss: AiBreakResult = { content: null, tokensUsed: 0 };
+      responseCache.set(prompt, miss);
+      return miss;
     }
 
-    let result: string | null = null;
+    let result: AiBreakResult = { content: null, tokensUsed: 0 };
     try {
       const { signal, clear } = abortAfter(BREAK_CALL_TIMEOUT_MS);
       try {
@@ -57,13 +58,16 @@ export function createAiSentenceBreaker(): AiBreaker {
           [{ role: 'user', content: prompt }],
           { maxRetries: 1, temperature: 0.1, signal },
         );
-        result = cleanFencedContent(res.content);
+        result = {
+          content: cleanFencedContent(res.content),
+          tokensUsed: res.tokensUsed ?? 0,
+        };
       } finally {
         clear();
       }
     } catch (error) {
       logger.warn('[aiSentenceBreaker] 调用失败，回退规则断句', error);
-      result = null;
+      result = { content: null, tokensUsed: 0 };
     }
 
     if (responseCache.size >= CACHE_MAX_ENTRIES) {

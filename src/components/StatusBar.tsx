@@ -21,7 +21,11 @@ export const StatusBar: React.FC = () => {
   const queueLen = useQueueStore((s) => s.taskQueue.length);
   const activeTaskId = useQueueStore((s) => s.activeTaskId);
   const historyTokens = useFilesStore((s) =>
-    s.tasks.reduce((sum, t) => sum + (t.phases?.translating?.tokens || 0), 0)
+    s.tasks.reduce(
+      (sum, t) =>
+        sum + (t.phases?.translating?.tokens || 0) + (t.phases?.transcribing?.tokens || 0),
+      0
+    )
   );
   const openSettings = useWorkspaceStore((s) => s.openSettings);
 
@@ -36,6 +40,9 @@ export const StatusBar: React.FC = () => {
       }
       if (t.phases?.transcribing?.status === 'active') {
         const p = t.phases.transcribing;
+        if (p.totalEntries && p.entryCount != null) {
+          return `断句 ${p.entryCount}/${p.totalEntries}`;
+        }
         if (p.progress > 0) return `转录 ${Math.round(p.progress)}%`;
         return '转录中';
       }

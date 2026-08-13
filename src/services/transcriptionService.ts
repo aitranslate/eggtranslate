@@ -81,6 +81,13 @@ export async function startTranscription(fileId: string): Promise<void> {
           progress: percent,
         });
       },
+      // AI 断句兜底进度：写入 entryCount/totalEntries，状态栏显示「断句 n/m」
+      onAiProgress: (resolved, total) => {
+        useFilesStore.getState().updatePhase(fileId, 'transcribing', {
+          entryCount: resolved,
+          totalEntries: total,
+        });
+      },
     });
 
     // 先写 phase 元数据，再 replaceTaskEntries（权威 hydrate + dirty flush）
@@ -95,7 +102,8 @@ export async function startTranscription(fileId: string): Promise<void> {
                 transcribing: {
                   status: 'completed',
                   progress: 100,
-                  tokens: 0,
+                  // AI 断句兜底的 LLM 消耗，统一记录在转录阶段 tokens（历史/状态栏同源）
+                  tokens: result.tokensUsed ?? 0,
                   language: result.language,
                   entryCount: result.entries.length,
                   totalEntries: result.entries.length,

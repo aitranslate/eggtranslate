@@ -242,7 +242,7 @@ describe('segmentWordsWithAiFallback', () => {
     let calls = 0;
     const breaker = async () => {
       calls++;
-      return null;
+      return { content: null, tokensUsed: 0 };
     };
     const words = mkWords('This is a short sentence. And another one here.');
     const plain = segmentWords(words, 'en', 'standard');
@@ -254,7 +254,7 @@ describe('segmentWordsWithAiFallback', () => {
   it('AI 返回 null → 与 segmentWords 一致', async () => {
     const words = longUnpunctuatedEn();
     const plain = segmentWords(words, 'en', 'standard');
-    const ai = await segmentWordsWithAiFallback(words, 'en', 'standard', { aiBreaker: async () => null });
+    const ai = await segmentWordsWithAiFallback(words, 'en', 'standard', { aiBreaker: async () => ({ content: null, tokensUsed: 0 }) });
     expect(ai).toEqual(plain);
   });
 
@@ -273,11 +273,11 @@ describe('segmentWordsWithAiFallback', () => {
     const words = longUnpunctuatedEn();
     const plain = segmentWords(words, 'en', 'standard');
     const noMark = await segmentWordsWithAiFallback(words, 'en', 'standard', {
-      aiBreaker: async () => words.map((x) => x.text).join(' '),
+      aiBreaker: async () => ({ content: words.map((x) => x.text).join(' '), tokensUsed: 0 }),
     });
     expect(noMark).toEqual(plain);
     const overLimit = await segmentWordsWithAiFallback(words, 'en', 'standard', {
-      aiBreaker: async () => 'word0 [BR] word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12 word13 word14 word15 word16 word17 word18 word19 word20 word21 word22 word23',
+      aiBreaker: async () => ({ content: 'word0 [BR] word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12 word13 word14 word15 word16 word17 word18 word19 word20 word21 word22 word23', tokensUsed: 0 }),
     });
     expect(overLimit).toEqual(plain);
   });
@@ -288,7 +288,7 @@ describe('segmentWordsWithAiFallback', () => {
     const ai = await segmentWordsWithAiFallback(words, 'en', 'standard', {
       aiBreaker: async (prompt) => {
         expect(prompt).toContain('16 words and 88 characters');
-        return marked.slice(0, marked.indexOf('word12')) + '[BR] ' + marked.slice(marked.indexOf('word12'));
+        return { content: marked.slice(0, marked.indexOf('word12')) + '[BR] ' + marked.slice(marked.indexOf('word12')), tokensUsed: 42 };
       },
     });
     const plain = segmentWords(words, 'en', 'standard');
@@ -312,7 +312,7 @@ describe('segmentWordsWithAiFallback', () => {
     ];
     const ai = await segmentWordsWithAiFallback(words, 'zh', 'standard', {
       aiBreaker: async () => {
-        return `一二三四五六[BR]七八九十甲乙${restChars.join('')}`;
+        return { content: `一二三四五六[BR]七八九十甲乙${restChars.join('')}`, tokensUsed: 10 };
       },
       minPieceMs: 0,
     });
@@ -323,12 +323,21 @@ describe('segmentWordsWithAiFallback', () => {
     expect(ai[1].text.startsWith('七八九十甲乙')).toBe(true);
   });
 
-  it('onAiResolved 报告采纳/回退', async () => {
-    const events: boolean[] = [];
+  it('onAiResolved 报告采纳/回退与 tokens', async () => {
+    const events: Array<{ accepted: boolean; tokensUsed: number }> = [];
     await segmentWordsWithAiFallback(longUnpunctuatedEn(), 'en', 'standard', {
-      aiBreaker: async () => null,
-      onAiResolved: (_text, accepted) => events.push(accepted),
+      aiBreaker: async () => ({ content: null, tokensUsed: 7 }),
+      onAiResolved: (_text, accepted, tokensUsed) => events.push({ accepted, tokensUsed }),
     });
-    expect(events).toEqual([false]);
+    expect(events).toEqual([{ accepted: false, tokensUsed: 7 }]);
+  });
+
+  it('onAiProgress 按完成句数推进', async () => {
+    const steps: Array<[number, number]> = [];
+    await segmentWordsWithAiFallback(longUnpunctuatedEn(), 'en', 'standard', {
+      aiBreaker: async () => ({ content: null, tokensUsed: 0 }),
+      onAiProgress: (resolved, total) => steps.push([resolved, total]),
+    });
+    expect(steps).toEqual([[1, 1]]);
   });
 });

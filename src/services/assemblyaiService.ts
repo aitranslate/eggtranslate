@@ -34,12 +34,14 @@ class AssemblyAIService {
    * @param audioFile addFile 缓存的音频（尽量小；不含视频）
    * @param options 热词等
    * @param onProgress 进度：transcribing | segmenting | completed
+   * @param onAiProgress AI 断句兜底进度（已处理/总触发，仅开启时回调）
    */
   async transcribeWithSmartSegmentation(
     audioFile: File,
     options: { keyterms?: string[] } = {},
-    onProgress?: (status: string, percent: number) => void
-  ): Promise<{ sentences: AssemblyAISentence[]; language: string }> {
+    onProgress?: (status: string, percent: number) => void,
+    onAiProgress?: (resolved: number, total: number) => void
+  ): Promise<{ sentences: AssemblyAISentence[]; language: string; tokensUsed?: number }> {
     try {
       const client = await this.createClient();
 
@@ -83,6 +85,7 @@ class AssemblyAIService {
       const { segmentWords, segmentWordsWithAiFallback } = await import("@/services/sentenceSegmentation");
 
       let segments;
+      let aiTokensUsed = 0;
       if (useTranscriptionStore.getState().aiSegmentationEnabled) {
         // AI 兜底：仅对「必须切且无好切点」的 span 调 LLM；失败回退规则结果。
         const { createAiSentenceBreaker } = await import(
@@ -91,6 +94,14 @@ class AssemblyAIService {
         segments = await segmentWordsWithAiFallback(words, languageCode, preset, {
           aiBreaker: createAiSentenceBreaker(),
           watchabilityMerge: true,
+          // 断句阶段 80→100 进度：按已完成的 AI 句数推进
+          onAiProgress: (resolved, total) => {
+            onAiProgress?.(resolved, total);
+            onProgress?.("segmenting", 80 + Math.round((20 * resolved) / total));
+          },
+          onAiResolved: (_text, _accepted, tokensUsed) => {
+            aiTokensUsed += tokensUsed;
+          },
         });
       } else {
         segments = segmentWords(words, languageCode, preset, {
@@ -98,7 +109,14 @@ class AssemblyAIService {
         });
       }
 
-      logger.info("DP 断句完成，共", segments.length, "句，语言:", languageCode);
+      logger.info(
+        "DP 断句完成，共",
+        segments.length,
+        "句，语言:",
+        languageCode,
+        "AI tokens:",
+        aiTokensUsed
+      );
       onProgress?.("completed", 100);
 
       return {
@@ -113,6 +131,7 @@ class AssemblyAIService {
           })),
         })),
         language: languageCode,
+        tokensUsed: aiTokensUsed,
       };
     } catch (error) {
       const appError = toAppError(error, "ASR 转录失败");

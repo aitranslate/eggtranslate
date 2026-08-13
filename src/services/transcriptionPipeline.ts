@@ -12,6 +12,8 @@ export interface ProgressCallbacks {
   onTranscribing?: () => void;
   onSegmenting?: () => void;
   onProgress?: (percent: number) => void;
+  /** AI 断句兜底进度：已处理句数 / 总触发句数（仅开启 AI 断句时回调）。 */
+  onAiProgress?: (resolved: number, total: number) => void;
   onCompleted?: () => void;
   onError?: (error: string) => void;
 }
@@ -28,9 +30,11 @@ export const runTranscriptionPipeline = async (
 ): Promise<{
   entries: SubtitleEntry[];
   language: string;
+  /** AI 断句兜底的 LLM tokens（未开启时缺省） */
+  tokensUsed?: number;
 }> => {
   try {
-    const { sentences, language } =
+    const { sentences, language, tokensUsed } =
       await assemblyaiService.transcribeWithSmartSegmentation(
         audioFile,
         { keyterms },
@@ -40,11 +44,13 @@ export const runTranscriptionPipeline = async (
             callbacks.onTranscribing?.();
             callbacks.onUploading?.();
           } else if (status === 'segmenting') {
+            callbacks.onProgress?.(percent);
             callbacks.onSegmenting?.();
           } else if (status === 'completed') {
             callbacks.onCompleted?.();
           }
-        }
+        },
+        (resolved, total) => callbacks.onAiProgress?.(resolved, total)
       );
 
     const entries: SubtitleEntry[] = [];
@@ -67,6 +73,7 @@ export const runTranscriptionPipeline = async (
     return {
       entries,
       language,
+      tokensUsed,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

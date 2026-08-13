@@ -35,6 +35,7 @@ export {
   segmentsWithinLimits,
   MIN_PIECE_MS,
   type AiBreaker,
+  type AiBreakResult,
   type BreakMark,
   type SplitPiece,
   type SpanCutInfo,
@@ -154,8 +155,10 @@ export interface SegmentWordsAiOptions {
   /** 词内拆分半片最短毫秒，默认 MIN_PIECE_MS。 */
   minPieceMs?: number;
   watchabilityMerge?: boolean;
-  /** 每次 AI 调用结束（采纳或回退）时回调，供统计/调试。 */
-  onAiResolved?: (spanText: string, accepted: boolean) => void;
+  /** 每次 AI 调用结束（采纳或回退）时回调，供统计/调试；tokensUsed 为本次调用消耗。 */
+  onAiResolved?: (spanText: string, accepted: boolean, tokensUsed: number) => void;
+  /** 断句进度：已处理 AI 句数 / 总触发句数（未触发 AI 的文件不会回调）。 */
+  onAiProgress?: (resolved: number, total: number) => void;
 }
 
 async function runPool<T>(
@@ -210,14 +213,18 @@ export async function segmentWordsWithAiFallback(
     number,
     { pieces: import('./aiBreak').SplitPiece[]; cuts: number[] }
   >();
+  let resolvedCount = 0;
 
   await runPool(
     aiSpans,
     async (span) => {
       const spanText = joinTokenTexts(span.info.tokens.map((t) => t.word), profile);
       let accepted = false;
+      let tokensUsed = 0;
       try {
-        const marked = await options.aiBreaker(buildAiBreakPrompt(spanText, profile, limit, charLimit));
+        const result = await options.aiBreaker(buildAiBreakPrompt(spanText, profile, limit, charLimit));
+        tokensUsed = result.tokensUsed ?? 0;
+        const marked = result.content;
         if (marked != null) {
           const marks = mapBreakMarksToCuts(marked, span.info.tokens, profile);
           if (marks.length > 0) {
@@ -235,7 +242,9 @@ export async function segmentWordsWithAiFallback(
       } catch {
         // AI 任何异常 → 回退 DP
       }
-      options.onAiResolved?.(spanText, accepted);
+      resolvedCount++;
+      options.onAiProgress?.(resolvedCount, aiSpans.length);
+      options.onAiResolved?.(spanText, accepted, tokensUsed);
     },
     options.concurrency ?? 3,
   );
