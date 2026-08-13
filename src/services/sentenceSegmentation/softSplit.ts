@@ -26,10 +26,12 @@ import {
   endsWithOpeningPunctuation,
   endsWithSoftPunctuation,
   isConnectorLike,
+  isDiscourseMarkerComma,
+  isFunctionWordLeft,
   isNumericContinuation,
   isTerminalBoundary,
+  isToBindingLeft,
   startsWithClosingPunctuation,
-  vadStrength,
 } from './textRules';
 
 export function boundaryBaseCost(
@@ -51,15 +53,34 @@ export function boundaryBaseCost(
 
   if (isTerminalBoundary(left.word)) return BOUNDARY_COST.terminal;
   if (endsWithSoftPunctuation(left.word)) return BOUNDARY_COST.soft;
-  if (left.word.trimEnd().endsWith(',') || left.word.trimEnd().endsWith('，')) {
+  // 话语标记 + 逗号（"Okay," / "Now,"）不给逗号折扣：单独成行是闪帧。
+  if (isDiscourseMarkerComma(left.word)) return BOUNDARY_COST.word;
+  if (left.word.trimEnd().endsWith(',') || left.word.trimEnd().endsWith('，') || left.word.trimEnd().endsWith('、')) {
     return BOUNDARY_COST.comma;
   }
+
+  // 功能词护栏：切在冠词/介词/助动词/to 之后 = 拆散短语，无折扣。
+  if (isFunctionWordLeft(left.word)) {
+    return BOUNDARY_COST.word;
+  }
+
   if (silence) {
     const sil = silence(left, right);
-    if (sil != null && sil > 0) {
-      return 2.0 - vadStrength(sil);
+    // 微停顿（< GOOD_SILENCE_SEC）只是词间抖动，不给折扣；
+    // 真停顿给折扣，但封顶与逗号持平（1.5），绝不让停顿压过标点。
+    if (sil != null && sil >= GOOD_SILENCE_SEC) {
+      return 2.0 - 0.5 * Math.min(1, (sil - GOOD_SILENCE_SEC) / 0.9);
     }
   }
+
+  // 不定式/to 介词短语起手：切在 "to" 之前是天然意群边界（"| to have"、"| to the upside"）。
+  // 但 "need to" / "going to" / "have to" 等情态绑定结构不拆。
+  // 注意：放在静音之后——"x [真停顿] to" 应取停顿折扣（更便宜）而非 to 奖励。
+  const rightStripped = right.word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase();
+  if (rightStripped === 'to' && !isToBindingLeft(left.word)) {
+    return BOUNDARY_COST.connector;
+  }
+
   if (
     isConnectorLike(right.word, profile.connectors) &&
     !isConnectorLike(left.word, profile.connectors)
@@ -87,9 +108,11 @@ export function isQualityCutBoundary(
   if (isNumericContinuation(left.word, right.word)) return false;
   if (isTerminalBoundary(left.word)) return true;
   if (endsWithSoftPunctuation(left.word)) return true;
-  if (left.word.trimEnd().endsWith(',') || left.word.trimEnd().endsWith('，')) {
+  if (isDiscourseMarkerComma(left.word)) return false;
+  if (left.word.trimEnd().endsWith(',') || left.word.trimEnd().endsWith('，') || left.word.trimEnd().endsWith('、')) {
     return true;
   }
+  if (isFunctionWordLeft(left.word)) return false;
   if (
     isConnectorLike(right.word, profile.connectors) &&
     !isConnectorLike(left.word, profile.connectors)
@@ -308,7 +331,12 @@ export function dpSplitSpan(
           (LENGTH_PENALTY_WEIGHT * 0.5 * Math.abs(segChars - hard.char)) / hard.char;
       }
       const cost = dp[j] + baseCost[j] + lengthPenalty + charPenalty;
-      if (cost < dp[i]) {
+      // 并列取舍按语言类型分：
+      // - 拉丁（按词切）：取更靠前的 j → 分段更均衡，避免切出碎尾
+      // - CJK（ASR 字符碎片、无词界信息）：取更靠后的 j → 首段尽量贴近上限，
+      //   切点更容易落在真实词界上（日语/中文碎片流的经验最优）
+      const better = profile.isCharBased ? cost < dp[i] : cost <= dp[i];
+      if (better) {
         dp[i] = cost;
         prev[i] = j;
       }

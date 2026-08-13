@@ -32,10 +32,11 @@ export interface LanguageProfile {
   tokenUnits(token: string): number;
 }
 
-// ---- 英文连词表（与 voxtrans ENGLISH_CONNECTORS 一致）----
+// ---- 英文连词表（与 voxtrans ENGLISH_CONNECTORS 一致，补充关系代词/连词）----
 const ENGLISH_CONNECTORS = [
   'and', 'but', 'or', 'so', 'because', 'when', 'while', 'which', 'that', 'if',
-  'then', 'though', 'although', 'however', 'therefore',
+  'then', 'though', 'although', 'however', 'therefore', 'before',
+  'where', 'who', 'what', 'whom', 'whose', 'as', 'until', 'once', 'since', 'unless', 'whereas',
 ];
 
 /** UI：短/标准/宽松 — 拉丁词数 */

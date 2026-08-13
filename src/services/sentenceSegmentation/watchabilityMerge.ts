@@ -57,7 +57,7 @@ const textLen = (t: string, lang: string) => {
 
 // 与 voxtrans quality.rs is_terminal_punctuation 一致。注意不含 ] / ) ——
 // 它们是配对右括号，不是句末标点。
-const isTerm = (ch: string) => ['.','!','?',';','。','！','？','；','，',','].includes(ch);
+const isTerm = (ch: string) => ['.','!','?',';','。','！','？','；','，','、',','].includes(ch);
 
 const CJK_CONNECTORS = ['然后','而且','并且','因为','所以','但是','如果','为了','以及','还有','并','和','与','及','或','来','去','在','对','把','将','大约'];
 const ASCII_CONNECTORS = ['and','or','to','for','with','that','which','when','if','but','so'];
