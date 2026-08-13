@@ -18,6 +18,7 @@ import {
 import { exportFile } from '@/services/SubtitleExporter';
 import { ExportButton } from '@/components/common/ExportButton';
 import { canRetranscribe } from '@/utils/fileUtils';
+import { formatAiSegmentProgress } from '@/utils/uxHelpers';
 import type { ExportFormat } from '@/utils/fileExport';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -153,11 +154,7 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
     if (isBusy) {
       if (file.phases.transcribing.status === 'active') return '转录中…';
       if (file.phases.segmenting?.status === 'active') {
-        const seg = file.phases.segmenting;
-        if (seg?.totalEntries && seg.entryCount != null) {
-          return `AI断句 ${seg.entryCount}/${seg.totalEntries}`;
-        }
-        return 'AI断句中…';
+        return formatAiSegmentProgress(file.phases.segmenting) ?? 'AI断句中…';
       }
       if (file.phases.translating.status === 'active') return '翻译中…';
       if (isQueued) return `排队 #${queuePosition}`;

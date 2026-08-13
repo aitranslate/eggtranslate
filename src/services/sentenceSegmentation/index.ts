@@ -207,6 +207,8 @@ export async function segmentWordsWithAiFallback(
     info: computeSpanCuts(words.slice(ws, we + 1), profile, limit, charLimit),
   }));
   const aiSpans = spans.filter((s) => s.info.needsAi);
+  // 筛完立刻报 0/N，UI 不必等第一次 LLM 才从「AI断句中」变成分数
+  options.onAiProgress?.(0, aiSpans.length);
 
   // AI 结果：spanIdx → pieces/cuts；无记录 = 回退 DP
   const aiResults = new Map<
@@ -275,6 +277,7 @@ export async function segmentWordsWithAiFallback(
         wordStart: span.ws + firstOrig,
         wordEnd: span.ws + lastOrig,
         words: segWords,
+        aiSplit: true,
       });
     }
   }

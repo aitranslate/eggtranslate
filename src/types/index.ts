@@ -28,6 +28,8 @@ export interface SubtitleEntry {
    * 入库 / 持久化 / 历史一律剥离，UI 与导出不依赖。
    */
   words?: SubtitleWord[];
+  /** 本条由 AI 断句产出（规则切分找不到好切点后 LLM 落刀）。 */
+  aiSplit?: boolean;
 }
 
 // LLM API 基础配置类型（调用时用）

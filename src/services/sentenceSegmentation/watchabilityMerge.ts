@@ -135,6 +135,7 @@ const mergePair = (l: DpSegment, r: DpSegment): DpSegment => ({
   wordStart: l.wordStart,
   wordEnd: r.wordEnd,
   words: [...l.words, ...r.words],
+  aiSplit: Boolean(l.aiSplit || r.aiSplit),
 });
 
 /**

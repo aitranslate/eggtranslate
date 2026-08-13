@@ -41,6 +41,15 @@ export function shouldPromptBeforeUnload(activeJob: boolean): boolean {
   return activeJob === true;
 }
 
+/** AI 断句进行中文案：已有总数则显示 n/m（含 0/m），否则不返回（由调用方写「AI断句中」）。 */
+export function formatAiSegmentProgress(seg?: {
+  entryCount?: number;
+  totalEntries?: number;
+} | null): string | null {
+  if (!seg || seg.totalEntries == null || seg.entryCount == null) return null;
+  return `AI断句 ${seg.entryCount}/${seg.totalEntries}`;
+}
+
 /** 从 phases 判断是否有进行中阶段 */
 export function hasActivePhase(phases: FilePhases | null | undefined): boolean {
   if (!phases) return false;

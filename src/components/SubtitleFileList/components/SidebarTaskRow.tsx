@@ -35,7 +35,11 @@ import { canRetranscribe } from '@/utils/fileUtils';
 import type { ExportFormat } from '@/utils/fileExport';
 import { ExportButton } from '@/components/common/ExportButton';
 import { copyToClipboard } from '@/utils/appToast';
-import { getFailedPhaseError, shouldShowTaskErrorDetail } from '@/utils/uxHelpers';
+import {
+  formatAiSegmentProgress,
+  getFailedPhaseError,
+  shouldShowTaskErrorDetail,
+} from '@/utils/uxHelpers';
 import { formatFileSize, formatDuration } from '../utils/fileHelpers';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
 import { useAgentRunStore } from '@/stores/agentRunStore';
@@ -335,8 +339,8 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
                 phase === 'transcribing'
                   ? '识别'
                   : phase === 'segmenting'
-                    ? st === 'active' && seg?.totalEntries && seg.entryCount != null
-                      ? `AI断句 ${seg.entryCount}/${seg.totalEntries}`
+                    ? st === 'active'
+                      ? formatAiSegmentProgress(seg) ?? 'AI断句'
                       : 'AI断句'
                     : phaseTranslateLabel;
               return (

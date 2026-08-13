@@ -99,7 +99,8 @@ class AssemblyAIService {
           // 断句阶段 80→100 进度：按已完成的 AI 句数推进
           onAiProgress: (resolved, total) => {
             onAiProgress?.(resolved, total);
-            onProgress?.("segmenting", 80 + Math.round((20 * resolved) / total));
+            const denom = Math.max(total, 1);
+            onProgress?.("segmenting", 80 + Math.round((20 * resolved) / denom));
           },
           onAiResolved: (_text, _accepted, tokensUsed) => {
             if (tokensUsed > 0) {
@@ -129,6 +130,7 @@ class AssemblyAIService {
           text: s.text,
           start: s.startTime,
           end: s.endTime,
+          aiSplit: s.aiSplit,
           words: s.words.map((w) => ({
             text: w.text,
             start: w.start,

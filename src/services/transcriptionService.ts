@@ -74,6 +74,11 @@ export async function startTranscription(fileId: string): Promise<void> {
 
     // 任务级 AI 断句开关（创建任务时从全局设置快照，之后改设置不影响本任务）
     const aiEnabled = file.aiSegmentationEnabled === true;
+    // ASR 等待期间预加载断句模块，避免识别完再卡在「AI断句中」
+    if (aiEnabled && import.meta.env.MODE !== 'test') {
+      void import('@/services/sentenceSegmentation');
+      void import('@/services/aiSentenceBreakerService');
+    }
 
     const result = await runTranscriptionPipeline(
       asrFile,

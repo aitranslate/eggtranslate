@@ -10,7 +10,7 @@ import { useQueueStore } from '@/stores/queueStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { getProviderById } from '@/constants/llmProviders';
 import type { LlmProviderId } from '@/constants/llmProviders';
-import { hasActivePhase } from '@/utils/uxHelpers';
+import { formatAiSegmentProgress, hasActivePhase } from '@/utils/uxHelpers';
 
 export const StatusBar: React.FC = () => {
   const profile = useActiveLlmProfile();
@@ -42,11 +42,7 @@ export const StatusBar: React.FC = () => {
         return '翻译中';
       }
       if (t.phases?.segmenting?.status === 'active') {
-        const p = t.phases.segmenting;
-        if (p.totalEntries && p.entryCount != null) {
-          return `AI断句 ${p.entryCount}/${p.totalEntries}`;
-        }
-        return 'AI断句中';
+        return formatAiSegmentProgress(t.phases.segmenting) ?? 'AI断句中';
       }
       if (t.phases?.transcribing?.status === 'active') {
         const p = t.phases.transcribing;

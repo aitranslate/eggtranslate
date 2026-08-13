@@ -69,6 +69,7 @@ export const runTranscriptionPipeline = async (
         text: sentence.text,
         translatedText: '',
         translationStatus: 'pending',
+        ...(sentence.aiSplit ? { aiSplit: true } : {}),
       });
     }
 

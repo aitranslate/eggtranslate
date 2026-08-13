@@ -45,4 +45,6 @@ export interface DpSegment {
   wordStart: number;
   wordEnd: number;
   words: WordWithTime[];
+  /** 本段由 AI 断句产出（规则找不到好切点后 LLM 落刀）。 */
+  aiSplit?: boolean;
 }

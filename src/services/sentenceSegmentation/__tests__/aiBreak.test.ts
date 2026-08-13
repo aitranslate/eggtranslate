@@ -332,12 +332,30 @@ describe('segmentWordsWithAiFallback', () => {
     expect(events).toEqual([{ accepted: false, tokensUsed: 7 }]);
   });
 
-  it('onAiProgress 按完成句数推进', async () => {
+  it('onAiProgress 筛完立刻报 0/N，再按完成句数推进', async () => {
     const steps: Array<[number, number]> = [];
     await segmentWordsWithAiFallback(longUnpunctuatedEn(), 'en', 'standard', {
       aiBreaker: async () => ({ content: null, tokensUsed: 0 }),
       onAiProgress: (resolved, total) => steps.push([resolved, total]),
     });
-    expect(steps).toEqual([[1, 1]]);
+    expect(steps).toEqual([[0, 1], [1, 1]]);
+  });
+
+  it('采纳的 AI 分段带 aiSplit；回退 DP 不带', async () => {
+    const accepted = await segmentWordsWithAiFallback(longUnpunctuatedEn(), 'en', 'standard', {
+      aiBreaker: async (prompt) => {
+        const text = prompt.split('Text:\n')[1] ?? '';
+        const words = text.split(/\s+/).filter(Boolean);
+        const mid = Math.floor(words.length / 2);
+        return { content: `${words.slice(0, mid).join(' ')} [BR] ${words.slice(mid).join(' ')}`, tokensUsed: 4 };
+      },
+    });
+    expect(accepted.length).toBeGreaterThan(1);
+    expect(accepted.every((s) => s.aiSplit === true)).toBe(true);
+
+    const rejected = await segmentWordsWithAiFallback(longUnpunctuatedEn(), 'en', 'standard', {
+      aiBreaker: async () => ({ content: null, tokensUsed: 0 }),
+    });
+    expect(rejected.every((s) => !s.aiSplit)).toBe(true);
   });
 });

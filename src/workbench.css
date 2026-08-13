@@ -1234,6 +1234,18 @@ html.dark .se-list {
   box-shadow: inset 2px 0 0 var(--wb-brand);
 }
 
+/* AI 切开的行：细品牌描边 + 序号下极小 AI 标，不抢漏译/编辑态 */
+.se-row.is-ai-split {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--wb-brand) 40%, transparent);
+}
+.se-row.is-ai-split.is-missing {
+  box-shadow: inset 2px 0 0 var(--apple-warning, #ff9500);
+}
+.se-row.is-ai-split:not(.se-row-editing) .se-row-src {
+  background: color-mix(in srgb, var(--wb-brand) 5.5%, transparent);
+  border-radius: 5px;
+}
+
 .se-row-idx {
   font-size: 11px;
   font-weight: 500;
@@ -1242,6 +1254,23 @@ html.dark .se-list {
   font-variant-numeric: tabular-nums;
   line-height: 1;
   text-align: center;
+}
+
+.se-row-idx.is-ai {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.se-ai-mark {
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: var(--wb-brand);
+  opacity: 0.7;
 }
 
 button.se-row-time {

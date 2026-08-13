@@ -25,6 +25,8 @@ export interface AssemblyAISentence {
   end: number;             // 毫秒
   confidence?: number;
   words?: TranscriptionWord[];  // 可选的单词级别时间戳
+  /** 本句由 AI 断句产出 */
+  aiSplit?: boolean;
 }
 
 /**

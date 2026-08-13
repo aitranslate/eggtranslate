@@ -142,4 +142,14 @@ describe('SubtitleEditor draft isolation', () => {
     expect(container.querySelector('.se-row-src')?.textContent).toContain('text-1');
     expect(container.querySelector('.se-row-dst')).toBeTruthy();
   });
+
+  it('AI 断句行带 is-ai-split 与 AI 标', () => {
+    const entry: SubtitleEntry = { ...makeEntry(1), aiSplit: true };
+    const { container } = render(
+      <SubtitleDisplayRow entry={entry} index={0} start={0} onStartEdit={() => {}} />
+    );
+    const row = container.querySelector('.se-row');
+    expect(row?.classList.contains('is-ai-split')).toBe(true);
+    expect(row?.querySelector('.se-ai-mark')?.textContent).toBe('AI');
+  });
 });

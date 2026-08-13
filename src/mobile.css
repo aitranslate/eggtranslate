@@ -673,6 +673,13 @@
   text-align: left;
 }
 
+.m-shell .se-row-idx.is-ai {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
 /* 时间戳与序号同一行：#12  00:00:01,200 → 00:00:03,840 */
 .m-shell button.se-row-time {
   order: 1;
