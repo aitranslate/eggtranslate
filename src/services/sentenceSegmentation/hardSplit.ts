@@ -115,12 +115,13 @@ export function mapSentencesToWordRanges(
     let acc = '';
     while (wi < words.length) {
       acc = acc ? acc + ' ' + words[wi].text : words[wi].text;
-      if (normalize(acc) === target) {
+      const normAcc = normalize(acc);
+      if (normAcc === target) {
         ranges.push([start, wi]);
         wi++;
         break;
       }
-      if (normalize(acc).length > target.length) {
+      if (normAcc.length > target.length) {
         // 累积超出仍未匹配 → 兜底：把已累积的词归入本句
         ranges.push([start, wi]);
         wi++;

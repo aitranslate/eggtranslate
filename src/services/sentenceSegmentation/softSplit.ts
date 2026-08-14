@@ -286,9 +286,13 @@ export function dpSplitSpan(
     prefix[k + 1] = prefix[k] + profile.tokenUnits(tokens[start + k].word);
   }
 
-  // charOf：相对 span 的 [a,b] 闭区间（0-based within span）
-  const charOf = (a: number, b: number) =>
-    segmentDisplayChars(tokens, start + a, start + b, profile);
+  // charOf：相对 span 的 [a,b] 闭区间（0-based within span）。
+  // 字符上限未启用（CJK 等 charLimit=Infinity）时，segChars 在所有消费点
+  // （isValidSegment / charPenalty）都被短路，跳过昂贵的字符串拼接。
+  const charLimited = isFiniteCharLimit(hard.char);
+  const charOf: (a: number, b: number) => number = charLimited
+    ? (a, b) => segmentDisplayChars(tokens, start + a, start + b, profile)
+    : (_a, _b) => 0;
 
   const totalChars = charOf(0, n - 1);
   if (isValidSegment(n, prefix[n], totalChars, hard)) return [];
@@ -316,9 +320,9 @@ export function dpSplitSpan(
     for (let j = i - 1; j >= 0; j--) {
       const segLen = prefix[i] - prefix[j];
       const tokenCount = i - j;
-      const segChars = charOf(j, i - 1);
-      // 词/字单调：超 unit 可 break；字符也随 j 减小而增大
+      // 词/字单调：超 unit 可 break；先判再算字符，避免 break 迭代仍拼接字符串
       if (tokenCount > 1 && segLen > hard.unit) break;
+      const segChars = charOf(j, i - 1);
       if (!isValidSegment(tokenCount, segLen, segChars, hard)) continue;
       if (baseCost[j] === Infinity || dp[j] === Infinity) continue;
       if (onlyGood && j > 0 && j < n && !qualityOk[j]) continue;

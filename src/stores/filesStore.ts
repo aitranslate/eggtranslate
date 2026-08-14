@@ -842,22 +842,31 @@ export const useFiles = () => {
   return useMemo(() => tasks.map(convertTaskToMetadata), [tasks]);
 };
 
+/**
+ * 按稳定 fileId 定位任务（引用级订阅）。
+ * find 返回任务引用，用 zustand 默认 Object.is 即可精准订阅：
+ * 只有该任务被替换时才重渲染；其余任务 / 选中态变化都不触发。
+ * 无需 useShallow —— 浅比较反而会把「结构相同的新对象」误判为未变化。
+ */
+const selectTaskByFileId = (fileId: string) => (state: FilesState) =>
+  state.tasks.find((t) => generateStableFileId(t.taskId) === fileId) ?? null;
+
+/** 选中任务选择器：selectedFileId 为空时返回 null */
+const selectSelectedTask = (state: FilesState) => {
+  const id = state.selectedFileId;
+  if (!id) return null;
+  return state.tasks.find((t) => generateStableFileId(t.taskId) === id) ?? null;
+};
+
 export const useFile = (fileId: string) => {
-  const tasks = useFilesStore(useShallow((state) => state.tasks));
-  return useMemo(() => {
-    const task = tasks.find((t) => generateStableFileId(t.taskId) === fileId);
-    return task ? convertTaskToMetadata(task) : undefined;
-  }, [tasks, fileId]);
+  const task = useFilesStore(selectTaskByFileId(fileId));
+  // task 已完全由 fileId 决定：fileId 变化必然换 task 引用，故只依赖 task。
+  return useMemo(() => (task ? convertTaskToMetadata(task) : undefined), [task]);
 };
 
 export const useSelectedFile = () => {
-  const selectedFileId = useFilesStore((state) => state.selectedFileId);
-  const tasks = useFilesStore(useShallow((state) => state.tasks));
-  return useMemo(() => {
-    if (!selectedFileId) return null;
-    const task = tasks.find((t) => generateStableFileId(t.taskId) === selectedFileId);
-    return task ? convertTaskToMetadata(task) : null;
-  }, [tasks, selectedFileId]);
+  const task = useFilesStore(selectSelectedTask);
+  return useMemo(() => (task ? convertTaskToMetadata(task) : null), [task]);
 };
 
 /** DEV：agent-browser 读取选中文件 */

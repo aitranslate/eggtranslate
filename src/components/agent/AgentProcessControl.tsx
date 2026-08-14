@@ -35,6 +35,7 @@ import {
 } from '@/services/agent/agentRunStatus';
 import type { AgentToolLogEntry } from '@/services/agent/types';
 import { useFilesStore } from '@/stores/filesStore';
+import { generateStableFileId } from '@/utils/taskIdGenerator';
 
 export interface AgentProcessControlProps {
   status: AgentRunStatus;
@@ -141,9 +142,13 @@ export const AgentProcessControl: React.FC<AgentProcessControlProps> = ({
   }, [status.recentEvents.length, status.toolLog.length, open, tab, status.active, reduceMotion]);
 
   /** 与右下角同源：任务 translating.tokens（LLM usage 单路累加），避免过程状态机双计 */
-  const phaseTokens = useFilesStore(
-    (s) => s.getFile(status.fileId)?.phases?.translating?.tokens ?? 0
-  );
+  // 只取一个数字：直接 find + 读 token，避免 getFile() 每次构建整个 metadata 对象
+  const phaseTokens = useFilesStore((s) => {
+    const task = s.tasks.find(
+      (t) => generateStableFileId(t.taskId) === status.fileId
+    );
+    return task?.phases?.translating?.tokens ?? 0;
+  });
   const displayTokens = phaseTokens > 0 ? phaseTokens : status.tokensTotal || 0;
 
   const filteredGlossary = useMemo(() => {

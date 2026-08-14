@@ -65,18 +65,18 @@ const CJK_STARTERS = ['个','这个','那个','这','那','然后','并且','而
 const ASCII_STARTERS = ['a','an','the','to','of','and','or','with','for','this','that','if','so','then','while','it','you','we','they'];
 const CJK_DANGLING = ['一个','做一个','这个','那个','这笔','那笔','这','那'];
 
-const endsDangling = (t: string) => CJK_DANGLING.some((s) => norm(t).endsWith(s));
+// 以下四个函数入参均为**已归一化**（norm 过）的文本；
+// 归一化在 canMerge 只做一次，避免同一段文本反复 replace/split/join。
+const endsDangling = (n: string) => CJK_DANGLING.some((s) => n.endsWith(s));
 
-const endsConnector = (t: string) => {
-  const n = norm(t);
+const endsConnector = (n: string) => {
   if (!n) return false;
   if (CJK_CONNECTORS.some((s) => n.endsWith(s))) return true;
   const lo = n.toLowerCase();
   return ASCII_CONNECTORS.some((s) => lo.endsWith(s));
 };
 
-const fragPenalty = (t: string) => {
-  const n = norm(t);
+const fragPenalty = (n: string) => {
   if (!n) return 0;
   const cc = [...n].length;
   const endTerm = isTerm(n[n.length - 1]);
@@ -89,8 +89,7 @@ const fragPenalty = (t: string) => {
   return p;
 };
 
-const isFragIssue = (t: string, lang: string) => {
-  const n = norm(t);
+const isFragIssue = (n: string, lang: string) => {
   if (!n || countWordUnits(n) < 6) return false;
   if (isTerm(n[n.length - 1])) return false;
   if (endsConnector(n) || endsDangling(n)) return true;
@@ -120,8 +119,10 @@ const canMerge = (l: DpSegment, r: DpSegment, maxUnits: number, lang: string) =>
   if (l.endTime > r.startTime) return false;
   if (r.startTime - l.endTime > MERGE_GAP_MS) return false;
   if (r.endTime - l.startTime > MERGE_BUDGET_MS) return false;
-  if (isTerm(norm(l.text).slice(-1))) return false;
-  if (!endsDangling(l.text) && !isFragIssue(l.text, lang)) return false;
+  // 左段只归一化一次，endsDangling / isFragIssue 复用同一结果
+  const nl = norm(l.text);
+  if (isTerm(nl.slice(-1))) return false;
+  if (!endsDangling(nl) && !isFragIssue(nl, lang)) return false;
   if (!startsContinuation(r.text, lang)) return false;
   const merged = mergeText(l.text, r.text);
   if (textLen(merged, lang) > maxUnits) return false;
