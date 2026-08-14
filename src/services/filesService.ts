@@ -28,6 +28,10 @@ function defaultTaskLanguages() {
 export async function addFile(file: File): Promise<string | null> {
   // Store 已在 main bootstrap 中 rehydrate 完成；此处不再做 per-call hydrate 等待
   const { defaultKeytermGroupId, aiSegmentationEnabled } = useTranscriptionStore.getState();
+  // 任务级 Agent 翻译开关：添加任务时从全局设置快照，之后改设置不影响本任务
+  const agentTranslationEnabled = Boolean(
+    useTranslationConfigStore.getState().config.agentTranslationEnabled
+  );
   const langs = defaultTaskLanguages();
 
   // 音视频：准备 ASR 音频（能压 MP3 则压；否则抽轨/原音频，不传视频）
@@ -38,16 +42,23 @@ export async function addFile(file: File): Promise<string | null> {
       file.type.startsWith('video/') ||
       isMediaImportFileName(file.name));
   if (isMedia) {
-    return addMediaFile(file, defaultKeytermGroupId, langs, aiSegmentationEnabled);
+    return addMediaFile(
+      file,
+      defaultKeytermGroupId,
+      langs,
+      aiSegmentationEnabled,
+      agentTranslationEnabled
+    );
   }
 
-  return addSubtitleFile(file, defaultKeytermGroupId, langs);
+  return addSubtitleFile(file, defaultKeytermGroupId, langs, agentTranslationEnabled);
 }
 
 async function addSubtitleFile(
   file: File,
   defaultKeytermGroupId: string | null,
-  langs: { sourceLanguage: string; targetLanguage: string }
+  langs: { sourceLanguage: string; targetLanguage: string },
+  agentTranslationEnabled: boolean
 ): Promise<string> {
   try {
     const result = await loadFromFile(file, {
@@ -55,6 +66,7 @@ async function addSubtitleFile(
       defaultKeytermGroupId,
       defaultSourceLanguage: langs.sourceLanguage,
       defaultTargetLanguage: langs.targetLanguage,
+      defaultAgentTranslationEnabled: agentTranslationEnabled,
     });
     useFilesStore.getState().addTask(result.task);
     toast.success(`已添加：${file.name}`);
@@ -71,7 +83,8 @@ async function addMediaFile(
   file: File,
   defaultKeytermGroupId: string | null,
   langs: { sourceLanguage: string; targetLanguage: string },
-  aiSegmentationEnabled: boolean
+  aiSegmentationEnabled: boolean,
+  agentTranslationEnabled: boolean
 ): Promise<string | null> {
   // 处理中 toast 必须持续显示：显式 Infinity（全局 duration 会盖住 loading 默认值）。
   // 定稿 success/error 必须带有限 duration，覆盖同 id 上的 Infinity。
@@ -84,6 +97,7 @@ async function addMediaFile(
       defaultSourceLanguage: langs.sourceLanguage,
       defaultTargetLanguage: langs.targetLanguage,
       defaultAiSegmentationEnabled: aiSegmentationEnabled,
+      defaultAgentTranslationEnabled: agentTranslationEnabled,
     });
 
     // 2) 准备上传音频：抽 AAC 音轨 / 原文件直传（绝不存视频轨）

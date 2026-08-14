@@ -105,7 +105,8 @@ export function resolveBusyPrimaryLabel(opts: {
  * 优先级：
  * 1. 已落库 translationPath（agent/batch）
  * 2. 本任务 Agent 正在跑
- * 3. 尚未写出 path 的 upcoming/active：才看全局 agentEnabled（即将走哪条路）
+ * 3. 尚未写出 path 的 upcoming/active：看本任务的 Agent 开关
+ *    （任务级快照，缺省视为批译）
  * 4. 默认「翻译」
  */
 export function resolveTranslatePhaseLabel(opts: {
@@ -114,15 +115,15 @@ export function resolveTranslatePhaseLabel(opts: {
   agentEnabled?: boolean;
   translatingStatus?: string | null;
 }): string {
-  if (opts.translationPath === 'agent') return 'Agent翻译';
+  if (opts.translationPath === 'agent') return 'Agent 翻译';
   if (opts.translationPath === 'batch') return '翻译';
-  if (opts.agentRunActive) return 'Agent翻译';
+  if (opts.agentRunActive) return 'Agent 翻译';
   const st = opts.translatingStatus || '';
   if (
     (st === 'upcoming' || st === 'active') &&
     opts.agentEnabled
   ) {
-    return 'Agent翻译';
+    return 'Agent 翻译';
   }
   return '翻译';
 }

@@ -9,7 +9,7 @@ describe('resolveTranslatePhaseLabel', () => {
         agentEnabled: false,
         translatingStatus: 'completed',
       })
-    ).toBe('Agent翻译');
+    ).toBe('Agent 翻译');
     expect(
       resolveTranslatePhaseLabel({
         translationPath: 'batch',
@@ -26,7 +26,7 @@ describe('resolveTranslatePhaseLabel', () => {
         agentEnabled: false,
         translatingStatus: 'active',
       })
-    ).toBe('Agent翻译');
+    ).toBe('Agent 翻译');
   });
 
   it('uses config only for upcoming/active without path', () => {
@@ -35,7 +35,7 @@ describe('resolveTranslatePhaseLabel', () => {
         agentEnabled: true,
         translatingStatus: 'upcoming',
       })
-    ).toBe('Agent翻译');
+    ).toBe('Agent 翻译');
     expect(
       resolveTranslatePhaseLabel({
         agentEnabled: false,

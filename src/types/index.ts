@@ -203,6 +203,13 @@ export interface SingleTask {
    */
   aiSegmentationEnabled?: boolean;
 
+  /**
+   * 任务级 Agent 翻译开关：创建/导入时从全局设置拷贝。
+   * 之后修改全局设置不影响已有任务（开启者永远走 Agent，关闭者永远走批译）；
+   * 缺省（undefined）一律批译。
+   */
+  agentTranslationEnabled?: boolean;
+
   /** 最近一次翻译路径；设置开关不改写历史 */
   translationPath?: TranslationPath;
   /** Agent 上次运行终态（完成/失败摘要），可恢复大脑面板 */

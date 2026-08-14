@@ -33,7 +33,7 @@ import type {
   TranslationConfig,
   TranslationStatus,
 } from '@/types';
-import { withTaskLanguages } from '@/utils/taskLanguages';
+import { withTaskLanguages, resolveTaskAgentEnabled } from '@/utils/taskLanguages';
 import { maybeSimplifyChinese } from '@/utils/chineseScript';
 import toast from 'react-hot-toast';
 
@@ -143,7 +143,9 @@ export async function startTranslation(
   }
 
   let controller: AbortController | null = null;
-  const usedAgent = Boolean(config.agentTranslationEnabled);
+  // 任务级 Agent 翻译开关（添加任务时快照，与 AI 断句同款语义）；
+  // 严格判定，未开启（含缺省）一律批译，不跟全局设置。
+  const usedAgent = resolveTaskAgentEnabled(file);
 
   try {
     // 懒加载条目（主表 rehydrate 不含 subtitle_entries）
