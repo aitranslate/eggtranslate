@@ -67,28 +67,6 @@ export interface TranslationConfig {
   batchSize: number;
   threadCount: number;
   rpm?: number;
-  /**
-   * Agent 翻译管线（术语 → 分窗译 → 可选 QA）。
-   * false/缺省：现有批译流式路径，行为不变。
-   */
-  agentTranslationEnabled?: boolean;
-  /** Agent 分窗大小（段数），默认 30 */
-  agentWindowSize?: number;
-  /** Agent 窗并发，默认 3 */
-  agentMaxConcurrency?: number;
-  /**
-   * Agent 路径：是否强制并入全部用户术语（含字幕未出现的）。
-   * 默认 false — 用户术语为候选，须 grounding；不影响批译路径。
-   */
-  agentForceAllUserTerms?: boolean;
-  /** Agent 术语阶段 web_search 预算；0=关网。默认 3。不影响批译。 */
-  agentMaxWebSearches?: number;
-  /** Agent 术语 submit 软 nudge（有 glossary 且 0 搜时拦一次）。默认 true。 */
-  agentSoftWebNudge?: boolean;
-  /** Agent：LLM 扩展用户术语表面（默认 true）。不影响批译。 */
-  agentExpandUserTerms?: boolean;
-  /** Agent：全窗合并后术语一致性检查（默认 true）。 */
-  agentGlobalTermCheck?: boolean;
 }
 
 // 翻译进度类型
@@ -105,69 +83,6 @@ export interface Term {
   original: string;
   translation: string;
   notes?: string;  // 新增：可选的说明字段
-}
-
-/** 最近一次翻译走的路径（与设置开关解耦，只记事实） */
-export type TranslationPath = 'agent' | 'batch';
-
-/**
- * Agent 终态快照：落在任务上并随 filesStore 持久化。
- * 设置里关 Agent 只影响下次路径，不擦除历史。
- * 完整术语/风格/工具日志用于过程面板复看。
- */
-export interface AgentRunSnapshot {
-  glossaryCount: number;
-  styleGuidePreview?: string;
-  /** 完整术语表（过程面板「术语」Tab） */
-  glossary?: Array<{ source: string; target: string; note?: string }>;
-  /** 完整风格指南 */
-  styleGuide?: string;
-  /** 工具调用摘要（裁剪后，避免 IDB 膨胀） */
-  toolLog?: Array<{
-    id: string;
-    name: string;
-    argsSummary: string;
-    ok: boolean;
-    kind?: string;
-    nudge?: string | null;
-    detail?: string;
-    durationMs?: number;
-    at: number;
-    stage?: string;
-  }>;
-  /** 分窗摘要 */
-  windows?: Array<{
-    windowIndex: number;
-    entryCount: number;
-    status: string;
-    tokensUsed: number;
-    qaCritical?: number;
-    qaTotal?: number;
-    qaNote?: string;
-  }>;
-  tokensTotal?: number;
-  /** 阶段 token 分解（过程面板） */
-  tokensTerminology?: number;
-  tokensTranslate?: number;
-  tokensQa?: number;
-  tokensExpand?: number;
-  qaWindowsRun?: number;
-  qaWindowsSkipped?: number;
-  webSearchCount?: number;
-  webSearchMax?: number;
-  briefingWindowTotal?: number;
-  termIssues?: Array<{
-    index: number;
-    source: string;
-    canonicalTarget: string;
-    foundTarget: string;
-  }>;
-  lastActionLine: string;
-  completedAt: number;
-  error?: string | null;
-  totalEntries?: number;
-  completedEntries?: number;
-  totalWindows?: number;
 }
 
 // 单个翻译任务状态类型 (用于批处理任务列表)
@@ -202,18 +117,6 @@ export interface SingleTask {
    * 之后修改全局设置不影响已有任务；关闭时任务无 segmenting 阶段。
    */
   aiSegmentationEnabled?: boolean;
-
-  /**
-   * 任务级 Agent 翻译开关：创建/导入时从全局设置拷贝。
-   * 之后修改全局设置不影响已有任务（开启者永远走 Agent，关闭者永远走批译）；
-   * 缺省（undefined）一律批译。
-   */
-  agentTranslationEnabled?: boolean;
-
-  /** 最近一次翻译路径；设置开关不改写历史 */
-  translationPath?: TranslationPath;
-  /** Agent 上次运行终态（完成/失败摘要），可恢复大脑面板 */
-  agentSnapshot?: AgentRunSnapshot | null;
 
   /** 派生状态缓存：避免每次 updateEntry 触发整数组 O(n) filter */
   entryCount: number;

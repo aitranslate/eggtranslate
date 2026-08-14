@@ -15,15 +15,12 @@ import {
   FilePhases,
   PhaseProgress,
   WorkflowType,
-  type AgentRunSnapshot,
-  type TranslationPath,
 } from "@/types";
 import { convertTaskToMetadata } from "@/services/SubtitleFileManager";
 import { generateStableFileId } from "@/utils/taskIdGenerator";
 import { maybeSimplifyChinese } from "@/utils/chineseScript";
 import localforage from "localforage";
 import type { SingleTask } from "@/types";
-import { useAgentRunStore } from "@/stores/agentRunStore";
 import { useTranslationConfigStore } from "@/stores/translationConfigStore";
 import {
   clearAllTaskEntries,
@@ -232,14 +229,6 @@ interface FilesState {
     fileId: string,
     languages: { sourceLanguage: string; targetLanguage: string }
   ) => void;
-  /** 记录最近翻译路径 / Agent 终态（持久化，与设置开关无关） */
-  setTranslationPathMeta: (
-    fileId: string,
-    meta: {
-      translationPath?: TranslationPath;
-      agentSnapshot?: AgentRunSnapshot | null;
-    }
-  ) => void;
 
   getFile: (fileId: string) => SubtitleFileMetadata | undefined;
   getAllFiles: () => SubtitleFileMetadata[];
@@ -443,7 +432,6 @@ export const useFilesStore = create<FilesState>()(
 
       removeTask: (taskId) => {
         const fileId = generateStableFileId(taskId);
-        useAgentRunStore.getState().clearFile(fileId);
         void removeTaskEntries(taskId);
         set((state) => ({
           tasks: state.tasks.filter((t) => t.taskId !== taskId),
@@ -457,7 +445,6 @@ export const useFilesStore = create<FilesState>()(
       },
 
       clearAllTasks: () => {
-        useAgentRunStore.setState({ byFileId: {} });
         void clearAllTaskEntries();
         set({ tasks: [], selectedFileId: null });
         void flushFilesStorePersist();
@@ -707,26 +694,6 @@ export const useFilesStore = create<FilesState>()(
         void flushFilesStorePersist();
       },
 
-      setTranslationPathMeta: (fileId, meta) => {
-        const file = get().getFile(fileId);
-        if (!file) return;
-        set((state) => ({
-          tasks: state.tasks.map((t) => {
-            if (t.taskId !== file.taskId) return t;
-            return {
-              ...t,
-              ...(meta.translationPath !== undefined
-                ? { translationPath: meta.translationPath }
-                : {}),
-              ...(meta.agentSnapshot !== undefined
-                ? { agentSnapshot: meta.agentSnapshot }
-                : {}),
-            };
-          }),
-        }));
-        void flushFilesStorePersist();
-      },
-
       getFile: (fileId) => {
         const task = get().tasks.find((t) => generateStableFileId(t.taskId) === fileId);
         return task ? convertTaskToMetadata(task) : undefined;
@@ -752,13 +719,12 @@ export const useFilesStore = create<FilesState>()(
     {
       name: "subtitle_tasks",
       storage: createJSONStorage(() => debouncedStateStorage),
-      // 主表不落大 entries / agentSnapshot，减轻启动 parse；entries 见 taskEntriesStorage
+      // 主表不落大 entries，减轻启动 parse；entries 见 taskEntriesStorage
       partialize: (state) => ({
         selectedFileId: state.selectedFileId,
         tasks: state.tasks.map((t) => ({
           ...t,
           subtitle_entries: [],
-          agentSnapshot: undefined,
         })),
       }),
       version: 4,
@@ -799,16 +765,10 @@ export const useFilesStore = create<FilesState>()(
         }
         clearEntriesLifecycle();
         const tasks = raw
-          .map((t) =>
-            hasInline
-              ? { ...t, subtitle_entries: [] as SubtitleEntry[], agentSnapshot: undefined }
-              : {
-                  ...t,
-                  // 统一懒加载：主表不带 entries
-                  subtitle_entries: [] as SubtitleEntry[],
-                  agentSnapshot: t.agentSnapshot,
-                }
-          )
+          .map((t) => ({
+            ...t,
+            subtitle_entries: [] as SubtitleEntry[],
+          }))
           .map(recoverInterruptedPhases);
         // entryCount===0 的任务空即权威，无需再 load
         for (const t of tasks) {

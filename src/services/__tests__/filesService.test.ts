@@ -23,7 +23,6 @@ const translationConfigState = vi.hoisted(() => ({
   config: {
     sourceLanguage: 'English',
     targetLanguage: '简体中文',
-    agentTranslationEnabled: false,
   },
 }));
 
@@ -56,7 +55,6 @@ describe('filesService', () => {
   beforeEach(() => {
     useFilesStore.setState({ tasks: [], selectedFileId: null });
     useQueueStore.setState({ taskQueue: [], activeTaskId: null });
-    translationConfigState.config.agentTranslationEnabled = false;
     vi.clearAllMocks();
   });
 
@@ -78,26 +76,6 @@ describe('filesService', () => {
       expect.objectContaining({
         defaultSourceLanguage: 'English',
         defaultTargetLanguage: '简体中文',
-        defaultAgentTranslationEnabled: false,
-      })
-    );
-  });
-
-  it('addFile 在全局开启 Agent 翻译时把开关快照到任务选项', async () => {
-    translationConfigState.config.agentTranslationEnabled = true;
-    const mockTask = makeSingleTask({ taskId: 't1' });
-    vi.mocked(loadFromFile).mockResolvedValue({
-      metadata: { id: 'file-1', taskId: 't1', name: 'test.srt' } as unknown as SubtitleFileMetadata & { fileRef?: File },
-      task: mockTask,
-    });
-
-    const fakeFile = new File(['test'], 'test.srt', { type: 'text/plain' });
-    await addFile(fakeFile);
-
-    expect(loadFromFile).toHaveBeenCalledWith(
-      fakeFile,
-      expect.objectContaining({
-        defaultAgentTranslationEnabled: true,
       })
     );
   });

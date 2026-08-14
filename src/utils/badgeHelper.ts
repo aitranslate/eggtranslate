@@ -1,4 +1,4 @@
-import type { FilePhases, ProgressPhase, TranslationPath } from '@/types';
+import type { FilePhases, ProgressPhase } from '@/types';
 
 export interface BadgeInfo {
   text: string;
@@ -99,32 +99,10 @@ export function resolveBusyPrimaryLabel(opts: {
   return opts.idleLabel === '转译' ? opts.idleLabel : '翻译';
 }
 
-/**
- * 阶段 chip「翻译」文案：按**任务事实**，不跟全局开关瞎改历史。
- *
- * 优先级：
- * 1. 已落库 translationPath（agent/batch）
- * 2. 本任务 Agent 正在跑
- * 3. 尚未写出 path 的 upcoming/active：看本任务的 Agent 开关
- *    （任务级快照，缺省视为批译）
- * 4. 默认「翻译」
- */
-export function resolveTranslatePhaseLabel(opts: {
-  translationPath?: TranslationPath | null;
-  agentRunActive?: boolean;
-  agentEnabled?: boolean;
+/** 阶段 chip「翻译」文案。 */
+export function resolveTranslatePhaseLabel(_opts?: {
   translatingStatus?: string | null;
 }): string {
-  if (opts.translationPath === 'agent') return 'Agent 翻译';
-  if (opts.translationPath === 'batch') return '翻译';
-  if (opts.agentRunActive) return 'Agent 翻译';
-  const st = opts.translatingStatus || '';
-  if (
-    (st === 'upcoming' || st === 'active') &&
-    opts.agentEnabled
-  ) {
-    return 'Agent 翻译';
-  }
   return '翻译';
 }
 

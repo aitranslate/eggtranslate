@@ -29,12 +29,6 @@ import { getBilingualDisplayLines } from '@/utils/srtParser';
 import { generateStableFileId } from '@/utils/taskIdGenerator';
 import { formatMatchCount, swapLanguages } from '@/utils/uxHelpers';
 import { resolveTaskLanguages } from '@/utils/taskLanguages';
-import { useAgentRunStore } from '@/stores/agentRunStore';
-import {
-  LazyAgentProcessControl,
-  LazySurface,
-} from '@/components/lazySurfaces';
-import { prefetchAgentProcessControl } from '@/components/lazyPrefetch';
 import { useIsMobile } from '@/hooks/useIsMobile';
 
 const EMPTY_ENTRIES: SubtitleEntry[] = [];
@@ -439,26 +433,6 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const streamCaretEntryId = useStreamingOverlayStore(
     (s) => s.activeCaretByFile[fileId] ?? null
   );
-  const agentRun = useAgentRunStore((s) => s.byFileId[fileId]);
-  // 设置里的 Agent 开关只决定「下次」走哪条路径，不隐藏历史/当前运行态
-  const agentUiVisible = Boolean(
-    agentRun && (agentRun.active || agentRun.error || agentRun.actionLine)
-  );
-
-  // Agent 开关或已有运行态时预取面板 chunk，避免分隔符先闪、控件后弹
-  useEffect(() => {
-    if (agentUiVisible || config.agentTranslationEnabled) {
-      void prefetchAgentProcessControl();
-    }
-  }, [agentUiVisible, config.agentTranslationEnabled]);
-
-  // 从任务持久化快照回填大脑面板（刷新 / 关 Agent 开关后仍可见）
-  useEffect(() => {
-    if (!file?.taskId || !file.agentSnapshot) return;
-    useAgentRunStore
-      .getState()
-      .hydrateFromSnapshot(fileId, file.taskId, file.agentSnapshot);
-  }, [fileId, file?.taskId, file?.agentSnapshot]);
   const displayEntries = useMemo(
     () => mergeEntriesWithOverlay(fileEntries, streamingOverlay),
     [fileEntries, streamingOverlay]
@@ -851,14 +825,6 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
             <span>
               {translationStats.translated}/{translationStats.total} 已译 · {translationStats.percentage}%
             </span>
-            {agentUiVisible && agentRun ? (
-              <LazySurface fallback={null}>
-                <>
-                  <span aria-hidden>·</span>
-                  <LazyAgentProcessControl status={agentRun} visible />
-                </>
-              </LazySurface>
-            ) : null}
           </div>
         </div>
       </div>

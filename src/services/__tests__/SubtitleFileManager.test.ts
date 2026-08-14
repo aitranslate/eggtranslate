@@ -33,7 +33,6 @@ interface MakeTaskOptions {
   sourceLanguage?: string;
   targetLanguage?: string;
   aiSegmentationEnabled?: boolean;
-  agentTranslationEnabled?: boolean;
   entryCount?: number;
   translatedCount?: number;
   fileType?: SingleTask['fileType'];
@@ -132,20 +131,6 @@ describe('convertTaskToMetadata', () => {
       ).toBe(true);
       expect(
         convertTaskToMetadata(makeTask()).aiSegmentationEnabled
-      ).toBeUndefined();
-    });
-
-    it('任务级 agentTranslationEnabled 透传；旧任务缺省为 undefined', () => {
-      expect(
-        convertTaskToMetadata(makeTask({ agentTranslationEnabled: true }))
-          .agentTranslationEnabled
-      ).toBe(true);
-      expect(
-        convertTaskToMetadata(makeTask({ agentTranslationEnabled: false }))
-          .agentTranslationEnabled
-      ).toBe(false);
-      expect(
-        convertTaskToMetadata(makeTask()).agentTranslationEnabled
       ).toBeUndefined();
     });
 

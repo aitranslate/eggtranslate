@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  resolveTaskLanguages,
-  withTaskLanguages,
-  resolveTaskAgentEnabled,
-} from '../taskLanguages';
+import { resolveTaskLanguages, withTaskLanguages } from '../taskLanguages';
 import type { TranslationConfig } from '@/types';
 
 const baseConfig = {
@@ -51,19 +47,6 @@ describe('resolveTaskLanguages', () => {
     expect(
       resolveTaskLanguages({ sourceLanguage: '  ', targetLanguage: '' }, baseConfig)
     ).toEqual(baseConfig);
-  });
-});
-
-describe('resolveTaskAgentEnabled', () => {
-  it('任务级开关严格判定：只有 true 才走 Agent', () => {
-    expect(resolveTaskAgentEnabled({ agentTranslationEnabled: true })).toBe(true);
-    expect(resolveTaskAgentEnabled({ agentTranslationEnabled: false })).toBe(false);
-  });
-
-  it('缺省 / null / 空对象一律批译（不跟全局设置）', () => {
-    expect(resolveTaskAgentEnabled({})).toBe(false);
-    expect(resolveTaskAgentEnabled(undefined)).toBe(false);
-    expect(resolveTaskAgentEnabled(null)).toBe(false);
   });
 });
 

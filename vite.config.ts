@@ -39,27 +39,10 @@ export default defineConfig(({ command }) => ({
         './src/services/filesService.ts',
       ],
     },
-    // Agent web_search：开发态代理 Parallel（免费无 Key），避免浏览器 CORS
-    proxy: {
-      '/api/parallel-mcp': {
-        target: 'https://search.parallel.ai',
-        changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api\/parallel-mcp$/, '/mcp'),
-        secure: true,
-      },
-    },
   },
   preview: {
     host: '127.0.0.1',
     port: 4173,
-    proxy: {
-      '/api/parallel-mcp': {
-        target: 'https://search.parallel.ai',
-        changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api\/parallel-mcp$/, '/mcp'),
-        secure: true,
-      },
-    },
   },
   define: {
     global: 'globalThis',

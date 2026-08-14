@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useFilesStore } from '@/stores/filesStore';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
-import { useAgentRunStore } from '@/stores/agentRunStore';
 import { startTranslation } from '../translationService';
 import type { SingleTask, SubtitleEntry } from '@/types';
 import { generateStableFileId } from '@/utils/taskIdGenerator';
@@ -24,12 +23,7 @@ vi.mock('react-hot-toast', () => ({
   default: { success: vi.fn(), error: vi.fn() },
 }));
 
-const runAgentTranslation = vi.fn();
 const executeTranslation = vi.fn();
-
-vi.mock('../agent', () => ({
-  runAgentTranslation: (...args: unknown[]) => runAgentTranslation(...args),
-}));
 
 vi.mock('../TranslationOrchestrator', () => ({
   executeTranslation: (...args: unknown[]) => executeTranslation(...args),
@@ -71,7 +65,7 @@ const makeFile = (
   ...overrides,
 });
 
-function configuredState(agent: boolean) {
+function configuredState() {
   useTranslationConfigStore.setState({
     isConfigured: true,
     isTranslating: false,
@@ -93,17 +87,14 @@ function configuredState(agent: boolean) {
       contextBefore: 5,
       contextAfter: 3,
       threadCount: 4,
-      agentTranslationEnabled: agent,
     },
   });
 }
 
 describe('translationService', () => {
   beforeEach(() => {
-    runAgentTranslation.mockReset();
     executeTranslation.mockReset();
     useFilesStore.setState({ tasks: [], selectedFileId: null });
-    useAgentRunStore.setState({ byFileId: {} });
     useTranslationConfigStore.setState({
       isConfigured: false,
       isTranslating: false,
@@ -125,7 +116,6 @@ describe('translationService', () => {
         contextBefore: 5,
         contextAfter: 3,
         threadCount: 4,
-        agentTranslationEnabled: false,
       },
     });
   });
@@ -145,162 +135,58 @@ describe('translationService', () => {
     useFilesStore.setState({
       tasks: [makeFile('t1', 'completed')],
     });
-    configuredState(false);
+    configuredState();
 
     const result = await startTranslation(generateStableFileId('t1'));
     expect(result).toBeNull();
-    expect(runAgentTranslation).not.toHaveBeenCalled();
     expect(executeTranslation).not.toHaveBeenCalled();
   });
 
-  it('agent path: sets translationPath agent and calls runAgentTranslation', async () => {
-    useFilesStore.setState({
-      tasks: [makeFile('t-agent', 'upcoming', { agentTranslationEnabled: true })],
-    });
-    configuredState(true);
-    runAgentTranslation.mockImplementation(async (_entries, input) => {
-      await input.onEvent({ type: 'pipeline_start', totalEntries: 2, totalWindows: 1 });
-      await input.onEvent({ type: 'pipeline_end' });
-      return { tokensUsed: 1 };
-    });
-
-    const fileId = generateStableFileId('t-agent');
-    const result = await startTranslation(fileId);
-
-    expect(runAgentTranslation).toHaveBeenCalled();
-    expect(executeTranslation).not.toHaveBeenCalled();
-    expect(result).not.toBeNull();
-    const task = useFilesStore.getState().tasks.find((t) => t.taskId === 't-agent');
-    expect(task?.translationPath).toBe('agent');
-    expect(task?.agentSnapshot?.error).toBeNull();
-    expect(task?.agentSnapshot?.lastActionLine).toBeTruthy();
-  });
-
-  it('batch path: sets translationPath batch and calls executeTranslation', async () => {
+  it('calls executeTranslation on the batch path', async () => {
     useFilesStore.setState({ tasks: [makeFile('t-batch')] });
-    configuredState(false);
+    configuredState();
     executeTranslation.mockResolvedValue(undefined);
 
     const fileId = generateStableFileId('t-batch');
     const result = await startTranslation(fileId);
 
     expect(executeTranslation).toHaveBeenCalled();
-    expect(runAgentTranslation).not.toHaveBeenCalled();
     expect(result).not.toBeNull();
-    const task = useFilesStore.getState().tasks.find((t) => t.taskId === 't-batch');
-    expect(task?.translationPath).toBe('batch');
   });
 
-  it('任务级 agentTranslationEnabled=true：全局关也走 Agent', async () => {
-    useFilesStore.setState({
-      tasks: [makeFile('t-task-agent', 'upcoming', { agentTranslationEnabled: true })],
-    });
-    configuredState(false); // 全局关
-    runAgentTranslation.mockImplementation(async (_entries, input) => {
-      await input.onEvent({ type: 'pipeline_start', totalEntries: 2, totalWindows: 1 });
-      await input.onEvent({ type: 'pipeline_end' });
-      return { tokensUsed: 1 };
-    });
-
-    await startTranslation(generateStableFileId('t-task-agent'));
-
-    expect(runAgentTranslation).toHaveBeenCalled();
-    expect(executeTranslation).not.toHaveBeenCalled();
-    expect(
-      useFilesStore.getState().tasks.find((t) => t.taskId === 't-task-agent')
-        ?.translationPath
-    ).toBe('agent');
-  });
-
-  it('任务级 agentTranslationEnabled=false：全局开也走批译', async () => {
-    useFilesStore.setState({
-      tasks: [makeFile('t-task-batch', 'upcoming', { agentTranslationEnabled: false })],
-    });
-    configuredState(true); // 全局开
-    executeTranslation.mockResolvedValue(undefined);
-
-    await startTranslation(generateStableFileId('t-task-batch'));
-
-    expect(executeTranslation).toHaveBeenCalled();
-    expect(runAgentTranslation).not.toHaveBeenCalled();
-    expect(
-      useFilesStore.getState().tasks.find((t) => t.taskId === 't-task-batch')
-        ?.translationPath
-    ).toBe('batch');
-  });
-
-  it('任务缺省（undefined）：不跟全局设置，一律批译', async () => {
-    useFilesStore.setState({ tasks: [makeFile('t-legacy-batch')] });
-    configuredState(true); // 全局开也不影响缺省任务
-    executeTranslation.mockResolvedValue(undefined);
-
-    await startTranslation(generateStableFileId('t-legacy-batch'));
-    expect(executeTranslation).toHaveBeenCalled();
-    expect(runAgentTranslation).not.toHaveBeenCalled();
-    expect(
-      useFilesStore.getState().tasks.find((t) => t.taskId === 't-legacy-batch')
-        ?.translationPath
-    ).toBe('batch');
-  });
-
-  it('agent path: prefers task source/target languages over global config', async () => {
+  it('prefers task source/target languages over global config', async () => {
     useFilesStore.setState({
       tasks: [
         makeFile('t-lang', 'upcoming', {
           sourceLanguage: 'Japanese',
           targetLanguage: 'Korean',
-          agentTranslationEnabled: true,
         }),
       ],
     });
-    configuredState(true); // global still en/zh
-    runAgentTranslation.mockImplementation(async (_entries, input) => {
-      expect(input.config.sourceLanguage).toBe('Japanese');
-      expect(input.config.targetLanguage).toBe('Korean');
-      await input.onEvent({ type: 'pipeline_start', totalEntries: 2, totalWindows: 1 });
-      await input.onEvent({ type: 'pipeline_end' });
-      return { tokensUsed: 1 };
+    configuredState();
+    executeTranslation.mockImplementation(async (_opts, callbacks) => {
+      expect(callbacks).toBeTruthy();
     });
 
     await startTranslation(generateStableFileId('t-lang'));
-    expect(runAgentTranslation).toHaveBeenCalled();
+    expect(executeTranslation).toHaveBeenCalled();
+    const [, firstCall] = executeTranslation.mock.calls[0] as [
+      { filename: string },
+      unknown,
+    ];
+    void firstCall;
+    const arg0 = executeTranslation.mock.calls[0][0] as {
+      filename: string;
+    };
+    expect(arg0.filename).toBe('t-lang.srt');
   });
 
-  it('agent throw: emits pipeline_error via mock path + marks failed + snapshot', async () => {
+  it('marks translating failed when executeTranslation throws', async () => {
     useFilesStore.setState({
-      tasks: [makeFile('t-fail', 'upcoming', { agentTranslationEnabled: true })],
+      tasks: [makeFile('t-fail', 'upcoming')],
     });
-    configuredState(true);
-    // Simulate pipeline wrapper: on failure the real pipeline emits pipeline_error then throws.
-    // Here the service onEvent is only invoked if runAgentTranslation calls it — mock does that.
-    runAgentTranslation.mockImplementation(async (_entries, input) => {
-      await input.onEvent({ type: 'pipeline_start', totalEntries: 2, totalWindows: 1 });
-      await input.onEvent({
-        type: 'terminology_done',
-        glossary: [{ source: 'Hi', target: '嗨', note: 'n' }],
-        styleGuide: 'Keep short.',
-        tokensUsed: 3,
-      });
-      await input.onEvent({
-        type: 'tool_start',
-        name: 'web_search',
-        argsSummary: '{}',
-        callId: 'fail-ws',
-        stage: 'terminology',
-      });
-      await input.onEvent({
-        type: 'tool_end',
-        name: 'web_search',
-        argsSummary: '{}',
-        callId: 'fail-ws',
-        ok: true,
-        detail: 'ok',
-        durationMs: 10,
-        stage: 'terminology',
-      });
-      await input.onEvent({ type: 'pipeline_error', error: 'boom' });
-      throw new Error('boom');
-    });
+    configuredState();
+    executeTranslation.mockRejectedValue(new Error('boom'));
 
     const fileId = generateStableFileId('t-fail');
     const result = await startTranslation(fileId);
@@ -309,30 +195,16 @@ describe('translationService', () => {
     const task = useFilesStore.getState().tasks.find((t) => t.taskId === 't-fail');
     expect(task?.phases.translating.status).toBe('failed');
     expect(task?.phases.translating.errorMessage).toMatch(/boom/);
-    expect(task?.agentSnapshot?.error).toMatch(/boom/);
-    // ensureAgentFailureSnapshot 不得把富快照冲成薄结构
-    expect(task?.agentSnapshot?.glossary).toEqual([
-      { source: 'Hi', target: '嗨', note: 'n' },
-    ]);
-    expect(task?.agentSnapshot?.styleGuide).toMatch(/Keep short/);
-    expect(task?.agentSnapshot?.toolLog?.some((t) => t.id === 'fail-ws')).toBe(true);
-    expect(task?.agentSnapshot?.totalEntries).toBe(2);
-    const run = useAgentRunStore.getState().byFileId[fileId];
-    expect(run?.active).toBe(false);
-    expect(run?.error).toMatch(/boom/);
   });
 
-  it('agent AbortError: does not mark failed', async () => {
+  it('AbortError does not mark failed', async () => {
     useFilesStore.setState({
-      tasks: [makeFile('t-abort', 'upcoming', { agentTranslationEnabled: true })],
+      tasks: [makeFile('t-abort', 'upcoming')],
     });
-    configuredState(true);
+    configuredState();
     const err = new Error('翻译已取消');
     err.name = 'AbortError';
-    runAgentTranslation.mockImplementation(async (_entries, input) => {
-      await input.onEvent({ type: 'pipeline_start', totalEntries: 2, totalWindows: 1 });
-      throw err;
-    });
+    executeTranslation.mockRejectedValue(err);
 
     const fileId = generateStableFileId('t-abort');
     const result = await startTranslation(fileId);
@@ -340,8 +212,5 @@ describe('translationService', () => {
     expect(result).toBeNull();
     const task = useFilesStore.getState().tasks.find((t) => t.taskId === 't-abort');
     expect(task?.phases.translating.status).not.toBe('failed');
-    // still active from start; abort deactivates agent UI without failed snapshot
-    const run = useAgentRunStore.getState().byFileId[fileId];
-    expect(run?.active).toBe(false);
   });
 });

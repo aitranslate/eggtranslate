@@ -16,4 +16,5 @@ claude.md
 # 本地一次性探针，勿提交
 /e2e/probe-mobile-editor.mjs
 /test-fixtures/
+/downloads/
 /test-media-list.json

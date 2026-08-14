@@ -44,14 +44,3 @@ export function withTaskLanguages(
     targetLanguage: langs.targetLanguage,
   };
 }
-
-/**
- * 本任务翻译是否走 Agent 管线（任务级开关，创建/导入时从全局设置快照）。
- * 与 AI 断句一致：添加任务后开关跟随任务，改全局设置不影响既有任务；
- * 严格判定，未开启（含历史任务缺省）一律批译，不跟全局设置。
- */
-export function resolveTaskAgentEnabled(
-  file: Pick<SubtitleFileMetadata, 'agentTranslationEnabled'> | null | undefined
-): boolean {
-  return file?.agentTranslationEnabled === true;
-}

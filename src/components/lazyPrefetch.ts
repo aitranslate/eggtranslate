@@ -6,7 +6,3 @@
 export function prefetchMobileShell(): Promise<unknown> {
   return import('./mobile/MobileShell');
 }
-
-export function prefetchAgentProcessControl(): Promise<unknown> {
-  return import('./agent/AgentProcessControl');
-}

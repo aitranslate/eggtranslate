@@ -38,34 +38,18 @@ describe('lazy surface wiring', () => {
     expect(src).not.toMatch(/from ['"]\.\/mobile\/MobileShell['"]/);
   });
 
-  it('lazySurfaces exposes LazyMobileShell + LazyAgentProcessControl', () => {
+  it('lazySurfaces exposes LazyMobileShell', () => {
     const src = readSrc('components/lazySurfaces.tsx');
     expect(src).toMatch(/LazyMobileShell\s*=\s*React\.lazy/);
     expect(src).toMatch(/import\(['"]\.\/mobile\/MobileShell['"]\)/);
-    expect(src).toMatch(/LazyAgentProcessControl\s*=\s*React\.lazy/);
-    expect(src).toMatch(/import\(['"]\.\/agent\/AgentProcessControl['"]\)/);
+    expect(src).not.toMatch(/AgentProcessControl/);
   });
 
   it('lazyPrefetch triggers the same dynamic graphs without mounting UI', () => {
     const src = readSrc('components/lazyPrefetch.ts');
     expect(src).toMatch(/export function prefetchMobileShell/);
     expect(src).toMatch(/import\(['"]\.\/mobile\/MobileShell['"]\)/);
-    expect(src).toMatch(/export function prefetchAgentProcessControl/);
-    expect(src).toMatch(/import\(['"]\.\/agent\/AgentProcessControl['"]\)/);
-  });
-
-  it('SubtitleEditor lazy-loads AgentProcessControl (separator inside Suspense)', () => {
-    const src = readSrc('components/SubtitleEditor.tsx');
-    expect(src).toMatch(/LazyAgentProcessControl/);
-    expect(src).toMatch(/prefetchAgentProcessControl/);
-    expect(src).toMatch(/from ['"]@\/components\/lazyPrefetch['"]/);
-    expect(src).not.toMatch(
-      /from ['"]@\/components\/agent\/AgentProcessControl['"]/
-    );
-    // 分隔符必须在 LazySurface 内，避免孤立「·」
-    expect(src).toMatch(
-      /LazySurface\s+fallback=\{null\}[\s\S]*?LazyAgentProcessControl/
-    );
+    expect(src).not.toMatch(/AgentProcessControl/);
   });
 
   it('heavy libs stay dynamic-only; vite keeps them out of static vendor', () => {
@@ -128,11 +112,9 @@ describe('lazy surface wiring', () => {
     );
   });
 
-  it('translationService dynamically imports agent pipeline (not static)', () => {
+  it('translationService has no agent pipeline import', () => {
     const src = readSrc('services/translationService.ts');
-    expect(src).toMatch(/await\s+import\(['"]\.\/agent['"]\)/);
-    expect(src).not.toMatch(
-      /import\s*\{\s*runAgentTranslation\s*\}\s*from\s*['"]\.\/agent['"]/
-    );
+    expect(src).not.toMatch(/runAgentTranslation/);
+    expect(src).not.toMatch(/['"]\.\/agent['"]/);
   });
 });

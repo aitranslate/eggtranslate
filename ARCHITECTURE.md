@@ -79,20 +79,12 @@ setQueueServiceDeps({
 
 ## 主数据流
 
-### 翻译（双路径，默认批译）
-
-设置项 `agentTranslationEnabled`（**默认 false**）决定本次走哪条路径；关开关不擦除历史 `agentSnapshot`。
+### 翻译（批译）
 
 ```
 startTranslation
-  ├─ agentTranslationEnabled === true
-  │    → services/agent/* （术语 tool-loop → 分窗译 → 窗级 QA → IDB 断点）
-  │    → 过程面板 AgentProcessControl / agentRunStore
-  └─ false（默认）
-       → TranslationOrchestrator + llmTranslationService 批译
+  → TranslationOrchestrator + llmTranslationService 批译
 ```
-
-**批译（默认）：**
 
 1. UI：`enqueueTask(fileId)` → `queueService`
 2. `runTask` → `startTranslation(fileId)`
@@ -100,16 +92,6 @@ startTranslation
 4. `executeTranslation` 按 batch 调用 `llmTranslationService.translateBatch`
 5. 流式：`streamingOverlayStore`；定稿：`filesStore.batchUpdateEntries` + phase
 6. 结束：`stopTranslation`、可选 `saveTranslationHistory`
-
-**Agent（可选高质量路径，对齐 AsrAgent 语义）：**
-
-1. 同上 1–3 后进入 `runAgentTranslation`
-2. 术语：长片分窗 tool-loop → union glossary；grounding / 用户术语非全收 + LLM expand + style↔glossary 对齐
-3. 分窗 `submit_translation`：仅强制**本窗命中**的 glossary；覆盖率重试；`tool_choice` 优先强制 submit（不支持则 auto）
-4. 窗级 LLM QA 仅 **risk**：有确定性风险信号才审校，critical 可重译（无 always/off）
-5. 合并后全局术语一致性检查（提示，不强制重译）；`run_stats` 上报阶段 token 与 QA 跳过数
-6. `web_search` 仅术语阶段（默认预算 3，可关）；loop 用 structured outcome + context projection
-7. 批译路径不加载 agent 模块；默认 `agentTranslationEnabled: false`
 
 ### 转录
 

@@ -18,8 +18,6 @@ export interface LoadFileOptions {
   defaultTargetLanguage?: string;
   /** 创建任务时写入的 AI 断句开关（来自全局设置，音视频任务生效） */
   defaultAiSegmentationEnabled?: boolean;
-  /** 创建任务时写入的 Agent 翻译开关（来自全局设置快照，之后改设置不影响本任务） */
-  defaultAgentTranslationEnabled?: boolean;
 }
 
 export interface LoadFileResult {
@@ -86,9 +84,6 @@ export async function loadFromFile(
   // 音视频文件立即获取 duration（不需要转码）
   const duration = fileType !== 'srt' ? await getMediaDuration(file) : undefined;
 
-  // 任务级 Agent 翻译开关：创建时从全局设置快照（SRT / 音视频都生效）
-  const agentEnabled = options.defaultAgentTranslationEnabled === true;
-
   if (fileType === 'srt') {
     const content = await file.text();
     const entries = parseSRT(content);
@@ -104,7 +99,6 @@ export async function loadFromFile(
       selectedKeytermGroupId,
       sourceLanguage,
       targetLanguage,
-      agentTranslationEnabled: agentEnabled,
       entryCount: entries.length,
       translatedCount: entries.filter(e => e.translatedText).length,
     };
@@ -125,7 +119,6 @@ export async function loadFromFile(
         selectedKeytermGroupId,
         sourceLanguage,
         targetLanguage,
-        agentTranslationEnabled: agentEnabled,
       },
       task: newTask
     };
@@ -149,7 +142,6 @@ export async function loadFromFile(
       sourceLanguage,
       targetLanguage,
       aiSegmentationEnabled: aiEnabled,
-      agentTranslationEnabled: agentEnabled,
       entryCount: 0,
       translatedCount: 0,
     };
@@ -172,7 +164,6 @@ export async function loadFromFile(
         sourceLanguage,
         targetLanguage,
         aiSegmentationEnabled: aiEnabled,
-        agentTranslationEnabled: agentEnabled,
         fileRef: file
       },
       task: newTask
@@ -219,9 +210,6 @@ export function convertTaskToMetadata(task: SingleTask): SubtitleFileMetadata {
     sourceLanguage: task.sourceLanguage,
     targetLanguage: task.targetLanguage,
     aiSegmentationEnabled: task.aiSegmentationEnabled,
-    agentTranslationEnabled: task.agentTranslationEnabled,
-    translationPath: task.translationPath,
-    agentSnapshot: task.agentSnapshot ?? null,
     fileRef: task.fileRef
   };
 }

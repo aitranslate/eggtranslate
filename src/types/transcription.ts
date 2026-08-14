@@ -1,4 +1,4 @@
-import type { AgentRunSnapshot, FilePhases, TranslationPath } from './index';
+import type { FilePhases } from './index';
 
 // 热词分组
 export interface KeytermGroup {
@@ -60,21 +60,13 @@ export interface SubtitleFileMetadata {
 
   /**
    * 任务级源语言 / 目标语言（创建时从全局拷贝；旧任务可缺省）。
-   * 翻译/Agent 优先读此字段，缺省回退全局设置。
+   * 翻译优先读此字段，缺省回退全局设置。
    */
   sourceLanguage?: string;
   targetLanguage?: string;
 
   /** 任务级 AI 断句开关（创建时从全局设置拷贝；音视频任务）。 */
   aiSegmentationEnabled?: boolean;
-
-  /** 任务级 Agent 翻译开关（创建时从全局设置拷贝；缺省一律批译）。 */
-  agentTranslationEnabled?: boolean;
-
-  /** 最近一次翻译路径（agent / batch），与设置开关解耦 */
-  translationPath?: TranslationPath;
-  /** Agent 终态快照（持久化在任务上） */
-  agentSnapshot?: AgentRunSnapshot | null;
 
   // 音视频原始文件引用（不持久化，仅内存）
   fileRef?: File;

@@ -1,5 +1,5 @@
 /**
- * 工作台非关键路径的懒加载表面（设置 / 术语 / 历史 / 移动壳 / Agent 面板）。
+ * 工作台非关键路径的懒加载表面（设置 / 术语 / 历史 / 移动壳）。
  * 冷启动不拉取这些模块的完整依赖图；首次打开时再动态 import。
  */
 import React, { Suspense, type ReactNode } from 'react';
@@ -19,13 +19,6 @@ export const LazyHistoryModal = React.lazy(() =>
 /** 桌面不加载；仅 isMobile 分支挂载 */
 export const LazyMobileShell = React.lazy(() =>
   import('./mobile/MobileShell').then((m) => ({ default: m.MobileShell }))
-);
-
-/** 仅 Agent 运行态可见时加载 */
-export const LazyAgentProcessControl = React.lazy(() =>
-  import('./agent/AgentProcessControl').then((m) => ({
-    default: m.AgentProcessControl,
-  }))
 );
 
 /** 面板/抽屉加载中的轻量占位 */

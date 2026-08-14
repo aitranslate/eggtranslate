@@ -41,8 +41,7 @@ import {
   shouldShowTaskErrorDetail,
 } from '@/utils/uxHelpers';
 import { formatFileSize, formatDuration } from '../utils/fileHelpers';
-import { useAgentRunStore } from '@/stores/agentRunStore';
-import { resolveTaskAgentEnabled } from '@/utils/taskLanguages';
+
 
 interface SidebarTaskRowProps {
   file: SubtitleFileMetadata;
@@ -81,16 +80,7 @@ export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
 }) => {
   const keytermGroups = useTranscriptionStore((s) => s.keytermGroups);
   const setSelectedKeytermGroupId = useFilesStore((s) => s.setSelectedKeytermGroupId);
-  // 任务级 Agent 开关（添加任务时快照，与 AI 断句同款）：缺省即批译，不跟全局设置
-  const agentEnabled = resolveTaskAgentEnabled(file);
-  const agentRunActive = useAgentRunStore((s) => Boolean(s.byFileId[file.id]?.active));
-  /** 阶段 chip 按任务路径/运行态；主按钮仍固定「翻译 / 转译」 */
-  const phaseTranslateLabel = resolveTranslatePhaseLabel({
-    translationPath: file.translationPath,
-    agentRunActive,
-    agentEnabled,
-    translatingStatus: file.phases.translating?.status,
-  });
+  const phaseTranslateLabel = resolveTranslatePhaseLabel();
 
   const displayPhases = useMemo(() => {
     const base =
@@ -450,9 +440,6 @@ export const SidebarTaskRowMemo = memo(SidebarTaskRow, (prev, next) => {
     'tokensUsed',
     'selectedKeytermGroupId',
     'fileType',
-    // phase chip label: agent vs batch
-    'translationPath',
-    'agentTranslationEnabled',
   ];
   for (const k of keys) {
     if (prev.file[k] !== next.file[k]) return false;
