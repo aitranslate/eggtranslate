@@ -266,8 +266,7 @@ function ParamsFields({
               Agent 翻译
             </span>
             <span className="block text-[11px] text-[var(--wb-text-3)] mt-0.5 leading-snug">
-              开启后：术语 Agent（tool loop）→ 分窗翻译 Subagent → QA 审校/重跑 →
-              断点续跑；译文仍走现有流式上屏。关闭则完全使用原来的批译路径。
+              仅对之后添加的任务生效：术语 → 分窗译 → QA 审校；关闭则走批译。
             </span>
           </span>
         </label>
