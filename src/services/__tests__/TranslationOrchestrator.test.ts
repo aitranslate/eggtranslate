@@ -6,6 +6,9 @@ import {
   saveTranslationHistory,
   processBatch,
   finalizeBatchTranslations,
+  formatSubtitleContextLine,
+  collectEstablishedTranslations,
+  buildBatchContext,
   type BatchInfo,
   type TranslationCallbacks,
 } from '../TranslationOrchestrator';
@@ -174,6 +177,25 @@ describe('createTranslationBatches', () => {
     // 批 1: entries[2..3] —— before 为 entries[0..1]，after 为 entries[4]
     expect(batches[1].contextBeforeTexts).toBe('text-1\ntext-2');
     expect(batches[1].contextAfterTexts).toBe('text-5');
+    expect(batches[1].spanStart).toBe(2);
+    expect(batches[1].spanEnd).toBe(4);
+  });
+
+  it('已完成邻行写成 原文 → 译文', () => {
+    const entries = [
+      makeEntry(1, { translationStatus: 'completed', translatedText: '译-1' }),
+      makeEntry(2, { translationStatus: 'completed', translatedText: '译-2' }),
+      makeEntry(3),
+      makeEntry(4),
+    ];
+    const batches = createTranslationBatches(
+      entries,
+      makeConfig({ batchSize: 2, contextBefore: 2, contextAfter: 0 }),
+      makeCallbacks()
+    );
+    expect(batches).toHaveLength(1);
+    expect(batches[0].contextBeforeTexts).toBe('text-1 → 译-1\ntext-2 → 译-2');
+    expect(batches[0].establishedTexts).toBe('');
   });
 
   it('将 getRelevantTerms 的结果放入 batch.relevantTerms', () => {
@@ -188,6 +210,34 @@ describe('createTranslationBatches', () => {
     );
     expect(callbacks.getRelevantTerms).toHaveBeenCalledTimes(1);
     expect(batches[0].relevantTerms).toBe(terms);
+  });
+});
+
+describe('formatSubtitleContextLine / established memory', () => {
+  it('未完成只输出原文', () => {
+    expect(formatSubtitleContextLine(makeEntry(1))).toBe('text-1');
+  });
+
+  it('收集窗口外的已译对照，只留最近若干条', () => {
+    const entries = Array.from({ length: 8 }, (_, i) =>
+      makeEntry(i + 1, { translationStatus: 'completed', translatedText: `T${i + 1}` })
+    );
+    const text = collectEstablishedTranslations(entries, 6, 2, 3);
+    expect(text).toBe('text-2 → T2\ntext-3 → T3\ntext-4 → T4');
+  });
+
+  it('buildBatchContext 同时给出邻行与 established', () => {
+    const entries = [
+      makeEntry(1, { translationStatus: 'completed', translatedText: 'A' }),
+      makeEntry(2, { translationStatus: 'completed', translatedText: 'B' }),
+      makeEntry(3),
+      makeEntry(4),
+      makeEntry(5, { translationStatus: 'completed', translatedText: 'E' }),
+    ];
+    const ctx = buildBatchContext(entries, 2, 4, 1, 1);
+    expect(ctx.contextBeforeTexts).toBe('text-2 → B');
+    expect(ctx.contextAfterTexts).toBe('text-5 → E');
+    expect(ctx.establishedTexts).toBe('text-1 → A');
   });
 });
 

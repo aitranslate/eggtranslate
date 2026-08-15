@@ -188,7 +188,8 @@ export async function startTranslation(
             contextAfter,
             terms,
             onPartial,
-            onAttemptStart
+            onAttemptStart,
+            established
           ) =>
             deps.translateBatch(config, texts, {
               signal,
@@ -197,6 +198,7 @@ export async function startTranslation(
               terms,
               onPartial,
               onAttemptStart,
+              established,
             }),
           batchUpdateEntries: (updates) => {
             deps.batchUpdateEntries(fileId, updates);

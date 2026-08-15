@@ -13,10 +13,17 @@ import { mapPool } from '@/utils/asyncPool';
 
 export interface BatchInfo {
   batchIndex: number;
+  /** 该批在全片 entries 中的起止下标（end 开区间），供开译时按最新条目刷新上下文。 */
+  spanStart?: number;
+  spanEnd?: number;
+  contextBeforeCount?: number;
+  contextAfterCount?: number;
   untranslatedEntries: SubtitleEntry[];
   textsToTranslate: string[];
   contextBeforeTexts: string;
   contextAfterTexts: string;
+  /** 窗口之外、更早的已译对照（压缩记忆）。 */
+  establishedTexts?: string;
   relevantTerms: Term[];  // 改为传递术语数组
 }
 
@@ -37,7 +44,9 @@ export interface TranslationCallbacks {
     /** 流式 partial：key 为 "1"|"2"|...，与 texts 下标对应 */
     onPartial?: (translations: Record<string, { direct: string }>) => void,
     /** 格式重试 attempt 从 1 起；>1 时应清本批 overlay */
-    onAttemptStart?: (attempt: number) => void
+    onAttemptStart?: (attempt: number) => void,
+    /** 窗口外已确定的原文→译文，供译名一致 */
+    established?: string
   ) => Promise<{ translations: Record<string, { direct: string }>; tokensUsed: number; partial?: boolean }>;
   /**
    * Apply an entire batch of entry patches in one store mutation.
@@ -78,6 +87,69 @@ export interface TranslationOptions {
   config: TranslationConfig;
   controller: AbortController;
   taskId: string;
+}
+
+/**
+ * 计算实际翻译进度（仅 completed 算成功；missing 可重试）
+ */
+const ESTABLISHED_PAIR_LIMIT = 12;
+
+/** 已完成的行写成「原文 → 译文」，否则只留原文。 */
+export function formatSubtitleContextLine(
+  entry: Pick<SubtitleEntry, 'text' | 'translatedText' | 'translationStatus'>
+): string {
+  const src = (entry.text || '').trim();
+  const tgt = (entry.translatedText || '').trim();
+  if (tgt && entry.translationStatus === 'completed') {
+    return `${src} → ${tgt}`;
+  }
+  return src;
+}
+
+/** 上下文窗口之前的已译对照，最多保留最近 limit 条。 */
+export function collectEstablishedTranslations(
+  entries: Array<Pick<SubtitleEntry, 'text' | 'translatedText' | 'translationStatus'>>,
+  spanStart: number,
+  contextBeforeCount: number,
+  limit: number = ESTABLISHED_PAIR_LIMIT
+): string {
+  const excludeFrom = Math.max(0, spanStart - Math.max(0, contextBeforeCount));
+  const pairs: string[] = [];
+  for (let i = 0; i < excludeFrom; i++) {
+    const e = entries[i];
+    if (
+      e?.translationStatus === 'completed' &&
+      e.text?.trim() &&
+      e.translatedText?.trim()
+    ) {
+      pairs.push(`${e.text.trim()} → ${e.translatedText.trim()}`);
+    }
+  }
+  if (pairs.length <= limit) return pairs.join('\n');
+  return pairs.slice(-limit).join('\n');
+}
+
+export function buildBatchContext(
+  entries: SubtitleEntry[],
+  spanStart: number,
+  spanEnd: number,
+  contextBeforeCount: number,
+  contextAfterCount: number
+): { contextBeforeTexts: string; contextAfterTexts: string; establishedTexts: string } {
+  const contextBeforeTexts = entries
+    .slice(Math.max(0, spanStart - contextBeforeCount), spanStart)
+    .map(formatSubtitleContextLine)
+    .join('\n');
+  const contextAfterTexts = entries
+    .slice(spanEnd, Math.min(entries.length, spanEnd + contextAfterCount))
+    .map(formatSubtitleContextLine)
+    .join('\n');
+  const establishedTexts = collectEstablishedTranslations(
+    entries,
+    spanStart,
+    contextBeforeCount
+  );
+  return { contextBeforeTexts, contextAfterTexts, establishedTexts };
 }
 
 /**
@@ -166,15 +238,13 @@ export function createTranslationBatches(
       continue;
     }
 
-    const contextBeforeTexts = entries
-      .slice(Math.max(0, startIdx - contextBefore), startIdx)
-      .map(e => e.text)
-      .join('\n');
-
-    const contextAfterTexts = entries
-      .slice(endIdx, Math.min(entries.length, endIdx + contextAfter))
-      .map(e => e.text)
-      .join('\n');
+    const { contextBeforeTexts, contextAfterTexts, establishedTexts } = buildBatchContext(
+      entries,
+      startIdx,
+      endIdx,
+      contextBefore,
+      contextAfter
+    );
 
     const batchText = untranslatedEntries.map(e => e.text).join(' ');
     const relevantTerms = callbacks.getRelevantTerms(
@@ -187,10 +257,15 @@ export function createTranslationBatches(
 
     allBatches.push({
       batchIndex,
+      spanStart: startIdx,
+      spanEnd: endIdx,
+      contextBeforeCount: contextBefore,
+      contextAfterCount: contextAfter,
       untranslatedEntries,
       textsToTranslate,
       contextBeforeTexts,
       contextAfterTexts,
+      establishedTexts,
       relevantTerms  // 传递术语数组而非格式化字符串
     });
   }
@@ -212,8 +287,38 @@ export async function processBatch(
   const batchEntryIds = batch.untranslatedEntries.map((e) => e.id);
 
   try {
+    let contextBeforeTexts = batch.contextBeforeTexts;
+    let contextAfterTexts = batch.contextAfterTexts;
+    let establishedTexts = batch.establishedTexts ?? '';
+    let relevantTerms = batch.relevantTerms;
+
+    const live = callbacks.getCurrentEntries?.();
+    if (
+      live &&
+      live.length > 0 &&
+      Number.isFinite(batch.spanStart) &&
+      Number.isFinite(batch.spanEnd)
+    ) {
+      const refreshed = buildBatchContext(
+        live,
+        batch.spanStart,
+        batch.spanEnd,
+        batch.contextBeforeCount ?? 0,
+        batch.contextAfterCount ?? 0
+      );
+      contextBeforeTexts = refreshed.contextBeforeTexts;
+      contextAfterTexts = refreshed.contextAfterTexts;
+      establishedTexts = refreshed.establishedTexts;
+      const batchText = batch.textsToTranslate.join(' ');
+      relevantTerms = callbacks.getRelevantTerms(
+        batchText,
+        contextBeforeTexts,
+        contextAfterTexts
+      );
+    }
+
     // 使用 formatTermsForPrompt 格式化术语
-    const termsText = formatTermsForPrompt(batch.relevantTerms);
+    const termsText = formatTermsForPrompt(relevantTerms);
 
     // 流式 partial → 内存 overlay（不写 filesStore，避免卡顿）
     const onPartial = (partial: Record<string, { direct: string }>) => {
@@ -235,14 +340,15 @@ export async function processBatch(
     const translationResult = await callbacks.translateBatch(
       batch.textsToTranslate,
       controller.signal,
-      batch.contextBeforeTexts,
-      batch.contextAfterTexts,
+      contextBeforeTexts,
+      contextAfterTexts,
       termsText,  // 使用格式化后的术语
       onPartial,
       // 重试时清掉上轮半截流式，避免「UI 31 条 / 定稿失败」叠在一起
       (attempt) => {
         if (attempt > 1) callbacks.clearStreamingIds?.(batchEntryIds);
-      }
+      },
+      establishedTexts
     );
 
     const batchUpdates = finalizeBatchTranslations(
