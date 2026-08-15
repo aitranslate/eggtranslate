@@ -8,7 +8,7 @@ import type { TranslationHistoryEntry } from '@/types';
 /** 本地历史条数上限（含全文条目）；超出时丢弃最旧记录 */
 export const HISTORY_MAX_ENTRIES = 50;
 
-export interface HistoryStats {
+interface HistoryStats {
   total: number;
   totalTokens: number;
 }
@@ -47,9 +47,9 @@ export function calculateHistoryStats(history: TranslationHistoryEntry[]): Histo
   };
 }
 
-export type HistoryStatusKind = 'translated' | 'transcribed';
+type HistoryStatusKind = 'translated' | 'transcribed';
 
-export interface HistoryStatus {
+interface HistoryStatus {
   label: string;
   kind: HistoryStatusKind;
 }

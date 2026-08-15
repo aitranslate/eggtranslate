@@ -35,7 +35,7 @@ function normalizeBaseURL(baseURL: string): string {
  * 根据模型 id / 元数据粗分类型。
  * 厂商很少返回统一的 capability 字段，主要靠命名约定。
  */
-export function classifyModelKind(
+function classifyModelKind(
   id: string,
   extra?: { owned_by?: string; object?: string }
 ): LlmModelKind {
@@ -137,7 +137,7 @@ function extractModels(payload: unknown): LlmModelInfo[] {
   return result;
 }
 
-export interface ListLlmModelsResult {
+interface ListLlmModelsResult {
   /** 适合翻译的对话/文本模型 */
   chatModels: LlmModelInfo[];
   /** 被过滤掉的非对话模型（生图/视频等） */

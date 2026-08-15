@@ -1,4 +1,4 @@
-export class RateLimiter {
+class RateLimiter {
   private rpm: number;
   private requests: number[];
   private maxQueueSize: number;

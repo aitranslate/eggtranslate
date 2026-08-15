@@ -1,8 +1,8 @@
 import React from 'react';
 
-export type InputSize = 'sm' | 'md';
+type InputSize = 'sm' | 'md';
 
-export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
+interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
   inputSize?: InputSize;
 }
 

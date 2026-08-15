@@ -45,7 +45,7 @@ const ENGLISH_CONNECTORS = [
 ];
 
 /** UI：短/标准/宽松 — 拉丁词数 */
-export const WORD_LIMITS: Record<Preset, number> = {
+const WORD_LIMITS: Record<Preset, number> = {
   short: 12,
   standard: 16,
   loose: 20,
@@ -58,14 +58,14 @@ export const WORD_LIMITS: Record<Preset, number> = {
 export const CHARS_PER_WORD_BUDGET = 5.5;
 
 /** 由词数预设导出的拉丁字符上限 */
-export const LATIN_CHAR_LIMITS: Record<Preset, number> = {
+const LATIN_CHAR_LIMITS: Record<Preset, number> = {
   short: Math.round(WORD_LIMITS.short * CHARS_PER_WORD_BUDGET),
   standard: Math.round(WORD_LIMITS.standard * CHARS_PER_WORD_BUDGET),
   loose: Math.round(WORD_LIMITS.loose * CHARS_PER_WORD_BUDGET),
 };
 
 /** UI：短/标准/宽松 — 中日韩等字数 */
-export const CJK_CHAR_LIMITS: Record<Preset, number> = {
+const CJK_CHAR_LIMITS: Record<Preset, number> = {
   short: 16,
   standard: 22,
   loose: 28,
@@ -86,7 +86,7 @@ function isCjkChar(ch: string): boolean {
  * 词级计量（拉丁 / 西里尔 / 阿拉伯 / 印地等）：
  * 一个 ASR token 只要含字母或数字 → 计 1 词；纯标点 → 0。
  */
-export function wordTokenUnits(token: string): number {
+function wordTokenUnits(token: string): number {
   return /\p{L}|\p{N}/u.test(token) ? 1 : 0;
 }
 
@@ -96,7 +96,7 @@ export function wordTokenUnits(token: string): number {
  * - 连续拉丁/数字块 = 1（混排英文）
  * - 纯标点 = 0
  */
-export function cjkTokenUnits(token: string): number {
+function cjkTokenUnits(token: string): number {
   let n = 0;
   let inAsciiWord = false;
   for (const ch of token) {

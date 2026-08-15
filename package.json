@@ -21,7 +21,6 @@
     "test:e2e:install": "npm install -g agent-browser && agent-browser install"
   },
   "dependencies": {
-    "@breezystack/lamejs": "^1.2.7",
     "@tanstack/react-virtual": "^3.13.26",
     "assemblyai": "^4.36.4",
     "framer-motion": "^12.23.12",

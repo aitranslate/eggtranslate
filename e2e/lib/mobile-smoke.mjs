@@ -8,8 +8,8 @@
 import path from 'node:path';
 import * as ab from './agent.mjs';
 
-export const MOBILE_VW = 390;
-export const MOBILE_VH = 844;
+const MOBILE_VW = 390;
+const MOBILE_VH = 844;
 
 function evalResult(results, index) {
   return ab.batchEvalResult(results[index]);

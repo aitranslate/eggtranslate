@@ -8,7 +8,7 @@ import { useQueueStore } from '@/stores/queueStore';
 import { useIsTranslating } from '@/stores/translationConfigStore';
 import { hasActivePhase, shouldPromptBeforeUnload } from '@/utils/uxHelpers';
 
-export function useIsActiveJob(): boolean {
+function useIsActiveJob(): boolean {
   const isTranslating = useIsTranslating();
   const activeTaskId = useQueueStore((s) => s.activeTaskId);
   const anyPhaseActive = useFilesStore((s) => s.tasks.some((t) => hasActivePhase(t.phases)));

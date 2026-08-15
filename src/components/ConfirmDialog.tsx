@@ -3,7 +3,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { AlertTriangle } from 'lucide-react';
 import { backdropFade, overlayPanelMotion } from '@/motion';
 
-export type ConfirmTone = 'danger' | 'default';
+type ConfirmTone = 'danger' | 'default';
 
 interface ConfirmDialogProps {
   isOpen: boolean;

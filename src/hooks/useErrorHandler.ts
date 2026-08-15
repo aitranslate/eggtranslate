@@ -18,7 +18,7 @@ import { logger } from '@/utils/logger';
 /**
  * 错误处理选项
  */
-export interface ErrorHandlerOptions {
+interface ErrorHandlerOptions {
   /** 是否显示 toast 通知（默认 true） */
   showToast?: boolean;
   /** 是否记录日志（默认 true） */
@@ -36,7 +36,7 @@ export interface ErrorHandlerOptions {
 /**
  * 错误处理结果
  */
-export interface ErrorHandlerResult {
+interface ErrorHandlerResult {
   /** 是否成功 */
   success: boolean;
   /** 错误对象（如果失败） */

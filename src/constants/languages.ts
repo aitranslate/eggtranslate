@@ -3,10 +3,35 @@
  * 用于翻译设置中的源语言和目标语言选择
  */
 
-export interface LanguageOption {
+interface LanguageOption {
   value: string;
   label: string;
   nativeName: string;
+}
+
+/** 历史脏数据：en / zh-cn 等 → LANGUAGE_OPTIONS.value */
+export function normalizeLangValue(raw: string): string {
+  if (!raw) return raw;
+  if (LANGUAGE_OPTIONS.some((l) => l.value === raw)) return raw;
+  const key = raw.trim().toLowerCase();
+  const map: Record<string, string> = {
+    en: 'English',
+    eng: 'English',
+    english: 'English',
+    zh: '简体中文',
+    'zh-cn': '简体中文',
+    'zh-hans': '简体中文',
+    'zh-tw': '繁体中文',
+    'zh-hant': '繁体中文',
+    ja: 'Japanese',
+    jp: 'Japanese',
+    ko: 'Korean',
+    fr: 'French',
+    de: 'German',
+    es: 'Spanish',
+    ru: 'Russian',
+  };
+  return map[key] ?? raw;
 }
 
 export const LANGUAGE_OPTIONS: LanguageOption[] = [

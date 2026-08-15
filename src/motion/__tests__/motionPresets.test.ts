@@ -1,17 +1,13 @@
 import { describe, it, expect } from 'vitest';
+import { MOTION_DURATION, MOTION_SPRING_SOFT } from '../tokens';
 import {
-  MOTION_DURATION,
   MOTION_EASE,
-  MOTION_SPRING_SOFT,
   backdropFade,
   overlayPanelMotion,
   popoverMotion,
-  tooltipMotion,
   edgeDrawerMotion,
   stageMotion,
   collapseMotion,
-  progressWidthTransition,
-  indeterminateBarMotion,
   staggerItemMotion,
   countDuration,
 } from '@/motion';
@@ -40,11 +36,9 @@ describe('motion presets respect reduced-motion', () => {
     expect(red.transition).toEqual({ duration: 0 });
   });
 
-  it('popover / tooltip share soft spring when motion on', () => {
+  it('popover uses soft spring when motion on', () => {
     const p = popoverMotion(false);
-    const t = tooltipMotion(false);
     expect(p.transition).toMatchObject({ type: 'spring', stiffness: 380 });
-    expect(t.transition).toMatchObject({ type: 'spring', stiffness: 380 });
   });
 
   it('drawer uses tween duration from tokens', () => {
@@ -65,18 +59,9 @@ describe('motion presets respect reduced-motion', () => {
     expect(full.transition.duration).toBe(MOTION_DURATION.base);
   });
 
-  it('collapse and progress stop when reduced', () => {
+  it('collapse stops when reduced', () => {
     expect(collapseMotion(true).transition.duration).toBe(0);
-    expect(progressWidthTransition(true).duration).toBe(0);
-    expect(progressWidthTransition(false).duration).toBe(MOTION_DURATION.progress);
-  });
-
-  it('indeterminate bar does not loop when reduced', () => {
-    const red = indeterminateBarMotion(true);
-    expect(red.transition.duration).toBe(0);
-    expect(red.transition).not.toHaveProperty('repeat');
-    const full = indeterminateBarMotion(false);
-    expect(full.transition).toMatchObject({ repeat: Infinity });
+    expect(collapseMotion(false).transition.duration).toBe(MOTION_DURATION.expand);
   });
 
   it('stagger items have no delay when reduced', () => {

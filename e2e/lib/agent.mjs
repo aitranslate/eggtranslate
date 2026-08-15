@@ -61,7 +61,7 @@ function envBase() {
  * @param {string[]} args
  * @param {{ timeout?: number, input?: string }} [opts]
  */
-export function ab(args, { timeout = DEFAULT_TIMEOUT, input } = {}) {
+function ab(args, { timeout = DEFAULT_TIMEOUT, input } = {}) {
   const bin = resolveAgentBrowser();
   if (!bin) {
     throw new Error(
@@ -159,52 +159,6 @@ export function closeAll() {
 
 export function getSession() {
   return SESSION;
-}
-
-export function open(url) {
-  return ab(['open', url], { timeout: 120000 });
-}
-
-export function evalJs(code) {
-  const r = ab(['eval', code], { timeout: 30000 });
-  let value = r.stdout;
-  const lines = value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  if (lines.length) value = lines[lines.length - 1];
-  if (
-    (value.startsWith('"') && value.endsWith('"')) ||
-    (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    try {
-      value = JSON.parse(value);
-    } catch {
-      value = value.slice(1, -1);
-    }
-  }
-  return { ...r, value };
-}
-
-export function screenshot(filePath) {
-  return ab(['screenshot', path.resolve(filePath)], { timeout: 30000 });
-}
-
-export function wait(ms) {
-  return ab(['wait', String(ms)], { timeout: ms + 15000 });
-}
-
-export function upload(selector, filePath) {
-  return ab(['upload', selector, path.resolve(filePath)], { timeout: 60000 });
-}
-
-export function setViewport(w, h) {
-  return ab(['set', 'viewport', String(w), String(h)], { timeout: 15000 });
-}
-
-export function getUrl() {
-  return ab(['get', 'url'], { timeout: 15000 });
-}
-
-export function getTitle() {
-  return ab(['get', 'title'], { timeout: 15000 });
 }
 
 export function errors() {

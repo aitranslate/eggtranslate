@@ -47,7 +47,7 @@ import {
  * 非结构边界的时间代价：只用 start/end。
  * 粘连（≤8ms 抖动当 0）最贵；越大的间隔越便宜；≥0.35s 才算 quality 停顿。
  */
-export function lexicalCutCost(gapSec: number | null): number {
+function lexicalCutCost(gapSec: number | null): number {
   const g = gapSec == null ? 0 : Math.max(0, gapSec);
   if (g >= GOOD_SILENCE_SEC) {
     return 2.0 - 0.5 * Math.min(1, (g - GOOD_SILENCE_SEC) / 0.9);
@@ -70,7 +70,7 @@ function resolvedGap(
   return silence ? silence(left, right) : null;
 }
 
-export function boundaryBaseCost(
+function boundaryBaseCost(
   tokens: WordToken[],
   i: number,
   profile: LanguageProfile,
@@ -166,7 +166,7 @@ export function isQualityCutBoundary(
   return false;
 }
 
-export interface DualLimits {
+interface DualLimits {
   /** 词/字 hard */
   unit: number;
   /** 显示字符 hard；Infinity = 不启用 */
@@ -329,13 +329,13 @@ function greedyCutsByHardLimit(
   return cuts;
 }
 
-export type DpSplitMode = 'quality' | 'force';
+type DpSplitMode = 'quality' | 'force';
 
 /**
  * 对单个 span 做 DP 软切分。
  * hard 为多 token 段必须满足的上限；limit 仅用于长度惩罚目标。
  */
-export function dpSplitSpan(
+function dpSplitSpan(
   tokens: WordToken[],
   start: number,
   end: number,

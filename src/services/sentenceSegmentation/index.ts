@@ -20,37 +20,7 @@ import {
 } from './aiBreak';
 import type { DpSegment, Preset, Segment, SilenceQuery, WordToken, WordWithTime } from './types';
 
-export { mergeWatchabilitySegments } from './watchabilityMerge';
-export {
-  WORD_LIMITS,
-  CJK_CHAR_LIMITS,
-  LATIN_CHAR_LIMITS,
-  CHARS_PER_WORD_BUDGET,
-  getProfile,
-  joinTokenTexts,
-} from './profiles';
-export {
-  aiAcceptableVsDp,
-  aiNotWorseThanDp,
-  buildAiBreakPrompt,
-  computeSpanCuts,
-  dpPartTexts,
-  isStructurallyBadCut,
-  mapBreakMarksToCuts,
-  materializeCuts,
-  projectCutsToPieceBudget,
-  realizeAiPartition,
-  sanitizeAiCuts,
-  scoreCutList,
-  segmentsWithinLimits,
-  MIN_PIECE_MS,
-  type AiBreaker,
-  type AiBreakResult,
-  type BreakMark,
-  type PartitionScore,
-  type SplitPiece,
-  type SpanCutInfo,
-} from './aiBreak';
+export type { AiBreaker, AiBreakResult } from './aiBreak';
 
 /**
  * 纯文本断句（复刻 / 离线测试用，不带 VAD 静音信息）。
@@ -159,7 +129,7 @@ export function segmentWords(
     : out;
 }
 
-export interface SegmentWordsAiOptions {
+interface SegmentWordsAiOptions {
   aiBreaker: AiBreaker;
   /** LLM 并发，默认 4（与设置 threadCount 一致）。 */
   concurrency?: number;

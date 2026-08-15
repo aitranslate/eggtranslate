@@ -45,7 +45,7 @@ function extractSentencesFromAst(nodes: ReturnType<typeof split>): string[] {
 }
 
 /** 英文硬切分：sentence-splitter（内置缩写/引号/括号处理）+ 单字母枚举补切。 */
-export function splitEnglishText(text: string): string[] {
+function splitEnglishText(text: string): string[] {
   if (!text.trim()) return [];
   const base = extractSentencesFromAst(split(text));
   const out: string[] = [];
@@ -69,7 +69,7 @@ function endsSentence(token: string): boolean {
 }
 
 /** 其它语言默认标点切分（带基础缩写/小数保护）。 */
-export function splitByPunctuation(text: string): string[] {
+function splitByPunctuation(text: string): string[] {
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length === 0) return [];
   const result: string[] = [];

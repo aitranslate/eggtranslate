@@ -74,9 +74,9 @@ function touchTaskEntriesDirty(taskId: string): void {
 export const FILES_PERSIST_DEBOUNCE_MS = 800;
 
 /** active 阶段仅 progress 变化时的 store 写入节流（流畅性） */
-export const PHASE_PROGRESS_THROTTLE_MS = 250;
+const PHASE_PROGRESS_THROTTLE_MS = 250;
 
-export type BatchEntryUpdate = {
+type BatchEntryUpdate = {
   id: number;
   text: string;
   translatedText?: string;
@@ -276,7 +276,7 @@ const entriesLoadInflight = new Map<string, Promise<void>>();
 /**
  * 任务字幕是否可展示：无条目、已 hydrate、或 entryCount 为 0。
  */
-export function isTaskEntriesReady(taskId: string | undefined | null): boolean {
+function isTaskEntriesReady(taskId: string | undefined | null): boolean {
   if (!taskId) return true;
   if (isEntriesHydrated(taskId)) return true;
   const task = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);
@@ -287,7 +287,7 @@ export function isTaskEntriesReady(taskId: string | undefined | null): boolean {
   return false;
 }
 
-export function isTaskEntriesLoading(taskId: string | undefined | null): boolean {
+function isTaskEntriesLoading(taskId: string | undefined | null): boolean {
   if (!taskId) return false;
   return isEntriesLoading(taskId);
 }

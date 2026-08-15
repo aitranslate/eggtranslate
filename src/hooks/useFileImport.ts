@@ -31,7 +31,7 @@ import {
  * accept 用 MIME 通配 + 常见扩展（仅影响系统文件选择器过滤，UI 不罗列格式）。
  * 媒体走流式抽轨/原文件直传，用户无需关心容器细节。
  */
-export const IMPORT_ACCEPT =
+const IMPORT_ACCEPT =
   '.srt,audio/*,video/*,.mkv,.avi,.mov,.wmv,.flv,.ts,.m4v,.webm,.ogg,.flac,.aac,.opus,.wma,.3gp,.mpeg,.mpg,.m4a,.wav,.mp3,.mp4';
 
 export function isSupportedImportFile(file: File): boolean {

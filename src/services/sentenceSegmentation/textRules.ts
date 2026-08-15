@@ -273,7 +273,7 @@ export function isFunctionWordLeft(token: string, extras?: readonly string[]): b
 }
 
 /** 去掉句末标点后的核心词，供闪帧/口头禅判定。 */
-export function discourseCore(text: string): string {
+function discourseCore(text: string): string {
   return text
     .trim()
     .replace(/^[^\p{L}\p{N}]+|[.!?。！？…,，、]+$/gu, '')
@@ -284,10 +284,3 @@ export function isDiscourseMarkerText(text: string): boolean {
   return DISCOURSE_MARKERS.has(discourseCore(text));
 }
 
-/**
- * VAD 静音强度（0~1）—— 与 voxtrans vad_strength 近似对齐：
- * 停顿 ≥1.2s 视为强停顿（≈0.85），越短越弱。
- */
-export function vadStrength(silenceSec: number): number {
-  return Math.min(0.9, Math.max(0, silenceSec / 1.4));
-}

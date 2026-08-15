@@ -12,7 +12,7 @@
 
 import { useSoundStore } from '@/stores/soundStore';
 
-export type AppSoundKind = 'confirm' | 'success' | 'error' | 'delete';
+type AppSoundKind = 'confirm' | 'success' | 'error' | 'delete';
 
 const RESULT_MIN_INTERVAL_MS = 500;
 const CONFIRM_MIN_INTERVAL_MS = 350;

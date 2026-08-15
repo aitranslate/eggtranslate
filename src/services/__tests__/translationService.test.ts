@@ -170,14 +170,7 @@ describe('translationService', () => {
 
     await startTranslation(generateStableFileId('t-lang'));
     expect(executeTranslation).toHaveBeenCalled();
-    const [, firstCall] = executeTranslation.mock.calls[0] as [
-      { filename: string },
-      unknown,
-    ];
-    void firstCall;
-    const arg0 = executeTranslation.mock.calls[0][0] as {
-      filename: string;
-    };
+    const arg0 = executeTranslation.mock.calls[0][0] as { filename: string };
     expect(arg0.filename).toBe('t-lang.srt');
   });
 

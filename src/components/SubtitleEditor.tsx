@@ -23,7 +23,7 @@ import {
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useTranslationConfig } from '@/stores/translationConfigStore';
 import { LANGUAGE_OPTIONS } from '@/constants/languages';
-import { normalizeLangValue } from '@/components/SettingsModal/LanguageSelector';
+import { normalizeLangValue } from '@/constants/languages';
 import { normalizeSrtTime } from '@/utils/timeUtils';
 import { getBilingualDisplayLines } from '@/utils/srtParser';
 import { generateStableFileId } from '@/utils/taskIdGenerator';
@@ -712,11 +712,8 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     };
   }, [file?.entryCount, file?.translatedCount, streamingLineCount]);
 
-  // 任务级语言优先，旧任务回退全局设置
-  const taskLangs = useMemo(
-    () => resolveTaskLanguages(file, config),
-    [file?.sourceLanguage, file?.targetLanguage, config.sourceLanguage, config.targetLanguage]
-  );
+  // 任务级语言优先，旧任务回退全局设置；输入即 file/config 对象本身，避免手写字段依赖漂移
+  const taskLangs = useMemo(() => resolveTaskLanguages(file, config), [file, config]);
   const sourceSelectValue = useMemo(
     () => normalizeLangValue(taskLangs.sourceLanguage),
     [taskLangs.sourceLanguage]

@@ -6,7 +6,6 @@ import {
   dequeueTask,
   enqueueAllUncompleted,
   processNext,
-  resetQueueServiceDeps,
 } from '../queueService';
 import type { SingleTask, FilePhases } from '@/types';
 
@@ -74,14 +73,9 @@ const fid = (taskId: string) => `file_${taskId}`;
 
 describe('queueService', () => {
   beforeEach(() => {
-    resetQueueServiceDeps();
     useFilesStore.setState({ tasks: [] });
     useQueueStore.setState({ taskQueue: [], activeTaskId: null });
     vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    resetQueueServiceDeps();
   });
 
   it('enqueueTask adds fileId to queue and plays confirm sound', async () => {

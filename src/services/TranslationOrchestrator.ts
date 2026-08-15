@@ -27,7 +27,7 @@ export interface BatchInfo {
   relevantTerms: Term[];  // 改为传递术语数组
 }
 
-export interface TranslationConfig {
+interface TranslationConfig {
   batchSize: number;
   contextBefore: number;
   contextAfter: number;
@@ -81,7 +81,7 @@ export interface TranslationCallbacks {
   formatTermsForPrompt: (terms: Term[]) => string;  // 新增
 }
 
-export interface TranslationOptions {
+interface TranslationOptions {
   entries: SubtitleEntry[];
   filename: string;
   config: TranslationConfig;
@@ -89,9 +89,7 @@ export interface TranslationOptions {
   taskId: string;
 }
 
-/**
- * 计算实际翻译进度（仅 completed 算成功；missing 可重试）
- */
+/** 上下文窗口之前已译对照（established）的条数上限；超出只留最近的。 */
 const ESTABLISHED_PAIR_LIMIT = 12;
 
 /** 已完成的行写成「原文 → 译文」，否则只留原文。 */
@@ -165,7 +163,7 @@ export function calculateActualProgress(entries: SubtitleEntry[]): {
   return { completed, total: entries.length };
 }
 
-export type BatchEntryUpdate = {
+type BatchEntryUpdate = {
   id: number;
   text: string;
   translatedText: string;

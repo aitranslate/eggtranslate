@@ -1,6 +1,6 @@
 import type { FilePhases, ProgressPhase } from '@/types';
 
-export interface BadgeInfo {
+interface BadgeInfo {
   text: string;
   color: 'green' | 'blue' | 'gray' | 'red' | 'yellow';
 }
@@ -77,7 +77,7 @@ export function getCardBadge(
  * 排队中状态的 badge
  * 排队中不是 phases 的 status，而是从 taskQueue 派生的 UI 状态
  */
-export function getQueueBadge(queuePosition: number): BadgeInfo {
+function getQueueBadge(queuePosition: number): BadgeInfo {
   return { text: `排队中 #${queuePosition}`, color: 'yellow' };
 }
 
@@ -99,20 +99,7 @@ export function resolveBusyPrimaryLabel(opts: {
   return opts.idleLabel === '转译' ? opts.idleLabel : '翻译';
 }
 
-/** 阶段 chip「翻译」文案。 */
-export function resolveTranslatePhaseLabel(_opts?: {
-  translatingStatus?: string | null;
-}): string {
+/** 阶段 chip「翻译」文案（Agent 路径已移除，恒为「翻译」）。 */
+export function resolveTranslatePhaseLabel(): string {
   return '翻译';
-}
-
-/**
- * 判断连接线是否亮起
- * 规则：前节点 completed + 后节点 status !== 'upcoming' → 蓝
- */
-export function shouldLineBeActive(
-  prevPhaseStatus: string,
-  nextPhaseStatus: string
-): boolean {
-  return prevPhaseStatus === 'completed' && nextPhaseStatus !== 'upcoming';
 }

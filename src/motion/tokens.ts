@@ -31,8 +31,6 @@ export const MOTION_DURATION = {
   count: 0.7,
 } as const;
 
-export type MotionDurationKey = keyof typeof MOTION_DURATION;
-
 /** Cubic-bezier tuples for framer-motion */
 export const MOTION_EASE = {
   /** Standard decelerate (Material-ish out) */

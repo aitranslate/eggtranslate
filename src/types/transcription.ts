@@ -10,25 +10,6 @@ export interface KeytermGroup {
 // 文件类型
 export type FileType = 'srt' | 'audio' | 'video';
 
-// 转录单词（AssemblyAI 输出）
-export interface TranscriptionWord {
-  text: string;
-  start: number;           // 毫秒
-  end: number;             // 毫秒
-  confidence: number;
-}
-
-// AssemblyAI Sentence 类型（极简流程使用）
-export interface AssemblyAISentence {
-  text: string;
-  start: number;           // 毫秒
-  end: number;             // 毫秒
-  confidence?: number;
-  words?: TranscriptionWord[];  // 可选的单词级别时间戳
-  /** 本句由 AI 断句产出 */
-  aiSplit?: boolean;
-}
-
 /**
  * 字幕文件元数据（轻量级，用于 subtitleStore）
  * 不包含完整的 entries 数组，仅存储统计信息和状态

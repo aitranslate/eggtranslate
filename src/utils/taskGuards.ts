@@ -2,8 +2,8 @@
  * 任务启动前的配置守卫（纯函数，不依赖 onboarding UI）
  */
 
-export type StartIntent = 'translate' | 'full' | 'transcribe' | 'batch';
-export type SetupGuardKind = 'translation' | 'transcription';
+type StartIntent = 'translate' | 'full' | 'transcribe' | 'batch';
+type SetupGuardKind = 'translation' | 'transcription';
 
 /** AssemblyAI Key 是否已配置 */
 export function isTranscriptionApiConfigured(apiKeys: string | null | undefined): boolean {

@@ -104,19 +104,6 @@ export function buildAdtsFrame(
   return out;
 }
 
-/** 合并多帧 ADTS */
-export function concatUint8(chunks: Uint8Array[]): Uint8Array {
-  let total = 0;
-  for (const c of chunks) total += c.byteLength;
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (const c of chunks) {
-    out.set(c, off);
-    off += c.byteLength;
-  }
-  return out;
-}
-
 /** 从 ASC 或采样率/声道回退构建 ADTS 配置 */
 export function buildAdtsConfigFromAsc(
   asc: Uint8Array,

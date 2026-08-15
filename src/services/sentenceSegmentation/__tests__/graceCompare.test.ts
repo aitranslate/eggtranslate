@@ -182,7 +182,6 @@ describe('grace vs legacy hard A/B', () => {
     expect((comma.next_n as number) >= 2).toBe(true);
 
     // 打印便于人工审
-    // eslint-disable-next-line no-console
     console.log('[grace A/B]', JSON.stringify(rows, null, 2));
   });
 });

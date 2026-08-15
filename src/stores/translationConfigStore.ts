@@ -185,6 +185,3 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
 
 export const useTranslationTokensUsed = () =>
   useTranslationConfigStore((state) => state.tokensUsed);
-
-// re-export type for callers that imported LlmProfile via store history
-export type { LlmProfile };

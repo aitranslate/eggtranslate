@@ -7,18 +7,8 @@ import type JSZip from 'jszip';
 import { toSRT, toBilingual, toSrcTrans } from '@/utils/srtParser';
 import type { SubtitleEntry, SingleTask } from '@/types';
 import { useFilesStore } from '@/stores/filesStore';
-import {
-  downloadSubtitleFile,
-  downloadZipFile,
-  type ExportFormat,
-  FORMAT_LABELS,
-  FORMAT_SUFFIXES,
-} from '@/utils/fileExport';
+import { downloadSubtitleFile, downloadZipFile, type ExportFormat } from '@/utils/fileExport';
 import { logger } from '@/utils/logger';
-
-// 类型与映射表从 fileExport 统一导入并 re-export，方便调用方按需取用
-export type { ExportFormat };
-export { FORMAT_LABELS, FORMAT_SUFFIXES };
 
 // ============================================
 // 单文件单格式：entries → SRT 文本字符串
@@ -94,7 +84,7 @@ export async function buildEntriesZip(entries: SubtitleEntry[], baseName: string
  * 单文件全格式 ZIP（package 模式）—— 带前缀命名
  * 从 filesStore 取 task 数据。
  */
-export async function exportTaskZip(taskId: string): Promise<Blob> {
+async function exportTaskZip(taskId: string): Promise<Blob> {
   const { ensureTaskEntriesLoaded } = await import('@/stores/filesStore');
   await ensureTaskEntriesLoaded(taskId);
   const task = useFilesStore.getState().tasks.find((t) => t.taskId === taskId);

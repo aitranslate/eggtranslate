@@ -22,7 +22,7 @@ export interface AiBreakResult {
 export type AiBreaker = (prompt: string) => Promise<AiBreakResult>;
 
 /** 单个断点：tokenIndex 左侧 token 下标；charOffset=0 表示切在 token 之后。 */
-export interface BreakMark {
+interface BreakMark {
   tokenIndex: number;
   /** >0：切在 token 内部第 charOffset 个字符之后（仅 CJK 多字词 token）。 */
   charOffset: number;
@@ -38,7 +38,7 @@ export interface SplitPiece {
 }
 
 /** 一个 span 的 DP 结果 + AI 触发判定。 */
-export interface SpanCutInfo {
+interface SpanCutInfo {
   tokens: WordToken[];
   /** DP 结果（[start,end] 闭区间，相对 span 内 token 下标）。 */
   ranges: Array<[number, number]>;
@@ -61,7 +61,7 @@ function isCjkText(marked: string): boolean {
 }
 
 /** 长度预算文案（提示词第 1 条用）。 */
-export function limitTextFor(profile: LanguageProfile, limit: number, charLimit: number): string {
+function limitTextFor(profile: LanguageProfile, limit: number, charLimit: number): string {
   return profile.isCharBased
     ? `${limit} characters`
     : `${limit} words and ${charLimit} characters`;
@@ -403,7 +403,7 @@ export function materializeCuts(
 }
 
 /** 一套刀的可比较分数：只使用 DP 已经承认的封闭类特征。 */
-export interface PartitionScore {
+interface PartitionScore {
   pieceCount: number;
   crimes: number;
   tinies: number;
@@ -469,6 +469,27 @@ function keepScore(
 }
 
 /**
+ * 候选刀基线：去重 → 界内 → 剔除结构坏刀 → 升序。
+ * sanitize / project 两条收敛路径共用同一份清洗规则，避免各自维护漂移。
+ */
+function initKeptCuts(
+  pieces: SplitPiece[],
+  cuts: number[],
+  profile: LanguageProfile,
+): number[] {
+  const tokens = piecesAsTokens(pieces);
+  return [...new Set(cuts)]
+    .filter((c) => c >= 0 && c < pieces.length - 1)
+    .filter((c) => !isStructurallyBadCut(tokens, c, profile))
+    .sort((a, b) => a - b);
+}
+
+/** 由刀列表得到分段边界：[0, c1+1, c2+1, …, n]。 */
+function cutBounds(cuts: readonly number[], pieceCount: number): number[] {
+  return [0, ...cuts.map((c) => c + 1), pieceCount];
+}
+
+/**
  * 把模型标出的刀收敛到长度预算：先丢掉结构坏刀，再合并「最不值得保留」的刀，
  * 直到段数 ≤ targetPieces。多标的 [BR] 是候选集，不是失败。
  */
@@ -482,17 +503,12 @@ export function projectCutsToPieceBudget(
   silence: SilenceQuery = timestampSilence,
 ): { pieces: SplitPiece[]; cuts: number[] } {
   const tokens = piecesAsTokens(pieces);
-  let kept = [...new Set(cuts)]
-    .filter((c) => c >= 0 && c < pieces.length - 1)
-    .filter((c) => !isStructurallyBadCut(tokens, c, profile))
-    .sort((a, b) => a - b);
-
-  const boundsOf = (list: number[]) => [0, ...list.map((c) => c + 1), pieces.length];
+  const kept = initKeptCuts(pieces, cuts, profile);
 
   while (kept.length + 1 > Math.max(1, targetPieces)) {
     let dropAt = -1;
     let dropKey: [number, number, number] | null = null;
-    const bounds = boundsOf(kept);
+    const bounds = cutBounds(kept, pieces.length);
     for (let i = 0; i < kept.length; i++) {
       const leftStart = bounds[i];
       const rightEnd = bounds[i + 2] - 1;
@@ -557,7 +573,7 @@ export function scoreCutList(
   return { pieceCount: bounds.length - 1, crimes, tinies, quality, feasible };
 }
 
-export type AiRealizeReason =
+type AiRealizeReason =
   | 'accepted'
   | 'no-cuts-after-project'
   | 'over-limit'
@@ -568,7 +584,7 @@ export type AiRealizeReason =
   | 'single-piece';
 
 /** 硬断 DP 的合法替换：无坏刀/残段/超限；多出来的刀必须是好切点。 */
-export function aiPartitionIsLegal(ai: PartitionScore, dp?: PartitionScore): boolean {
+function aiPartitionIsLegal(ai: PartitionScore, dp?: PartitionScore): boolean {
   return whyAiRejectedVsDp(ai, dp) == null;
 }
 
@@ -576,7 +592,7 @@ export function aiAcceptableVsDp(ai: PartitionScore, dp?: PartitionScore): boole
   return aiPartitionIsLegal(ai, dp);
 }
 
-export function whyAiRejectedVsDp(ai: PartitionScore, dp?: PartitionScore): AiRealizeReason | null {
+function whyAiRejectedVsDp(ai: PartitionScore, dp?: PartitionScore): AiRealizeReason | null {
   if (!ai.feasible) return 'not-feasible';
   if (ai.pieceCount < 2) return 'single-piece';
   if (ai.crimes > 0) return 'more-crimes-than-dp';
@@ -588,28 +604,31 @@ export function whyAiRejectedVsDp(ai: PartitionScore, dp?: PartitionScore): AiRe
   return null;
 }
 
-/** 无坏刀/残段；若多于 DP 段数，调用方应再用 score 比好切点。 */
+/**
+ * 与 whyAiRejectedVsDp 同一条采纳规则：DP 侧只有段数时，
+ * 用「无坏刀/残段/好切点」的已知量参与比较，避免两条判定逻辑漂移。
+ */
 export function aiNotWorseThanDp(
   pieces: SplitPiece[],
   cuts: number[],
   profile: LanguageProfile,
   dpPieceCount?: number,
 ): boolean {
-  const scored = scoreCutList(
+  const ai = scoreCutList(
     piecesAsTokens(pieces),
     cuts,
     profile,
     Number.POSITIVE_INFINITY,
     Number.POSITIVE_INFINITY,
   );
-  if (scored.crimes > 0 || scored.tinies > 0 || scored.pieceCount < 2) return false;
-  if (dpPieceCount != null && scored.pieceCount > dpPieceCount && scored.quality < scored.pieceCount - dpPieceCount) {
-    return false;
-  }
-  return true;
+  const dp: PartitionScore | undefined =
+    dpPieceCount == null
+      ? undefined
+      : { pieceCount: dpPieceCount, crimes: 0, tinies: 0, quality: 0, feasible: true };
+  return whyAiRejectedVsDp(ai, dp) == null;
 }
 
-export interface RealizeAiResult {
+interface RealizeAiResult {
   ok: boolean;
   reason: AiRealizeReason;
   pieces?: SplitPiece[];
@@ -622,25 +641,19 @@ export interface RealizeAiResult {
  * 只去掉无效刀：结构坏刀；1–2 单位残段在合并不超限时并回去。
  * 不再把段数压回 DP——硬断 DP 已经是下限，合法的更细切分直接留下。
  */
-export function sanitizeAiCuts(
+function sanitizeAiCuts(
   pieces: SplitPiece[],
   cuts: number[],
   profile: LanguageProfile,
   limit: number,
   charLimit: number,
 ): { pieces: SplitPiece[]; cuts: number[] } {
-  const tokens = piecesAsTokens(pieces);
-  let kept = [...new Set(cuts)]
-    .filter((c) => c >= 0 && c < pieces.length - 1)
-    .filter((c) => !isStructurallyBadCut(tokens, c, profile))
-    .sort((a, b) => a - b);
-
-  const boundsOf = (list: number[]) => [0, ...list.map((c) => c + 1), pieces.length];
+  const kept = initKeptCuts(pieces, cuts, profile);
 
   let changed = true;
   while (changed) {
     changed = false;
-    const bounds = boundsOf(kept);
+    const bounds = cutBounds(kept, pieces.length);
     for (let i = 0; i < bounds.length - 1; i++) {
       const units = rangeUnits(pieces, bounds[i], bounds[i + 1] - 1, profile);
       if (units === 0 || units > 2) continue;
@@ -698,29 +711,6 @@ export function explainRealizeAiPartition(
   const vs = whyAiRejectedVsDp(aiScore, dpScore);
   if (vs) return { ok: false, reason: vs, aiScore, dpScore };
   return { ok: true, reason: 'accepted', pieces: cleaned.pieces, cuts: cleaned.cuts, aiScore, dpScore };
-}
-
-/** 清洗后的候选刀：合法则换下 DP，否则返回 null。 */
-export function realizeAiPartition(
-  pieces: SplitPiece[],
-  cuts: number[],
-  profile: LanguageProfile,
-  limit: number,
-  charLimit: number,
-  dpTokens: WordToken[],
-  dpRanges: Array<[number, number]>,
-): { pieces: SplitPiece[]; cuts: number[] } | null {
-  const explained = explainRealizeAiPartition(
-    pieces,
-    cuts,
-    profile,
-    limit,
-    charLimit,
-    dpTokens,
-    dpRanges,
-  );
-  if (!explained.ok || !explained.pieces || !explained.cuts) return null;
-  return { pieces: explained.pieces, cuts: explained.cuts };
 }
 
 /** 分段是否全部满足上限（多 token 段：词/字与字符双约束；单 token 例外）。 */

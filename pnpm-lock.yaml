@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@breezystack/lamejs':
-        specifier: ^1.2.7
-        version: 1.2.7
       '@tanstack/react-virtual':
         specifier: ^3.13.26
         version: 3.13.26(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -253,9 +250,6 @@ packages:
   '@bramus/specificity@2.4.2':
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
-
-  '@breezystack/lamejs@1.2.7':
-    resolution: {integrity: sha512-6wc7ck65ctA75Hq7FYHTtTvGnYs6msgdxiSUICQ+A01nVOWg6rqouZB8IdyteRlfpYYiFovkf67dIeOgWIUzTA==}
 
   '@csstools/color-helpers@6.0.2':
     resolution: {integrity: sha512-LMGQLS9EuADloEFkcTBR3BwV/CGHV7zyDxVRtVDTwdI2Ca4it0CCVTT9wCkxSgokjE5Ho41hEPgb8OEUwoXr6Q==}
@@ -2237,8 +2231,6 @@ snapshots:
   '@bramus/specificity@2.4.2':
     dependencies:
       css-tree: 3.2.1
-
-  '@breezystack/lamejs@1.2.7': {}
 
   '@csstools/color-helpers@6.0.2': {}
 

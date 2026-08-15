@@ -26,14 +26,14 @@ import {
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 
-export type TranslateBatchResult = {
+type TranslateBatchResult = {
   translations: Record<string, { direct: string }>;
   tokensUsed: number;
   /** 是否未凑齐全部非空 direct（调用方可标 missing 或再补扫） */
   partial?: boolean;
 };
 
-export type TranslateBatchOptions = {
+type TranslateBatchOptions = {
   signal?: AbortSignal;
   contextBefore?: string;
   contextAfter?: string;
@@ -105,7 +105,7 @@ export function isTranslationComplete(
   return countFilledKeys(result, originalTexts) === originalTexts.length;
 }
 
-export type TranslationGaps = {
+type TranslationGaps = {
   /** 完全没有该键 */
   missingKeys: string[];
   /** 有键但 direct 为空 */
@@ -592,12 +592,12 @@ export async function translateBatch(
   throw lastError instanceof Error ? lastError : new Error('翻译失败');
 }
 
-export type TestLlmConnectionInput = Pick<
+type TestLlmConnectionInput = Pick<
   LlmProfile,
   'baseURL' | 'apiKey' | 'model' | 'requiresKey'
 >;
 
-export type TestLlmConnectionResult =
+type TestLlmConnectionResult =
   | { ok: true }
   | { ok: false; message: string };
 

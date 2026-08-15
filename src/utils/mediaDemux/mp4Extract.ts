@@ -10,14 +10,14 @@ import { logger } from '@/utils/logger';
 import { buildAdtsConfigFromAsc, buildAdtsFrame, type AacAdtsConfig } from './adts';
 import { extractAudioSpecificConfig } from './esds';
 
-export { extractAudioSpecificConfig } from './esds';
+
 
 /** 流式读盘块大小：2MB，平衡 IO 与峰值内存 */
 const STREAM_CHUNK = 2 * 1024 * 1024;
 /** 多少 AAC 帧合并成一块 ADTS，减少 Blob part 数量 */
 const ADTS_BATCH_FRAMES = 128;
 
-export interface ExtractedAdtsAudio {
+interface ExtractedAdtsAudio {
   blob: Blob;
   mime: 'audio/aac';
   codec: string;
@@ -282,26 +282,6 @@ export async function extractAacAdtsFromIsoBmff(
 
     void run();
   });
-}
-
-/** @deprecated 使用 extractAacAdtsFromIsoBmff；保留别名避免旧 import */
-export async function extractAudioFromIsoBmff(
-  arrayBuffer: ArrayBuffer,
-  options?: { onProgress?: (ratio: number) => void }
-): Promise<{
-  mime: string;
-  codec: string;
-  via: 'aac-frames';
-  aac?: { frames: Uint8Array[]; description: Uint8Array; codec: string; sampleRate: number; numberOfChannels: number; adtsConfig: AacAdtsConfig };
-} | null> {
-  // 兼容旧签名：整包缓冲（仅小文件测试）
-  const r = await extractAacAdtsFromIsoBmff(arrayBuffer, options);
-  if (!r) return null;
-  return {
-    mime: r.mime,
-    codec: r.codec,
-    via: 'aac-frames',
-  };
 }
 
 export function shouldTryIsoBmffDemux(

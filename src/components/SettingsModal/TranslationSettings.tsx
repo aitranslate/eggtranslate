@@ -9,7 +9,7 @@ import { ApiTestForm } from './ApiTestForm';
 import { SettingsHint } from '../SettingsHint';
 import { getActiveProfile } from '@/utils/llmProfiles';
 
-export type TranslationSettingsSection = 'all' | 'provider' | 'language' | 'params';
+type TranslationSettingsSection = 'all' | 'provider' | 'language' | 'params';
 
 interface TranslationSettingsProps {
   config: TranslationConfig;

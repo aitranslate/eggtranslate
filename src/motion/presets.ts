@@ -11,7 +11,7 @@ import {
   MOTION_STAGGER,
 } from './tokens';
 
-export type ReduceMotion = boolean | null;
+type ReduceMotion = boolean | null;
 
 function isReduce(reduce: ReduceMotion): boolean {
   return Boolean(reduce);
@@ -19,7 +19,7 @@ function isReduce(reduce: ReduceMotion): boolean {
 
 // ── Backdrop (masks) ──────────────────────────────────────────
 
-export function backdropTransition(reduce: ReduceMotion): Transition {
+function backdropTransition(reduce: ReduceMotion): Transition {
   return { duration: isReduce(reduce) ? 0 : MOTION_DURATION.micro };
 }
 
@@ -38,11 +38,6 @@ export function backdropFade(reduce: ReduceMotion) {
 const OVERLAY_ENTER = { opacity: 0, scale: 0.98, y: 6 } as const;
 const OVERLAY_CENTER = { opacity: 1, scale: 1, y: 0 } as const;
 const OVERLAY_EXIT = { opacity: 0, scale: 0.98, y: 4 } as const;
-
-export function overlayPanelTransition(reduce: ReduceMotion): Transition {
-  if (isReduce(reduce)) return { duration: 0 };
-  return MOTION_SPRING_SOFT;
-}
 
 /** Centered dialog / alert / modal body */
 export function overlayPanelMotion(reduce: ReduceMotion) {
@@ -80,27 +75,9 @@ export function popoverMotion(reduce: ReduceMotion) {
   };
 }
 
-/** Tooltip below anchor */
-export function tooltipMotion(reduce: ReduceMotion) {
-  if (isReduce(reduce)) {
-    return {
-      initial: { opacity: 0 },
-      animate: { opacity: 1 },
-      exit: { opacity: 0 },
-      transition: { duration: 0 } as Transition,
-    };
-  }
-  return {
-    initial: { opacity: 0, y: 6, scale: 0.98 },
-    animate: { opacity: 1, y: 0, scale: 1 },
-    exit: { opacity: 0, y: 4, scale: 0.98 },
-    transition: MOTION_SPRING_SOFT as Transition,
-  };
-}
-
 // ── Drawers (edge sheets) ─────────────────────────────────────
 
-export function drawerTransition(reduce: ReduceMotion): Transition {
+function drawerTransition(reduce: ReduceMotion): Transition {
   return {
     type: 'tween',
     duration: isReduce(reduce) ? 0 : MOTION_DURATION.drawer,
@@ -156,7 +133,7 @@ export function stageMotion(reduce: ReduceMotion) {
 
 // ── Collapse / accordion ──────────────────────────────────────
 
-export function collapseTransition(reduce: ReduceMotion): Transition {
+function collapseTransition(reduce: ReduceMotion): Transition {
   return {
     duration: isReduce(reduce) ? 0 : MOTION_DURATION.expand,
     ease: MOTION_EASE.soft,
@@ -182,33 +159,6 @@ export function collapseMotion(reduce: ReduceMotion) {
 }
 
 // ── Progress ──────────────────────────────────────────────────
-
-export function progressWidthTransition(reduce: ReduceMotion): Transition {
-  return {
-    duration: isReduce(reduce) ? 0 : MOTION_DURATION.progress,
-    ease: MOTION_EASE.soft,
-  };
-}
-
-/**
- * Indeterminate bar sweep. When reduced-motion: static mid fill (no loop).
- */
-export function indeterminateBarMotion(reduce: ReduceMotion) {
-  if (isReduce(reduce)) {
-    return {
-      animate: { x: '100%' as const },
-      transition: { duration: 0 } as Transition,
-    };
-  }
-  return {
-    animate: { x: ['-30%', '300%'] as string[] },
-    transition: {
-      duration: MOTION_DURATION.sweep,
-      repeat: Infinity,
-      ease: 'easeInOut' as const,
-    } as Transition,
-  };
-}
 
 // ── Stagger list items ────────────────────────────────────────
 

@@ -24,6 +24,9 @@ export const ORPHAN_TAIL_MAX_MS = 1500;
 /** watchability / 闪帧合并允许的段间间隔（毫秒）。 */
 export const WATCHABILITY_GAP_MS = 800;
 
+/** 闪帧段时长上限（毫秒）：短于此的段视为一闪而过，优先吸收进相邻行。 */
+export const FLASH_MS = 800;
+
 /**
  * 无「好切点」时允许略超设置长度的词/字缓冲。
  * 例：短=12 → 词最多整句保留 14。

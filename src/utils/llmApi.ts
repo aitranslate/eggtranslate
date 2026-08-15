@@ -2,11 +2,9 @@ import { rateLimiter } from './rateLimiter';
 import { API_CONSTANTS } from '@/constants/api';
 import { logger } from '@/utils/logger';
 
-// 导入类型并重新导出，保持向后兼容
 import type { LLMConfig } from '@/types';
-export type { LLMConfig };
 
-export type LLMMessage = {
+type LLMMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | null;
   tool_call_id?: string;
@@ -14,14 +12,14 @@ export type LLMMessage = {
   tool_calls?: LLMToolCall[];
 };
 
-export type LLMToolCall = {
+type LLMToolCall = {
   id: string;
   type: 'function';
   function: { name: string; arguments: string };
 };
 
 /** OpenAI-compatible tool schema (type + function) */
-export type LLMToolSchema = {
+type LLMToolSchema = {
   type: 'function';
   function: {
     name: string;
@@ -31,7 +29,7 @@ export type LLMToolSchema = {
 };
 
 /** OpenAI-compatible tool_choice (string or named function). */
-export type LLMToolChoice =
+type LLMToolChoice =
   | 'auto'
   | 'none'
   | 'required'

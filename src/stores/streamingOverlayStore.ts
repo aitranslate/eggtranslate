@@ -13,7 +13,7 @@
 import { create } from 'zustand';
 import type { SubtitleEntry } from '@/types';
 
-export type StreamingOverlay = Record<number, string>;
+type StreamingOverlay = Record<number, string>;
 
 interface StreamingOverlayState {
   /** fileId → entryId → partial 译文 */

@@ -11,7 +11,7 @@ import {
   type LlmProviderPreset,
 } from '@/constants/llmProviders';
 
-export function createProfileFromPreset(preset: LlmProviderPreset, apiKey = ''): LlmProfile {
+function createProfileFromPreset(preset: LlmProviderPreset, apiKey = ''): LlmProfile {
   return {
     id: preset.id,
     name: preset.name,
@@ -47,7 +47,7 @@ export function getActiveLlmConfig(config: TranslationConfig): LLMConfig {
   };
 }
 
-export function isProfileConfigured(profile: LlmProfile): boolean {
+function isProfileConfigured(profile: LlmProfile): boolean {
   if (profile.requiresKey === false) return true;
   return (profile.apiKey?.trim().length ?? 0) > 0;
 }

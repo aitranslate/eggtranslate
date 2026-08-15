@@ -69,7 +69,7 @@ export function markEntriesDirty(taskId: string): void {
   dirtyTaskIds.add(taskId);
 }
 
-export function forgetTaskEntriesLifecycle(taskId: string): void {
+function forgetTaskEntriesLifecycle(taskId: string): void {
   hydratedTaskIds.delete(taskId);
   dirtyTaskIds.delete(taskId);
   loadingTaskIds.delete(taskId);
@@ -214,5 +214,3 @@ export async function forcePersistTaskEntriesFromTasks(
   );
 }
 
-/** @deprecated 使用 forcePersistTaskEntriesFromTasks；保留别名避免旧引用 */
-export const persistEntriesFromTasks = forcePersistTaskEntriesFromTasks;

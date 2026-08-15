@@ -4,9 +4,5 @@ import { resolveTranslatePhaseLabel } from '../badgeHelper';
 describe('resolveTranslatePhaseLabel', () => {
   it('always uses 翻译', () => {
     expect(resolveTranslatePhaseLabel()).toBe('翻译');
-    expect(resolveTranslatePhaseLabel({ translatingStatus: 'active' })).toBe('翻译');
-    expect(resolveTranslatePhaseLabel({ translatingStatus: 'completed' })).toBe(
-      '翻译'
-    );
   });
 });

@@ -7,7 +7,7 @@
  * 应用基础错误类
  * 所有自定义错误都应该继承这个类
  */
-export class AppError extends Error {
+class AppError extends Error {
   constructor(
     message: string,
     public readonly code: string,
@@ -31,7 +31,7 @@ export class AppError extends Error {
  * 操作取消错误
  * 用于标识用户主动取消的操作（如翻译被取消）
  */
-export class AbortOperationError extends AppError {
+class AbortOperationError extends AppError {
   constructor(message: string = '操作已被取消', userMessage: string = '操作已取消') {
     super(message, 'ABORT_OPERATION', userMessage, 499);
   }

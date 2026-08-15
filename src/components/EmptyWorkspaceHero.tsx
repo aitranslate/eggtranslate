@@ -5,7 +5,7 @@
 import React from 'react';
 import { FileText, Upload, Sparkles } from 'lucide-react';
 
-export interface EmptyWorkspaceHeroProps {
+interface EmptyWorkspaceHeroProps {
   isDragging: boolean;
   fileCount: number;
   isConfigured: boolean;

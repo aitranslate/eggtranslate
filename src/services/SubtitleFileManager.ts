@@ -9,7 +9,7 @@ import { detectFileType } from '@/utils/fileFormat';
 import localforage from 'localforage';
 import { generateTaskId, generateStableFileId } from '@/utils/taskIdGenerator';
 
-export interface LoadFileOptions {
+interface LoadFileOptions {
   existingFilesCount: number;
   defaultKeytermGroupId?: string | null;
   /** 创建任务时写入的默认源语言（来自全局设置） */
@@ -20,7 +20,7 @@ export interface LoadFileOptions {
   defaultAiSegmentationEnabled?: boolean;
 }
 
-export interface LoadFileResult {
+interface LoadFileResult {
   metadata: SubtitleFileMetadata & { fileRef?: File };
   task: SingleTask;
 }
@@ -47,7 +47,7 @@ function createInitialPhases(isSrt: boolean, isTranslated: boolean, workflow: Wo
  * 从音视频文件获取时长（不需要转码）
  * 直接读取文件头的元数据，速度很快
  */
-export function getMediaDuration(file: File): Promise<number | undefined> {
+function getMediaDuration(file: File): Promise<number | undefined> {
   return new Promise((resolve) => {
     const element = file.type.startsWith('audio/')
       ? document.createElement('audio')

@@ -64,7 +64,7 @@ function TypeIcon({ type }: { type?: SubtitleFileMetadata['fileType'] }) {
   return <FileText className="wb-proj-type-svg" strokeWidth={1.75} />;
 }
 
-export const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
+const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
   file,
   selected,
   isQueued,

@@ -34,7 +34,7 @@ import { maybeSimplifyChinese } from '@/utils/chineseScript';
 import toast from 'react-hot-toast';
 
 /** 可注入依赖：单测时 mock，默认走全局 store */
-export type TranslationServiceDeps = {
+type TranslationServiceDeps = {
   getFile: (fileId: string) => SubtitleFileMetadata | undefined;
   getTaskEntries: (taskId: string) => SubtitleEntry[];
   getConfig: () => TranslationConfig;
@@ -168,76 +168,76 @@ export async function startTranslation(
     }
 
     await executeTranslation(
-        {
-          entries,
-          filename: file.name,
-          config: {
-            batchSize: config.batchSize,
-            contextBefore: config.contextBefore,
-            contextAfter: config.contextAfter,
-            threadCount: config.threadCount,
-          },
-          controller,
-          taskId: file.taskId,
+      {
+        entries,
+        filename: file.name,
+        config: {
+          batchSize: config.batchSize,
+          contextBefore: config.contextBefore,
+          contextAfter: config.contextAfter,
+          threadCount: config.threadCount,
         },
-        {
-          translateBatch: (
-            texts,
+        controller,
+        taskId: file.taskId,
+      },
+      {
+        translateBatch: (
+          texts,
+          signal,
+          contextBefore,
+          contextAfter,
+          terms,
+          onPartial,
+          onAttemptStart,
+          established
+        ) =>
+          deps.translateBatch(config, texts, {
             signal,
             contextBefore,
             contextAfter,
             terms,
             onPartial,
             onAttemptStart,
-            established
-          ) =>
-            deps.translateBatch(config, texts, {
-              signal,
-              contextBefore,
-              contextAfter,
-              terms,
-              onPartial,
-              onAttemptStart,
-              established,
-            }),
-          batchUpdateEntries: (updates) => {
-            deps.batchUpdateEntries(fileId, updates);
-          },
-          // 流式只打内存 overlay，不碰 filesStore / persist
-          applyStreamingPartials: (updates) => {
-            deps.applyStreamingPartials(fileId, updates);
-          },
-          clearStreamingIds: (ids) => {
-            deps.clearStreamingIds(fileId, ids);
-          },
-          getCurrentEntries: () => deps.getTaskEntries(file.taskId),
-          updateProgress: async (
-            current: number,
-            total: number,
-            phase: 'direct' | 'completed',
-            status: string,
-            taskId: string,
-            newTokens?: number
-          ) => {
-            await deps.updateUiProgress(current, total, phase, status, taskId);
+            established,
+          }),
+        batchUpdateEntries: (updates) => {
+          deps.batchUpdateEntries(fileId, updates);
+        },
+        // 流式只打内存 overlay，不碰 filesStore / persist
+        applyStreamingPartials: (updates) => {
+          deps.applyStreamingPartials(fileId, updates);
+        },
+        clearStreamingIds: (ids) => {
+          deps.clearStreamingIds(fileId, ids);
+        },
+        getCurrentEntries: () => deps.getTaskEntries(file.taskId),
+        updateProgress: async (
+          current: number,
+          total: number,
+          phase: 'direct' | 'completed',
+          status: string,
+          taskId: string,
+          newTokens?: number
+        ) => {
+          await deps.updateUiProgress(current, total, phase, status, taskId);
 
-            // 进度与 token 解耦；tokensDelta 在 store 内原子累加（并发 batch 安全）
-            const progress = total > 0 ? Math.round((current / total) * 100) : 0;
-            if (newTokens !== undefined && newTokens > 0) {
-              deps.updatePhase(fileId, 'translating', {
-                progress,
-                tokensDelta: newTokens,
-              });
-            } else {
-              deps.updatePhase(fileId, 'translating', { progress });
-            }
-          },
-          getRelevantTerms: (batchText: string, before: string, after: string): Term[] => {
-            return getRelevantTermsUtil(deps.getAllTerms(), batchText, before, after);
-          },
-          formatTermsForPrompt: (terms: Term[]): string => formatTermsForPromptUtil(terms),
-        }
-      );
+          // 进度与 token 解耦；tokensDelta 在 store 内原子累加（并发 batch 安全）
+          const progress = total > 0 ? Math.round((current / total) * 100) : 0;
+          if (newTokens !== undefined && newTokens > 0) {
+            deps.updatePhase(fileId, 'translating', {
+              progress,
+              tokensDelta: newTokens,
+            });
+          } else {
+            deps.updatePhase(fileId, 'translating', { progress });
+          }
+        },
+        getRelevantTerms: (batchText: string, before: string, after: string): Term[] => {
+          return getRelevantTermsUtil(deps.getAllTerms(), batchText, before, after);
+        },
+        formatTermsForPrompt: (terms: Term[]): string => formatTermsForPromptUtil(terms),
+      }
+    );
 
     if (controller.signal.aborted) {
       logger.info('翻译已中止');

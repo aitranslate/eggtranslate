@@ -7,7 +7,7 @@ import { SubtitleEntry } from '@/types';
 import { assemblyaiService } from './assemblyaiService';
 import { formatTime } from '@/utils/timeUtils';
 
-export interface ProgressCallbacks {
+interface ProgressCallbacks {
   onUploading?: () => void;
   onTranscribing?: () => void;
   onSegmenting?: () => void;

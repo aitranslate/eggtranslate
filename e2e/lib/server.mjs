@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
 
-export function getPort() {
+function getPort() {
   return Number(process.env.E2E_PORT || 5173);
 }
 
@@ -17,7 +17,7 @@ export function getBaseUrl() {
   return `http://127.0.0.1:${getPort()}`;
 }
 
-export async function waitForUrl(url, { timeoutMs = 60000, intervalMs = 400 } = {}) {
+async function waitForUrl(url, { timeoutMs = 60000, intervalMs = 400 } = {}) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {

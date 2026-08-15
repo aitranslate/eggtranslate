@@ -3,7 +3,7 @@
  * 期望格式：{ "1": { "origin": "...", "direct": "..." }, "2": { ... } }
  */
 
-export type StreamingDirects = Record<string, string>;
+type StreamingDirects = Record<string, string>;
 
 /**
  * 从 partial/complete JSON 字符串中提取各条目的 direct 译文（可含未闭合字符串）。

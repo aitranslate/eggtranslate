@@ -8,7 +8,7 @@
 import { create } from 'zustand';
 
 export type StageMode = 'editor' | 'terms' | 'history';
-export type SettingsFocus = 'translation' | 'transcription' | null;
+type SettingsFocus = 'translation' | 'transcription' | null;
 
 interface WorkspaceState {
   stage: StageMode;

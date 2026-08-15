@@ -7,6 +7,7 @@ import { CHARS_PER_WORD_BUDGET, getProfile } from './profiles';
 import { isDiscourseMarkerText, isFunctionWordLeft } from './textRules';
 import type { DpSegment, Preset } from './types';
 import {
+  FLASH_MS,
   ORPHAN_MERGE_GRACE_UNITS,
   ORPHAN_TAIL_CJK_UNITS,
   ORPHAN_TAIL_LATIN_UNITS,
@@ -14,7 +15,6 @@ import {
   WATCHABILITY_GAP_MS,
 } from './constants';
 
-const MERGE_GAP_MS = WATCHABILITY_GAP_MS;
 const MERGE_BUDGET_MS = 6000;
 
 const norm = (s: string) => s.replace(/[\r\n]/g, ' ').split(/\s+/).filter(Boolean).join(' ').trim();
@@ -142,7 +142,7 @@ const canMerge = (
 ) => {
   if (!l.text.trim() || !r.text.trim()) return false;
   if (l.endTime > r.startTime) return false;
-  if (r.startTime - l.endTime > MERGE_GAP_MS) return false;
+  if (r.startTime - l.endTime > WATCHABILITY_GAP_MS) return false;
   if (r.endTime - l.startTime > MERGE_BUDGET_MS) return false;
   const nl = norm(l.text);
   if (isClosedSentencePair(l, r, profile, nl)) return false;
@@ -301,8 +301,6 @@ export function mergeWatchabilitySegments(
   return absorbFlashSegments(pass1, profile, hardLimit, charLimit);
 }
 
-const FLASH_MS = 800;
-
 function canFlashMerge(
   l: DpSegment,
   r: DpSegment,
@@ -311,7 +309,7 @@ function canFlashMerge(
   charLimit: number,
 ): boolean {
   const gap = r.startTime - l.endTime;
-  if (gap > MERGE_GAP_MS) return false;
+  if (gap > WATCHABILITY_GAP_MS) return false;
   if (r.endTime - l.startTime > MERGE_BUDGET_MS) return false;
   const nl = norm(l.text);
   if (isClosedSentencePair(l, r, profile, nl)) return false;

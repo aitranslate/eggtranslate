@@ -5,7 +5,7 @@
 
 import type { SubtitleFileMetadata, TranslationConfig } from '@/types';
 
-export type TaskLanguagePair = {
+type TaskLanguagePair = {
   sourceLanguage: string;
   targetLanguage: string;
 };

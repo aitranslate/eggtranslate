@@ -22,7 +22,7 @@ export const FORMAT_LABELS: Record<ExportFormat, string> = {
 };
 
 /** 文本格式 → SRT 文件名后缀（不含点） */
-export const FORMAT_SUFFIXES: Record<Exclude<ExportFormat, 'package'>, string> = {
+const FORMAT_SUFFIXES: Record<Exclude<ExportFormat, 'package'>, string> = {
   src: '_src',
   trans: '_trans',
   src_trans: '_src_trans',
