@@ -28,6 +28,11 @@ export interface LanguageProfile {
   isCharBased: boolean;
   /** 相邻 token 拼最终文本时是否插空格（CJK 为 false）。 */
   joinWithSpace: boolean;
+  /**
+   * 语言自己的「禁切左词」（冠词/介词/助动词）。
+   * 与 textRules 里的英/汉语全局表叠加；英文/汉语可留空。
+   */
+  functionWordsLeft: readonly string[];
   /** 单 ASR token 的长度单位（不可拆 token）。 */
   tokenUnits(token: string): number;
 }
@@ -120,39 +125,121 @@ const EnglishProfile: LanguageProfile = {
   sourceCharLimit: (p) => LATIN_CHAR_LIMITS[p],
   isCharBased: false,
   joinWithSpace: true,
+  functionWordsLeft: [],
   tokenUnits: wordTokenUnits,
 };
+
+/**
+ * Universal-3.5-Pro 空格分词语言（西/法/德/葡/意/荷/越/阿/印地…）的同类护栏。
+ * 切在这些词之后 = 拆短语；在连词之前切更优。英文走 EnglishProfile，不走这张表。
+ */
+const U35_SPACED_CONNECTORS = [
+  // Romance / Germanic
+  'y', 'o', 'pero', 'porque', 'cuando', 'mientras', 'entonces', 'aunque', 'donde', 'sino',
+  'et', 'ou', 'mais', 'parce', 'quand', 'pendant', 'donc', 'alors',
+  'und', 'oder', 'aber', 'weil', 'wenn', 'während', 'dass', 'obwohl', 'deshalb',
+  'e', 'mas', 'quando', 'enquanto', 'então', 'embora',
+  'ma', 'perché', 'mentre', 'allora', 'però',
+  'en', 'maar', 'omdat', 'wanneer', 'terwijl', 'als',
+  'och', 'eller', 'men', 'för', 'när', 'om', 'og', 'fordi', 'hvis',
+  'ja', 'tai', 'mutta', 'koska', 'kun', 'jos',
+  'i', 'lub', 'ale', 'ponieważ', 'kiedy', 'jeśli',
+  've', 'veya', 'ama', 'çünkü', 'eğer', 'sonra',
+  // Vietnamese / Hindi / Arabic / Hebrew / Russian
+  'và', 'hoặc', 'nhưng', 'vì', 'khi', 'nếu', 'thì', 'nên',
+  'और', 'या', 'लेकिन', 'क्योंकि', 'जब', 'यदि', 'तो',
+  'و', 'أو', 'لكن', 'لأن', 'عندما', 'إذا', 'ثم',
+  'או', 'אבל', 'כי', 'אם', 'אז',
+  'и', 'или', 'но', 'потому', 'когда', 'если',
+];
+
+const U35_SPACED_FUNCTION_WORDS = [
+  // articles / prep / clitic (es/fr/de/pt/it/nl)
+  'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas', 'de', 'del', 'al',
+  'por', 'para', 'con', 'sin', 'su', 'sus', 'mi', 'mis', 'tu', 'tus',
+  'es', 'son', 'está', 'están', 'se', 'lo', 'le', 'les',
+  'le', 'les', 'une', 'du', 'des', 'au', 'aux', 'à', 'par', 'pour', 'avec',
+  'sans', 'sur', 'son', 'sa', 'ses', 'mon', 'ma', 'mes', 'ton', 'ta', 'tes',
+  'est', 'sont', 'ce', 'cet', 'cette', 'ces', 'je', 'il', 'elle', 'nous', 'vous',
+  'der', 'die', 'das', 'den', 'dem', 'des', 'ein', 'eine', 'einen', 'einem',
+  'einer', 'eines', 'von', 'zu', 'mit', 'für', 'auf', 'aus', 'bei', 'nach',
+  'über', 'unter', 'ist', 'sind', 'im', 'am', 'vom', 'zum', 'zur', 'sich',
+  'o', 'os', 'as', 'um', 'uma', 'do', 'da', 'dos', 'das', 'em', 'no', 'na',
+  'nos', 'nas', 'é', 'são', 'seu', 'sua', 'seus', 'suas',
+  'il', 'gli', 'uno', 'della', 'dello', 'dei', 'delle', 'nel', 'nella',
+  'è', 'sono', 'si', 'suo', 'sua', 'suoi', 'sue',
+  'het', 'een', 'van', 'te', 'voor', 'op', 'aan', 'zijn',
+  // Vietnamese / Hindi / Arabic / Hebrew / Turkish
+  'của', 'là', 'các', 'những', 'một', 'trong', 'với', 'để', 'không',
+  'được', 'đã', 'sẽ', 'này', 'đó',
+  'का', 'के', 'की', 'में', 'से', 'को', 'है', 'हैं', 'था', 'थे', 'एक', 'यह', 'वह',
+  'तो', 'ही', 'भी',
+  'في', 'من', 'إلى', 'على', 'أن', 'إن', 'هذا', 'هذه', 'التي', 'الذي', 'هو', 'هي',
+  'של', 'את', 'על', 'אל', 'עם', 'זה', 'זו', 'היא', 'הוא',
+  'bir', 'bu', 'şu', 'ile', 'için',
+];
+
+/** 中日：引擎多数字级 token。只认双字以上连词，避免「美国 | 和以色列」。 */
+const CJK_CONNECTORS = [
+  '然后', '而且', '并且', '因为', '所以', '但是', '如果', '为了', '以及', '还有',
+  '及其', '或者',
+  'そして', 'だから', 'でも', 'けど', 'それで', 'しかし', 'けれど',
+];
 
 const CjkProfile: LanguageProfile = {
   key: 'cjk',
   hardSplit: 'punctuation',
-  connectors: [],
+  connectors: CJK_CONNECTORS,
   sourceLimit: (p) => CJK_CHAR_LIMITS[p],
   // 已按字计，不再叠第二层字符 cap
   sourceCharLimit: () => Number.POSITIVE_INFINITY,
   isCharBased: true,
   joinWithSpace: false,
+  functionWordsLeft: [],
   tokenUnits: cjkTokenUnits,
 };
 
-/** 默认：词级计量 + 空格拼接 + 拉丁字符双约束 */
+/**
+ * 韩语：AAI Universal-2 已按어절分词。
+ * 长度仍按谚文字数（字幕行宽），拼接按词插空格（token 原样用）。
+ */
+const KOREAN_CONNECTORS = [
+  '그리고', '그래서', '그런데', '하지만', '그러나', '또는', '및',
+  '왜냐면', '왜냐하면', '따라서',
+];
+
+const KoreanProfile: LanguageProfile = {
+  key: 'ko',
+  hardSplit: 'punctuation',
+  connectors: KOREAN_CONNECTORS,
+  sourceLimit: (p) => CJK_CHAR_LIMITS[p],
+  sourceCharLimit: () => Number.POSITIVE_INFINITY,
+  isCharBased: true,
+  joinWithSpace: true,
+  functionWordsLeft: [],
+  tokenUnits: cjkTokenUnits,
+};
+
+/** 默认：词级计量 + 空格拼接 + 拉丁双约束 + U3.5 空格语言护栏 */
 const DefaultProfile: LanguageProfile = {
   key: 'default',
   hardSplit: 'punctuation',
-  connectors: [],
+  connectors: U35_SPACED_CONNECTORS,
   sourceLimit: (p) => WORD_LIMITS[p],
   sourceCharLimit: (p) => LATIN_CHAR_LIMITS[p],
   isCharBased: false,
   joinWithSpace: true,
+  functionWordsLeft: U35_SPACED_FUNCTION_WORDS,
   tokenUnits: wordTokenUnits,
 };
 
-const CJK_LANG_KEYS = new Set(['zh', 'yue', 'cmn', 'ja', 'jp', 'ko', 'th']);
+const CJK_LANG_KEYS = new Set(['zh', 'yue', 'cmn', 'ja', 'jp', 'th']);
 
 /** 解析 BCP-47 风格语言标签，返回对应 profile。 */
 export function getProfile(lang: string): LanguageProfile {
   const key = lang.trim().split(/[-_]/)[0].toLowerCase();
   if (key === 'en') return EnglishProfile;
+  if (key === 'ko') return KoreanProfile;
   if (CJK_LANG_KEYS.has(key)) return CjkProfile;
   return DefaultProfile;
 }

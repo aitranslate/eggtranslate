@@ -10,11 +10,14 @@
 import {
   BOUNDARY_COST,
   FORBIDDEN_COST,
+  GLUE_GAP_SEC,
+  GLUED_WORD_COST,
   GOOD_SILENCE_SEC,
   LENGTH_GRACE_CHARS,
   LENGTH_GRACE_UNITS,
   LENGTH_PENALTY_WEIGHT,
   MIN_FRAGMENT_UNITS,
+  SHORT_SEGMENT_PENALTY,
 } from './constants';
 import {
   joinTokenTexts,
@@ -25,14 +28,47 @@ import type { SilenceQuery, WordToken } from './types';
 import {
   endsWithOpeningPunctuation,
   endsWithSoftPunctuation,
+  isBoundConnector,
   isConnectorLike,
   isDiscourseMarkerComma,
   isFunctionWordLeft,
+  isJapaneseOrthographicBind,
+  isPhraseCloseParticle,
   isNumericContinuation,
+  isSingleCjkCharToken,
   isTerminalBoundary,
   isToBindingLeft,
   startsWithClosingPunctuation,
+  stripToken,
+  tokenGapSec,
 } from './textRules';
+
+/**
+ * 非结构边界的时间代价：只用 start/end。
+ * 粘连（≤8ms 抖动当 0）最贵；越大的间隔越便宜；≥0.35s 才算 quality 停顿。
+ */
+export function lexicalCutCost(gapSec: number | null): number {
+  const g = gapSec == null ? 0 : Math.max(0, gapSec);
+  if (g >= GOOD_SILENCE_SEC) {
+    return 2.0 - 0.5 * Math.min(1, (g - GOOD_SILENCE_SEC) / 0.9);
+  }
+  if (g <= GLUE_GAP_SEC) {
+    if (GLUE_GAP_SEC <= 0) return GLUED_WORD_COST;
+    return GLUED_WORD_COST - ((GLUED_WORD_COST - BOUNDARY_COST.word) * g) / GLUE_GAP_SEC;
+  }
+  const t = (g - GLUE_GAP_SEC) / (GOOD_SILENCE_SEC - GLUE_GAP_SEC);
+  return BOUNDARY_COST.word - t * (BOUNDARY_COST.word - 3.2);
+}
+
+function resolvedGap(
+  left: WordToken,
+  right: WordToken,
+  silence: SilenceQuery | undefined,
+): number | null {
+  const fromTs = tokenGapSec(left, right);
+  if (fromTs != null) return fromTs;
+  return silence ? silence(left, right) : null;
+}
 
 export function boundaryBaseCost(
   tokens: WordToken[],
@@ -50,6 +86,9 @@ export function boundaryBaseCost(
   if (isNumericContinuation(left.word, right.word)) {
     return FORBIDDEN_COST;
   }
+  if (isJapaneseOrthographicBind(left.word, right.word)) {
+    return FORBIDDEN_COST;
+  }
 
   if (isTerminalBoundary(left.word)) return BOUNDARY_COST.terminal;
   if (endsWithSoftPunctuation(left.word)) return BOUNDARY_COST.soft;
@@ -59,35 +98,35 @@ export function boundaryBaseCost(
     return BOUNDARY_COST.comma;
   }
 
-  // 功能词护栏：切在冠词/介词/助动词/to 之后 = 拆散短语，无折扣。
-  if (isFunctionWordLeft(left.word)) {
-    return BOUNDARY_COST.word;
+  // 收束助词：切在 を/的/了 之后是短语结束（好切点）。
+  if (isPhraseCloseParticle(left.word)) {
+    return BOUNDARY_COST.comma;
   }
 
-  if (silence) {
-    const sil = silence(left, right);
-    // 微停顿（< GOOD_SILENCE_SEC）只是词间抖动，不给折扣；
-    // 真停顿给折扣，但封顶与逗号持平（1.5），绝不让停顿压过标点。
-    if (sil != null && sil >= GOOD_SILENCE_SEC) {
-      return 2.0 - 0.5 * Math.min(1, (sil - GOOD_SILENCE_SEC) / 0.9);
-    }
+  // 起手功能词之后禁止落刀：of | the、在 | 教育。的/了 不在此列。
+  if (isFunctionWordLeft(left.word, profile.functionWordsLeft)) {
+    return FORBIDDEN_COST;
   }
 
-  // 不定式/to 介词短语起手：切在 "to" 之前是天然意群边界（"| to have"、"| to the upside"）。
-  // 但 "need to" / "going to" / "have to" 等情态绑定结构不拆。
-  // 注意：放在静音之后——"x [真停顿] to" 应取停顿折扣（更便宜）而非 to 奖励。
-  const rightStripped = right.word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase();
+  const gap = resolvedGap(left, right, silence);
+  if (gap != null && gap >= GOOD_SILENCE_SEC) {
+    return 2.0 - 0.5 * Math.min(1, (gap - GOOD_SILENCE_SEC) / 0.9);
+  }
+
+  // 不定式/to 介词短语起手。真停顿已在上面返回，不会被 to 奖励盖掉。
+  const rightStripped = stripToken(right.word).toLowerCase();
   if (rightStripped === 'to' && !isToBindingLeft(left.word)) {
     return BOUNDARY_COST.connector;
   }
 
   if (
     isConnectorLike(right.word, profile.connectors) &&
-    !isConnectorLike(left.word, profile.connectors)
+    !isConnectorLike(left.word, profile.connectors) &&
+    !isBoundConnector(left.word, right.word, profile.connectors)
   ) {
     return BOUNDARY_COST.connector;
   }
-  return BOUNDARY_COST.word;
+  return lexicalCutCost(gap);
 }
 
 /**
@@ -106,23 +145,24 @@ export function isQualityCutBoundary(
     return false;
   }
   if (isNumericContinuation(left.word, right.word)) return false;
+  if (isJapaneseOrthographicBind(left.word, right.word)) return false;
   if (isTerminalBoundary(left.word)) return true;
   if (endsWithSoftPunctuation(left.word)) return true;
   if (isDiscourseMarkerComma(left.word)) return false;
   if (left.word.trimEnd().endsWith(',') || left.word.trimEnd().endsWith('，') || left.word.trimEnd().endsWith('、')) {
     return true;
   }
-  if (isFunctionWordLeft(left.word)) return false;
+  if (isPhraseCloseParticle(left.word)) return true;
+  if (isFunctionWordLeft(left.word, profile.functionWordsLeft)) return false;
   if (
     isConnectorLike(right.word, profile.connectors) &&
-    !isConnectorLike(left.word, profile.connectors)
+    !isConnectorLike(left.word, profile.connectors) &&
+    !isBoundConnector(left.word, right.word, profile.connectors)
   ) {
     return true;
   }
-  if (silence) {
-    const sil = silence(left, right);
-    if (sil != null && sil >= GOOD_SILENCE_SEC) return true;
-  }
+  const gap = resolvedGap(left, right, silence);
+  if (gap != null && gap >= GOOD_SILENCE_SEC) return true;
   return false;
 }
 
@@ -247,6 +287,8 @@ function greedyCutsByHardLimit(
   charOf: (a: number, b: number) => number,
   n: number,
   hard: DualLimits,
+  spanTokens: WordToken[],
+  extras?: readonly string[],
 ): number[] {
   const cuts: number[] = [];
   let start = 0;
@@ -255,8 +297,33 @@ function greedyCutsByHardLimit(
     const tok = i - start + 1;
     const chars = charOf(start, i);
     if (tok > 1 && !isValidSegment(tok, units, chars, hard)) {
-      cuts.push(i);
-      start = i;
+      let cut = i;
+      let glueSteps = 0;
+      while (cut > start + 1) {
+        const leftTok = spanTokens[cut - 1];
+        const rightTok = spanTokens[cut];
+        const left = leftTok?.word ?? '';
+        const right = rightTok?.word ?? '';
+        if (isFunctionWordLeft(left, extras) || isJapaneseOrthographicBind(left, right)) {
+          cut -= 1;
+          continue;
+        }
+        const glued =
+          leftTok &&
+          rightTok &&
+          isSingleCjkCharToken(left) &&
+          isSingleCjkCharToken(right) &&
+          (tokenGapSec(leftTok, rightTok) ?? 0) <= GLUE_GAP_SEC;
+        if (glued && glueSteps < 2) {
+          cut -= 1;
+          glueSteps += 1;
+          continue;
+        }
+        break;
+      }
+      cuts.push(cut);
+      start = cut;
+      i = cut;
     }
   }
   return cuts;
@@ -334,7 +401,8 @@ export function dpSplitSpan(
         charPenalty =
           (LENGTH_PENALTY_WEIGHT * 0.5 * Math.abs(segChars - hard.char)) / hard.char;
       }
-      const cost = dp[j] + baseCost[j] + lengthPenalty + charPenalty;
+      let cost = dp[j] + baseCost[j] + lengthPenalty + charPenalty;
+      if (segLen > 0 && segLen <= 2) cost += SHORT_SEGMENT_PENALTY;
       // 并列取舍按语言类型分：
       // - 拉丁（按词切）：取更靠前的 j → 分段更均衡，避免切出碎尾
       // - CJK（ASR 字符碎片、无词界信息）：取更靠后的 j → 首段尽量贴近上限，
@@ -349,7 +417,16 @@ export function dpSplitSpan(
 
   if (dp[n] === Infinity) {
     if (mode === 'quality') return null;
-    return greedyCutsByHardLimit(prefix, charOf, n, hard).map((k) => start + k - 1);
+    return greedyCutsByHardLimit(
+      prefix,
+      charOf,
+      n,
+      hard,
+      tokens.slice(start, end + 1),
+      profile.functionWordsLeft,
+    ).map(
+      (k) => start + k - 1,
+    );
   }
 
   const cutsRel: number[] = [];
@@ -372,7 +449,16 @@ export function dpSplitSpan(
   }
 
   if (!cutsRespectHardLimit(cutsRel, prefix, charOf, n, hard)) {
-    return greedyCutsByHardLimit(prefix, charOf, n, hard).map((k) => start + k - 1);
+    return greedyCutsByHardLimit(
+      prefix,
+      charOf,
+      n,
+      hard,
+      tokens.slice(start, end + 1),
+      profile.functionWordsLeft,
+    ).map(
+      (k) => start + k - 1,
+    );
   }
 
   return cutsRel.map((k) => start + k - 1);

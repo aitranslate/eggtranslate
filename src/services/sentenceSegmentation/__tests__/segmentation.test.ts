@@ -8,8 +8,14 @@
 import { describe, it, expect } from 'vitest';
 import { segmentText, segmentWords } from '../index';
 import { splitTextToSentences } from '../hardSplit';
-import { splitSpanByDp } from '../softSplit';
-import { getProfile, tokenize } from '../profiles';
+import { isQualityCutBoundary, splitSpanByDp } from '../softSplit';
+import { getProfile, joinTokenTexts, tokenize } from '../profiles';
+import {
+  isFunctionWordLeft,
+  isJapaneseOrthographicBind,
+  isPhraseCloseParticle,
+  stripToken,
+} from '../textRules';
 import type { WordWithTime } from '../types';
 
 /** voxtrans 的 w(index, text)：start=index*0.5, end=start+0.3（秒）。 */
@@ -256,10 +262,237 @@ describe('splitSpanByDp 单元', () => {
     }
   });
 
+  it('force_path_does_not_cut_after_english_function_word', () => {
+    const words = mkWords(
+      'Then she looked at the sides of the well and noticed they were filled with maps pictures',
+    );
+    const segs = segmentWords(words, 'en', 'short');
+    expect(segs.length).toBeGreaterThan(1);
+    for (const s of segs) {
+      const last = s.text.trim().split(/\s+/).pop()?.toLowerCase() ?? '';
+      expect(['the', 'a', 'an', 'of', 'to', 'at', 'and', 'with']).not.toContain(last);
+    }
+  });
+
+  it('force_path_keeps_japanese_particle_with_preceding_phrase', () => {
+    const tokens = [
+      '私', 'は', '駅', 'の', '前', 'で', '友達', 'を', '待って', 'いた',
+      'けれど', '雨', 'が', '強く', 'なって', 'きた', 'ので', 'すぐ', '帰った',
+    ];
+    const segs = segmentWords(tokens.map((t, i) => w(i, t)), 'ja', 'short');
+    expect(segs.length).toBeGreaterThan(1);
+    for (const s of segs) {
+      const firstTok = s.words[0]?.text ?? '';
+      expect(['は', 'が', 'を', 'に', 'の']).not.toContain(firstTok);
+    }
+  });
+
+  it('watchability_merges_latin_orphan_tail_after_word_budget', () => {
+    const tokens = [
+      'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight',
+      'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
+      'or', 'extra', 'bits',
+    ];
+    const words = tokens.map((t, i) => {
+      const start = i * 0.25;
+      return { text: t, start, end: start + 0.2 };
+    });
+    const segs = segmentWords(words, 'en', 'standard', { watchabilityMerge: true });
+    expect(segs.some((s) => /^\s*or extra bits\s*$/i.test(s.text))).toBe(false);
+    expect(segs[segs.length - 1].text).toMatch(/or extra bits$/i);
+  });
+
   it('single_oversize_cjk_token_stays_intact', () => {
     const words = [w(0, '这是一个超过十六个汉字限制的超长识别单元示例词')];
     const segs = segmentWords(words, 'zh', 'short');
     expect(segs).toHaveLength(1);
     expect(segs[0].text).toBe(words[0].text);
+  });
+
+  it('korean_joins_eojeol_tokens_with_spaces', () => {
+    const profile = getProfile('ko');
+    expect(profile.joinWithSpace).toBe(true);
+    expect(profile.isCharBased).toBe(true);
+    const text = joinTokenTexts(['국방부가', '촛불', '위수령을', '검토했다는'], profile);
+    expect(text).toBe('국방부가 촛불 위수령을 검토했다는');
+  });
+
+  it('korean_particle_suffix_eojeol_is_not_a_quality_cut', () => {
+    const tokens = [
+      { word: '국방부가', start: 0, end: 0.4 },
+      { word: '촛불', start: 0.4, end: 0.7 },
+    ];
+    expect(isPhraseCloseParticle('국방부가')).toBe(false);
+    expect(isPhraseCloseParticle('가')).toBe(true);
+    expect(isQualityCutBoundary(tokens, 0, getProfile('ko'), undefined)).toBe(false);
+  });
+
+  it('japanese_standalone_particle_remains_a_quality_cut', () => {
+    const tokens = [
+      { word: '友達', start: 0, end: 0.3 },
+      { word: 'を', start: 0.3, end: 0.4 },
+      { word: '待って', start: 0.4, end: 0.8 },
+    ];
+    expect(isPhraseCloseParticle('を')).toBe(true);
+    expect(isQualityCutBoundary(tokens, 1, getProfile('ja'), undefined)).toBe(true);
+  });
+
+  it('japanese_small_kana_and_chōonpu_stay_bound', () => {
+    expect(isJapaneseOrthographicBind('ニ', 'ュ')).toBe(true);
+    expect(isJapaneseOrthographicBind('ュ', 'ー')).toBe(true);
+    expect(isJapaneseOrthographicBind('待っ', 'て')).toBe(true);
+    const tokens = [
+      '10', '時', 'の', 'NHK', 'ニ', 'ュ', 'ー', 'ス', 'です。',
+      '中国', 'の', '習', '近', '平', '国', '家', '主', '席', 'は',
+    ];
+    const segs = segmentWords(tokens.map((t, i) => w(i, t)), 'ja', 'short');
+    const joined = segs.map((s) => s.text).join('|');
+    expect(joined).not.toMatch(/ニ\|/);
+    expect(joined).not.toMatch(/\|ー/);
+    expect(joined).not.toMatch(/\|ュ/);
+  });
+
+  it('does_not_cut_inside_zh_bound_connector', () => {
+    const tokens = [
+      '我', '不', '知', '道', '有', '多', '少', '中', '国', '人', '只',
+      '因为', '这', '不', '痛', '不', '痒', '的', '头', '发', '而',
+      '吃', '苦', '受', '难', '灭', '亡。',
+    ];
+    const segs = segmentWords(tokens.map((t, i) => w(i, t)), 'zh', 'short');
+    expect(segs.some((s) => s.text.endsWith('只'))).toBe(false);
+    expect(segs.some((s) => /只因为/.test(s.text))).toBe(true);
+  });
+
+  it('alice_well_sentence_does_not_end_on_of', () => {
+    const text =
+      'Then she looked at the sides of the well, and noticed that they were filled with cupboards and bookshelves.';
+    const segs = segmentWords(mkWords(text), 'en', 'standard');
+    for (const s of segs) {
+      const last = s.text.trim().split(/\s+/).pop()?.toLowerCase() ?? '';
+      expect(['of', 'the', 'a', 'and']).not.toContain(last);
+    }
+  });
+
+  it('french_spaced_u35_does_not_cut_after_function_word', () => {
+    const profile = getProfile('fr');
+    expect(profile.joinWithSpace).toBe(true);
+    expect(profile.connectors).toContain('mais');
+    expect(profile.functionWordsLeft).toContain('le');
+    const tokens = [
+      'Le', 'président', 'a', 'parlé', 'de', 'la', 'situation', 'économique',
+      'dans', 'le', 'pays', 'et', 'les', 'mesures', 'que', 'le', 'gouvernement',
+      'veut', 'prendre', 'pour', 'aider', 'les', 'citoyens',
+    ];
+    const segs = segmentWords(tokens.map((t, i) => w(i, t)), 'fr', 'short');
+    expect(segs.length).toBeGreaterThan(1);
+    expect(segs.every((s) => /\s/.test(s.text))).toBe(true);
+    for (const s of segs) {
+      const last = s.text.trim().split(/\s+/).pop()?.toLowerCase() ?? '';
+      expect(['le', 'la', 'les', 'de', 'du', 'des', 'un', 'une', 'et']).not.toContain(last);
+    }
+  });
+
+  it('spanish_prefers_cut_before_pero', () => {
+    const tokens = [
+      'El', 'gobierno', 'anunció', 'medidas', 'nuevas', 'para', 'la', 'economía',
+      'pero', 'los', 'expertos', 'creen', 'que', 'todavía', 'falta', 'mucho',
+      'trabajo', 'serio',
+    ];
+    const segs = segmentWords(tokens.map((t, i) => w(i, t)), 'es', 'short');
+    expect(segs.length).toBeGreaterThan(1);
+    expect(segs.some((s) => /^pero\b/i.test(s.text))).toBe(true);
+  });
+
+  it('german_profile_is_spaced_with_article_guard', () => {
+    const profile = getProfile('de');
+    expect(profile.joinWithSpace).toBe(true);
+    expect(profile.functionWordsLeft).toContain('der');
+    expect(profile.connectors).toContain('und');
+    const tokens = [
+      'Der', 'Kanzler', 'sprach', 'über', 'die', 'Lage', 'in', 'dem', 'Land',
+      'und', 'die', 'Bürger', 'warten', 'auf', 'eine', 'klare', 'Antwort',
+      'von', 'der', 'Regierung',
+    ];
+    const segs = segmentWords(tokens.map((t, i) => w(i, t)), 'de', 'short');
+    expect(segs.length).toBeGreaterThan(1);
+    for (const s of segs) {
+      const last = s.text.trim().split(/\s+/).pop()?.toLowerCase() ?? '';
+      expect(['der', 'die', 'das', 'den', 'dem', 'ein', 'eine', 'und', 'von']).not.toContain(last);
+    }
+  });
+
+  it('hindi_strip_keeps_matra_so_ka_matches', () => {
+    expect(stripToken('का')).toBe('का');
+    expect(stripToken('तो,')).toBe('तो');
+    const extras = getProfile('hi').functionWordsLeft;
+    expect(isFunctionWordLeft('का', extras)).toBe(true);
+    expect(isFunctionWordLeft('तो', extras)).toBe(true);
+  });
+
+  it('hindi_does_not_end_a_cue_on_ka_or_to', () => {
+    // 语料 25-hi-dosakhiyan words 397–399 曾切成「संसार का | सबसे」
+    const tokens = [
+      'लेकिन', 'संसार', 'का', 'सबसे', 'रूपवान', 'पुरुष', 'भी', 'मेरे',
+      'चित', 'को', 'आकरशित', 'नहीं', 'कर', 'सकता।',
+      'अब', 'वही', 'मेरे', 'सर्वस्व', 'है',
+    ];
+    const segs = segmentWords(tokens.map((t, i) => w(i, t)), 'hi', 'short');
+    expect(segs.length).toBeGreaterThan(1);
+    const banned = new Set(['का', 'की', 'के', 'को', 'तो', 'में', 'से']);
+    for (const s of segs) {
+      const last = stripToken(s.text.trim().split(/\s+/).pop() ?? '');
+      expect(banned.has(last)).toBe(false);
+    }
+    expect(segs.some((s) => /संसार का सबसे/.test(s.text))).toBe(true);
+  });
+
+  it('zh_de_is_phrase_close_not_function_forbid', () => {
+    expect(isPhraseCloseParticle('的')).toBe(true);
+    expect(isPhraseCloseParticle('了')).toBe(true);
+    expect(isFunctionWordLeft('的')).toBe(false);
+    const tokens = [
+      { word: '风', start: 0, end: 0.2 },
+      { word: '的', start: 0.2, end: 0.35 },
+      { word: '形', start: 0.35, end: 0.5 },
+    ];
+    expect(isQualityCutBoundary(tokens, 1, getProfile('zh'), undefined)).toBe(true);
+  });
+
+  it('zh_prefers_cut_after_de_not_before', () => {
+    const tokens = [
+      '这', '件', '事', '情', '已', '经', '说', '明', '了', '台', '风', '的',
+      '涡', '旋', '形', '状', '是', '如', '何', '形', '成', '的',
+    ];
+    const segs = segmentWords(tokens.map((t, i) => w(i, t)), 'zh', 'short');
+    expect(segs.length).toBeGreaterThan(1);
+    expect(segs.some((s) => s.words[s.words.length - 1]?.text === '的')).toBe(true);
+    expect(segs.every((s) => s.words[0]?.text !== '的')).toBe(true);
+  });
+
+  it('cjk_force_cut_prefers_pause_over_abutting_chars', () => {
+    const tokens: WordWithTime[] = [];
+    let t = 0;
+    for (let i = 0; i < 20; i++) {
+      const ch = '甲乙丙丁戊己庚辛壬癸'[i % 10]!;
+      if (i === 8) t += 0.45;
+      tokens.push({ text: ch, start: t, end: t + 0.12 });
+      t += 0.12;
+    }
+    const segs = segmentWords(tokens, 'zh', 'short');
+    expect(segs.length).toBeGreaterThan(1);
+    expect(segs.some((s) => s.wordEnd === 7)).toBe(true);
+  });
+
+  it('cjk_connector_is_preferred_cut_before', () => {
+    const profile = getProfile('zh');
+    expect(profile.connectors).toContain('但是');
+    // 左词不能是「了/的」等禁切功能词，否则 FORBIDDEN 会压过连词奖励。
+    const tokens = [
+      '前', '面', '这', '些', '内', '容', '都', '已', '经', '处', '理', '完',
+      '但是', '后', '面', '还', '有', '很', '多', '问', '题', '需', '要', '讨', '论',
+    ];
+    const segs = segmentWords(tokens.map((t, i) => w(i, t)), 'zh', 'short');
+    expect(segs.length).toBeGreaterThan(1);
+    expect(segs.some((s) => s.text.startsWith('但是'))).toBe(true);
   });
 });

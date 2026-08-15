@@ -48,7 +48,7 @@ describe('buildAiBreakPrompt', () => {
     const ja = getProfile('ja');
     const jaPrompt = buildAiBreakPrompt('こんにちは', ja, ja.sourceLimit('standard'), ja.sourceCharLimit('standard'));
     expect(jaPrompt).toContain('22 characters');
-    expect(jaPrompt).not.toContain('connector word');
+    expect(jaPrompt).toContain('connector word');
   });
 });
 

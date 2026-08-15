@@ -91,12 +91,33 @@ export function isNumericContinuation(left: string, right: string): boolean {
   );
 }
 
+/**
+ * 去掉首尾标点，但保留字母后的结合音符（\p{M}）。
+ * 印地 का / तो、阿语标音符若用 [^\p{L}\p{N}]+$ 会剥成 क / ت，词表永远对不上。
+ */
+export function stripToken(token: string): string {
+  return token.replace(/^[^\p{L}\p{N}\p{M}]+|[^\p{L}\p{N}\p{M}]+$/gu, '');
+}
+
 /** 连词判定：去除首尾标点并转小写后是否在连词表中。 */
 export function isConnectorLike(token: string, connectors: string[]): boolean {
-  const lower = token
-    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
-    .toLowerCase();
-  return connectors.includes(lower);
+  return connectors.includes(stripToken(token).toLowerCase());
+}
+
+/**
+ * 连词黏着左词：只因为 / 并不是因为 / 之所以。
+ * 此时「因为」不是新分句，不能在其前落刀。
+ */
+const CJK_CONNECTOR_BIND_LEFT = new Set([
+  '只', '正', '就', '是', '不', '并', '都', '也', '还', '又', '才', '却', '之',
+  '并不是', '不是', '只是',
+]);
+
+/** 右词虽是连词，但与左词构成一个词（只+因为），不给连词切分奖励。 */
+export function isBoundConnector(left: string, right: string, connectors: string[]): boolean {
+  if (!isConnectorLike(right, connectors)) return false;
+  const l = stripToken(left);
+  return CJK_CONNECTOR_BIND_LEFT.has(l);
 }
 
 /**
@@ -117,11 +138,18 @@ const FUNCTION_WORDS_LEFT = new Set([
   'beside', 'off', 'via', 'per',
 ]);
 
-/** CJK 单字功能词护栏（ASR 词 token 若恰为单字功能词则不给切点折扣）。 */
+/**
+ * 汉语短语**收束**助词：切在其后是好切点（台风的 | 形状）。
+ * 与英语 of 相反——的/了 在修饰语末尾，不是介词短语开头。
+ * 只认封闭语法类，不写开放名词。
+ */
+const CJK_PHRASE_CLOSE = new Set(['的', '了', '着', '过', '吗', '呢', '吧', '啊']);
+
+/** 汉语短语**起手**词：切在其后会拆开「在|教育」「把|门」。 */
 const CJK_FUNCTION_WORDS_LEFT = new Set([
-  '的', '了', '和', '与', '及', '或', '在', '是', '把', '被', '将', '从',
+  '和', '与', '及', '或', '在', '是', '把', '被', '将', '从',
   '对', '向', '往', '于', '给', '让', '使', '还', '也', '都', '就', '又',
-  '而', '但', '会', '要', '能', '着', '过', '吗', '呢', '吧', '啊',
+  '而', '但', '会', '要', '能',
 ]);
 
 /**
@@ -137,7 +165,7 @@ const DISCOURSE_MARKERS = new Set([
 export function isDiscourseMarkerComma(token: string): boolean {
   const trimmed = token.trimEnd();
   if (!trimmed.endsWith(',') && !trimmed.endsWith('，')) return false;
-  const t = trimmed.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase();
+  const t = stripToken(trimmed).toLowerCase();
   return DISCOURSE_MARKERS.has(t);
 }
 
@@ -155,15 +183,105 @@ const TO_BINDING_LEFT = new Set([
 
 /** 左词是否与后续 "to" 绑定（其后的 "to" 起手不构成独立断点）。 */
 export function isToBindingLeft(token: string): boolean {
-  const t = token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase();
-  return TO_BINDING_LEFT.has(t);
+  return TO_BINDING_LEFT.has(stripToken(token).toLowerCase());
 }
 
-/** 左词是否为功能词（切在其后 = 拆散短语）。 */
-export function isFunctionWordLeft(token: string): boolean {
-  const t = token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase();
+/**
+ * 日韩文节收束助词：切在其后是自然短语边界（友達を | 待って）。
+ * 切在其前才会把助词甩到下一行开头。不含 て/た/し。
+ *
+ * 韩语 AAI token 已经是어절（국방부가）。几乎每个名词都以后缀助词收尾，
+ * 不能把 endsWith(가/을) 当成 quality cut，否则韩语会退化成按字数硬切。
+ * 只认「单独的助词 token」。
+ */
+const JA_PHRASE_CLOSE = new Set([
+  'は', 'が', 'を', 'に', 'の', 'と', 'で', 'も', 'へ', 'や', 'より', 'まで', 'から',
+]);
+const KO_PHRASE_CLOSE = ['은', '는', '이', '가', '을', '를', '의', '에', '와', '과', '도', '로', '으로'];
+
+/** 左词是否收束一个短语（好切点，不是禁切点）。 */
+export function isPhraseCloseParticle(token: string): boolean {
+  const t = stripToken(token);
   if (!t) return false;
-  return FUNCTION_WORDS_LEFT.has(t) || CJK_FUNCTION_WORDS_LEFT.has(t);
+  if (JA_PHRASE_CLOSE.has(t) || CJK_PHRASE_CLOSE.has(t)) return true;
+  if (KO_PHRASE_CLOSE.some((p) => t === p)) return true;
+  const chars = [...t];
+  if (chars.length < 2) return false;
+  const last = chars[chars.length - 1]!;
+  if (JA_PHRASE_CLOSE.has(last)) return true;
+  // 仅末字「的」：所有的 | 人。不用「了」——「为了」是连词，切在其后是错的。
+  if (last === '的') return true;
+  return false;
+}
+
+/** 单字汉字/假名/谚文 token（时间粘连时不要从中间撕开）。 */
+export function isSingleCjkCharToken(token: string): boolean {
+  const t = stripToken(token);
+  if ([...t].length !== 1) return false;
+  const c = t.codePointAt(0)!;
+  return (
+    (c >= 0x3040 && c <= 0x30ff) ||
+    (c >= 0x3400 && c <= 0x4dbf) ||
+    (c >= 0x4e00 && c <= 0x9fff) ||
+    (c >= 0xf900 && c <= 0xfaff) ||
+    (c >= 0xac00 && c <= 0xd7af)
+  );
+}
+
+/** 两 token 的间隔（秒）。相接或重叠视为 0；缺时间戳返回 null。 */
+export function tokenGapSec(
+  left: { start?: number; end?: number },
+  right: { start?: number; end?: number },
+): number | null {
+  if (left.end == null || right.start == null) return null;
+  const g = right.start - left.end;
+  return g > 0 ? g : 0;
+}
+
+/** 日语小假名 / 促音 / 长音：必须粘在前一拍，禁止在其间落刀。 */
+const JA_SMALL_KANA = new Set([
+  'ぁ', 'ぃ', 'ぅ', 'ぇ', 'ぉ', 'っ', 'ゃ', 'ゅ', 'ょ', 'ゎ',
+  'ァ', 'ィ', 'ゥ', 'ェ', 'ォ', 'ッ', 'ャ', 'ュ', 'ョ', 'ヮ',
+]);
+
+/**
+ * 日语字级 token 的正字法绑定：
+ * ニュース 不可切成 ニ | ュース；待って 不可切成 待っ | て。
+ */
+export function isJapaneseOrthographicBind(left: string, right: string): boolean {
+  const l = stripToken(left);
+  const r = stripToken(right);
+  if (!l || !r) return false;
+  const r0 = r[0]!;
+  const lLast = l[l.length - 1]!;
+  if (r0 === 'ー' || r0 === 'ｰ') return true;
+  if (JA_SMALL_KANA.has(r0)) return true;
+  if (lLast === 'っ' || lLast === 'ッ') return true;
+  if (r === 'ん' || r === 'ン') return true;
+  return false;
+}
+
+/**
+ * 左词是否为功能词（切在其后 = 拆散短语）。
+ * extras：profile.functionWordsLeft（西/法/德等 U3.5 空格语言）。
+ */
+export function isFunctionWordLeft(token: string, extras?: readonly string[]): boolean {
+  const t = stripToken(token).toLowerCase();
+  if (!t) return false;
+  if (FUNCTION_WORDS_LEFT.has(t) || CJK_FUNCTION_WORDS_LEFT.has(t)) return true;
+  return extras != null && extras.includes(t);
+}
+
+/** 去掉句末标点后的核心词，供闪帧/口头禅判定。 */
+export function discourseCore(text: string): string {
+  return text
+    .trim()
+    .replace(/^[^\p{L}\p{N}]+|[.!?。！？…,，、]+$/gu, '')
+    .toLowerCase();
+}
+
+export function isDiscourseMarkerText(text: string): boolean {
+  return DISCOURSE_MARKERS.has(discourseCore(text));
 }
 
 /**

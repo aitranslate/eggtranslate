@@ -3,10 +3,18 @@
 // EggTranslate 断句阶段只有源文本，故文本判定均基于 source `text`，逻辑等价。
 // 入口为纯函数（输入输出 DpSegment[]），便于单测。
 
-import { getProfile } from './profiles';
+import { CHARS_PER_WORD_BUDGET, getProfile } from './profiles';
+import { isDiscourseMarkerText, isFunctionWordLeft } from './textRules';
 import type { DpSegment, Preset } from './types';
+import {
+  ORPHAN_MERGE_GRACE_UNITS,
+  ORPHAN_TAIL_CJK_UNITS,
+  ORPHAN_TAIL_LATIN_UNITS,
+  ORPHAN_TAIL_MAX_MS,
+  WATCHABILITY_GAP_MS,
+} from './constants';
 
-const MERGE_GAP_MS = 500;
+const MERGE_GAP_MS = WATCHABILITY_GAP_MS;
 const MERGE_BUDGET_MS = 6000;
 
 const norm = (s: string) => s.replace(/[\r\n]/g, ' ').split(/\s+/).filter(Boolean).join(' ').trim();
@@ -59,10 +67,20 @@ const textLen = (t: string, lang: string) => {
 // 它们是配对右括号，不是句末标点。
 const isTerm = (ch: string) => ['.','!','?',';','。','！','？','；','，','、',','].includes(ch);
 
-const CJK_CONNECTORS = ['然后','而且','并且','因为','所以','但是','如果','为了','以及','还有','并','和','与','及','或','来','去','在','对','把','将','大约'];
-const ASCII_CONNECTORS = ['and','or','to','for','with','that','which','when','if','but','so'];
-const CJK_STARTERS = ['个','这个','那个','这','那','然后','并且','而且','而','并','因为','所以','如果','还','继续','将','与','和'];
-const ASCII_STARTERS = ['a','an','the','to','of','and','or','with','for','this','that','if','so','then','while','it','you','we','they'];
+const CJK_CONNECTORS = [
+  '然后', '而且', '并且', '因为', '所以', '但是', '如果', '为了', '以及', '还有',
+  '并', '和', '与', '及', '或', '来', '去', '在', '对', '把', '将', '大约',
+  'そして', 'だから', 'でも', 'けど', 'それで', 'しかし',
+  '그리고', '그래서', '그런데', '하지만',
+];
+const ASCII_CONNECTORS = ['and', 'or', 'to', 'for', 'with', 'that', 'which', 'when', 'if', 'but', 'so'];
+const CJK_STARTERS = [
+  '个', '这个', '那个', '这', '那', '然后', '并且', '而且', '而', '并',
+  '因为', '所以', '如果', '还', '继续', '将', '与', '和',
+  'そして', 'それで', 'でも', 'だから',
+  '그리고', '그래서', '그런데',
+];
+const ASCII_STARTERS = ['a', 'an', 'the', 'to', 'of', 'and', 'or', 'with', 'for', 'this', 'that', 'if', 'so', 'then', 'while', 'it', 'you', 'we', 'they'];
 const CJK_DANGLING = ['一个','做一个','这个','那个','这笔','那笔','这','那'];
 
 // 以下四个函数入参均为**已归一化**（norm 过）的文本；
@@ -114,18 +132,46 @@ const mergeText = (a: string, b: string) => {
   return norm(useSpace ? `${la} ${lb}` : `${la}${lb}`);
 };
 
-const canMerge = (l: DpSegment, r: DpSegment, maxUnits: number, lang: string) => {
+const canMerge = (
+  l: DpSegment,
+  r: DpSegment,
+  maxUnits: number,
+  lang: string,
+  profile: ReturnType<typeof getProfile>,
+  charLimit: number,
+) => {
   if (!l.text.trim() || !r.text.trim()) return false;
   if (l.endTime > r.startTime) return false;
   if (r.startTime - l.endTime > MERGE_GAP_MS) return false;
   if (r.endTime - l.startTime > MERGE_BUDGET_MS) return false;
-  // 左段只归一化一次，endsDangling / isFragIssue 复用同一结果
   const nl = norm(l.text);
-  if (isTerm(nl.slice(-1))) return false;
+  if (isClosedSentencePair(l, r, profile, nl)) return false;
+
+  const orphan = isOrphanTail(r, profile) && !isOrphanTail(l, profile);
+  if (orphan) {
+    return !pairExceedsCaps(l, r, profile, maxUnits, charLimit, ORPHAN_MERGE_GRACE_UNITS);
+  }
+  // 左段才是顶格挤出来的孤儿：向后粘（韩语 사실관계를 + 下一句）。
+  // 右侧也是闪帧时不加 grace，避免两截短段靠缓冲撑破 hard。
+  const leftOrphan = isOrphanTail(l, profile) && !isOrphanTail(r, profile);
+  if (leftOrphan) {
+    const grace = r.endTime - r.startTime >= FLASH_MS ? ORPHAN_MERGE_GRACE_UNITS : 0;
+    return !pairExceedsCaps(l, r, profile, maxUnits, charLimit, grace);
+  }
+
+  const lastWord = nl.split(/\s+/).pop() ?? '';
+  if (isFunctionWordLeft(lastWord, profile.functionWordsLeft)) {
+    const ru = segmentUnits(r, profile.tokenUnits);
+    const rightCap = profile.isCharBased ? 12 : 8;
+    if (ru > 0 && ru <= rightCap) {
+      return !pairExceedsCaps(l, r, profile, maxUnits, charLimit, ORPHAN_MERGE_GRACE_UNITS);
+    }
+  }
+
   if (!endsDangling(nl) && !isFragIssue(nl, lang)) return false;
   if (!startsContinuation(r.text, lang)) return false;
   const merged = mergeText(l.text, r.text);
-  if (textLen(merged, lang) > maxUnits) return false;
+  if (textLen(merged, lang) > maxUnits + ORPHAN_MERGE_GRACE_UNITS) return false;
   return true;
 };
 
@@ -158,16 +204,65 @@ function pairExceedsCaps(
   profile: ReturnType<typeof getProfile>,
   unitCap: number,
   charCap: number,
+  unitGrace = 0,
 ): boolean {
   const pairUnits =
     segmentUnits(l, profile.tokenUnits) + segmentUnits(r, profile.tokenUnits);
   const tokenCount = (l.words?.length ?? 1) + (r.words?.length ?? 1);
-  if (tokenCount > 1 && pairUnits > unitCap) return true;
+  if (tokenCount > 1 && pairUnits > unitCap + unitGrace) return true;
   if (Number.isFinite(charCap)) {
     const merged = mergeText(l.text, r.text);
-    if (merged.length > charCap) return true;
+    const charGrace = unitGrace > 0 ? Math.round(unitGrace * CHARS_PER_WORD_BUDGET) : 0;
+    if (merged.length > charCap + charGrace) return true;
   }
   return false;
+}
+
+/** 两边都是实质句子时不跨句号粘；口头禅/一句短补语仍可粘。 */
+function isClosedSentencePair(
+  l: DpSegment,
+  r: DpSegment,
+  profile: ReturnType<typeof getProfile>,
+  leftNorm: string,
+): boolean {
+  if (!isTerm(leftNorm.slice(-1))) return false;
+  if (isShortInterjection(l, profile)) return false;
+  const ru = segmentUnits(r, profile.tokenUnits);
+  const afterthought = ru > 0 && ru <= (profile.isCharBased ? 4 : 2);
+  if (afterthought || isShortInterjection(r, profile)) return false;
+  return true;
+}
+
+function isShortInterjection(
+  seg: DpSegment,
+  profile: ReturnType<typeof getProfile>,
+): boolean {
+  const units = segmentUnits(seg, profile.tokenUnits);
+  const max = profile.isCharBased ? 6 : 2;
+  if (units <= 0 || units > max) return false;
+  const n = norm(seg.text);
+  if (isDiscourseMarkerText(n)) return true;
+  return isTerm(n.slice(-1));
+}
+
+function isOrphanTail(seg: DpSegment, profile: ReturnType<typeof getProfile>): boolean {
+  const dur = seg.endTime - seg.startTime;
+  if (dur <= 0 || dur > ORPHAN_TAIL_MAX_MS) return false;
+  const units = segmentUnits(seg, profile.tokenUnits);
+  const cap = profile.isCharBased ? ORPHAN_TAIL_CJK_UNITS : ORPHAN_TAIL_LATIN_UNITS;
+  return units > 0 && units <= cap;
+}
+
+/** 仅「较长左段 + 短右尾」才给超额缓冲，两截都短仍走硬上限。 */
+function tailMergeGrace(
+  l: DpSegment,
+  r: DpSegment,
+  profile: ReturnType<typeof getProfile>,
+): number {
+  if (isOrphanTail(r, profile) && !isOrphanTail(l, profile)) {
+    return ORPHAN_MERGE_GRACE_UNITS;
+  }
+  return 0;
 }
 
 /**
@@ -194,12 +289,7 @@ export function mergeWatchabilitySegments(
     }
     const l = segments[i];
     const r = segments[i + 1];
-    if (pairExceedsCaps(l, r, profile, maxUnits, charLimit)) {
-      pass1.push(l);
-      i += 1;
-      continue;
-    }
-    if (canMerge(l, r, maxUnits, lang)) {
+    if (canMerge(l, r, maxUnits, lang, profile, charLimit)) {
       pass1.push(mergePair(l, r));
       i += 2;
     } else {
@@ -223,7 +313,10 @@ function canFlashMerge(
   const gap = r.startTime - l.endTime;
   if (gap > MERGE_GAP_MS) return false;
   if (r.endTime - l.startTime > MERGE_BUDGET_MS) return false;
-  return !pairExceedsCaps(l, r, profile, hardLimit, charLimit);
+  const nl = norm(l.text);
+  if (isClosedSentencePair(l, r, profile, nl)) return false;
+  const grace = tailMergeGrace(l, r, profile);
+  return !pairExceedsCaps(l, r, profile, hardLimit, charLimit, grace);
 }
 
 function absorbFlashSegments(
