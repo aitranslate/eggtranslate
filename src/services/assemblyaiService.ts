@@ -90,7 +90,7 @@ class AssemblyAIService {
       let segments;
       let aiTokensUsed = 0;
       if (options.useAiSegmentation) {
-        // AI 兜底：仅对「必须切且无好切点」的 span 调 LLM；失败回退规则结果。
+        // AI 兜底：仅对 DP 硬断的 span 调 LLM；合法不超限即采纳，无效则回退规则结果。
         const { createAiSentenceBreaker } = await import(
           "@/services/aiSentenceBreakerService"
         );

@@ -1,16 +1,21 @@
 // AI 断句兜底模块的单元测试。
-// 核心保证：AI 只作用于「必须切且无好切点」的 span；任何失败回退 DP；
+// 核心保证：AI 只改 DP 硬刀；任何失败或比 DP 更碎都回退；
 // 未触发 span 的输出与 segmentWords 完全一致。
 
 import { describe, it, expect } from 'vitest';
 import { segmentWords, segmentWordsWithAiFallback } from '../index';
 import {
+  aiAcceptableVsDp,
+  aiNotWorseThanDp,
   buildAiBreakPrompt,
   computeSpanCuts,
+  isStructurallyBadCut,
   mapBreakMarksToCuts,
   materializeCuts,
+  projectCutsToPieceBudget,
+  scoreCutList,
   segmentsWithinLimits,
-  type BreakMark,
+  type SplitPiece,
 } from '../aiBreak';
 import { getProfile } from '../profiles';
 import type { WordToken, WordWithTime } from '../types';
@@ -49,6 +54,22 @@ describe('buildAiBreakPrompt', () => {
     const jaPrompt = buildAiBreakPrompt('こんにちは', ja, ja.sourceLimit('standard'), ja.sourceCharLimit('standard'));
     expect(jaPrompt).toContain('22 characters');
     expect(jaPrompt).toContain('connector word');
+  });
+
+  it('把 DP 初刀写成长度预算，允许多标候选', () => {
+    const en = getProfile('en');
+    const prompt = buildAiBreakPrompt(
+      'one two three four five six',
+      en,
+      en.sourceLimit('standard'),
+      en.sourceCharLimit('standard'),
+      ['one two three', 'four five six'],
+    );
+    expect(prompt).toContain('First-pass pieces:');
+    expect(prompt).toContain('1. one two three');
+    expect(prompt).toContain('2. four five six');
+    expect(prompt).toContain('cut this into 2 pieces');
+    expect(prompt).toContain('without a natural boundary');
   });
 });
 
@@ -233,6 +254,126 @@ describe('computeSpanCuts', () => {
     const info = computeSpanCuts(mkWords('short sentence here'), profile, profile.sourceLimit('standard'), profile.sourceCharLimit('standard'));
     expect(info.needsAi).toBe(false);
   });
+
+  it('虚词甩尾是结构坏刀', () => {
+    const en = getProfile('en');
+    const words = mkWords('see the price today');
+    expect(isStructurallyBadCut(toks(words), 1, en)).toBe(true); // the |
+    expect(isStructurallyBadCut(toks(words), 0, en)).toBe(false);
+  });
+
+  it('下一行以收束助词开头是结构坏刀', () => {
+    const zh = getProfile('zh');
+    const words: WordWithTime[] = [w(0, '台风'), w(1, '的'), w(2, '形状')];
+    expect(isStructurallyBadCut(toks(words), 0, zh)).toBe(true); // | 的
+    expect(isStructurallyBadCut(toks(words), 1, zh)).toBe(false); // 的 | 形状
+  });
+});
+
+// ---- 采纳门槛：不能比 DP 更差 ----
+
+function piecesOf(texts: string[]): SplitPiece[] {
+  return texts.map((text, i) => ({
+    text,
+    start: i * 0.3,
+    end: i * 0.3 + 0.3,
+    originalIndex: i,
+  }));
+}
+
+describe('aiNotWorseThanDp', () => {
+  const en = getProfile('en');
+
+  it('中性多切（没有好切点）→ 拒绝', () => {
+    const pieces = piecesOf([
+      'one', 'two', 'three', 'four',
+      'five', 'six', 'seven', 'eight',
+      'nine', 'ten', 'eleven', 'twelve',
+    ]);
+    expect(aiNotWorseThanDp(pieces, [5], en, 2)).toBe(true);
+    expect(aiNotWorseThanDp(pieces, [3, 7], en, 2)).toBe(false);
+  });
+
+  it('多出来的刀落在连词前 → 接受', () => {
+    const pieces = piecesOf([
+      'one', 'two', 'three', 'four',
+      'five', 'six', 'because', 'eight',
+      'nine', 'ten', 'eleven', 'twelve',
+    ]);
+    // 3 段 vs DP 2 段，多出的刀在 because 前
+    expect(aiNotWorseThanDp(pieces, [5, 8], en, 2)).toBe(true);
+  });
+
+  it('1–2 词残段 → 拒绝', () => {
+    const pieces = piecesOf(['one', 'two', 'three', 'four', 'five', 'six']);
+    expect(aiNotWorseThanDp(pieces, [1], en, 2)).toBe(false);
+  });
+
+  it('虚词甩尾 → 拒绝', () => {
+    const pieces = piecesOf(['see', 'the', 'price', 'today', 'clearly', 'now']);
+    expect(aiNotWorseThanDp(pieces, [1], en, 2)).toBe(false);
+  });
+});
+
+describe('projectCutsToPieceBudget', () => {
+  const en = getProfile('en');
+
+  it('多出来的中性刀被合掉，连词刀留下', () => {
+    const texts = [
+      'one', 'two', 'three', 'four', 'five', 'six',
+      'because', 'eight', 'nine', 'ten', 'eleven', 'twelve',
+    ];
+    const pieces = piecesOf(texts);
+    // 刀在 2（中性）、5（because 前，连词好切点）、8（中性）
+    const { cuts } = projectCutsToPieceBudget(pieces, [2, 5, 8], en, 16, 88, 2);
+    expect(cuts).toEqual([5]);
+  });
+
+  it('结构坏刀先丢掉', () => {
+    const pieces = piecesOf(['see', 'the', 'price', 'today', 'clearly', 'now', 'here', 'too']);
+    const { cuts } = projectCutsToPieceBudget(pieces, [1, 4], en, 16, 88, 2);
+    expect(cuts).toEqual([4]);
+    expect(isStructurallyBadCut(
+      pieces.map((p) => ({ word: p.text, start: p.start, end: p.end })),
+      1,
+      en,
+    )).toBe(true);
+  });
+});
+
+describe('aiAcceptableVsDp', () => {
+  const en = getProfile('en');
+
+  it('合法切分即可，不再因为好切点变少而拒绝', () => {
+    const tokens = [
+      { word: 'one' }, { word: 'two' }, { word: 'three,' }, { word: 'four' },
+      { word: 'five' }, { word: 'six' }, { word: 'seven' }, { word: 'eight' },
+    ];
+    const dp = scoreCutList(tokens, [2], en, 16, 88);
+    const ai = scoreCutList(tokens, [4], en, 16, 88);
+    expect(dp.quality).toBeGreaterThan(0);
+    expect(ai.quality).toBe(0);
+    expect(aiAcceptableVsDp(ai, dp)).toBe(true);
+  });
+
+  it('中性更细切分 → 拒绝；连词处多切 → 接受', () => {
+    const tokens = Array.from({ length: 12 }, (_, i) => ({ word: `w${i}` }));
+    const dp = scoreCutList(tokens, [5], en, 16, 88);
+    const aiNeutral = scoreCutList(tokens, [3, 7], en, 16, 88);
+    expect(aiNeutral.pieceCount).toBeGreaterThan(dp.pieceCount);
+    expect(aiAcceptableVsDp(aiNeutral, dp)).toBe(false);
+
+    const withConn = [
+      ...Array.from({ length: 6 }, (_, i) => ({ word: `w${i}` })),
+      { word: 'because' },
+      ...Array.from({ length: 5 }, (_, i) => ({ word: `z${i}` })),
+    ];
+    const dp2 = scoreCutList(withConn, [8], en, 16, 88);
+    const aiConn = scoreCutList(withConn, [2, 5], en, 16, 88);
+    expect(aiConn.pieceCount).toBe(3);
+    expect(aiConn.quality).toBeGreaterThan(0);
+    expect(aiAcceptableVsDp(aiConn, dp2)).toBe(true);
+  });
 });
 
 // ---- 端到端：segmentWordsWithAiFallback ----
@@ -357,5 +498,50 @@ describe('segmentWordsWithAiFallback', () => {
       aiBreaker: async () => ({ content: null, tokensUsed: 0 }),
     });
     expect(rejected.every((s) => !s.aiSplit)).toBe(true);
+  });
+
+  it('AI 中性多标 → 回退 DP（多出来的刀没有好切点）', async () => {
+    const words = longUnpunctuatedEn();
+    const plain = segmentWords(words, 'en', 'standard');
+    const finer = await segmentWordsWithAiFallback(words, 'en', 'standard', {
+      aiBreaker: async () => ({
+        content:
+          'word0 word1 word2 word3 word4 word5 [BR] word6 word7 word8 word9 word10 word11 [BR] word12 word13 word14 word15 word16 word17 [BR] word18 word19 word20 word21 word22 word23',
+        tokensUsed: 1,
+      }),
+    });
+    expect(finer).toEqual(plain);
+    expect(finer.every((s) => !s.aiSplit)).toBe(true);
+  });
+
+  it('AI 虚词甩尾 → 回退 DP', async () => {
+    const words = Array.from({ length: 24 }, (_, i) => w(i, i === 11 ? 'the' : `word${i}`));
+    const plain = segmentWords(words, 'en', 'standard');
+    const bad = await segmentWordsWithAiFallback(words, 'en', 'standard', {
+      aiBreaker: async () => ({
+        content: `${words
+          .slice(0, 12)
+          .map((x) => x.text)
+          .join(' ')} [BR] ${words
+          .slice(12)
+          .map((x) => x.text)
+          .join(' ')}`,
+        tokensUsed: 1,
+      }),
+    });
+    expect(bad).toEqual(plain);
+  });
+
+  it('提示词包含 DP 初刀', async () => {
+    const words = longUnpunctuatedEn();
+    let seen = '';
+    await segmentWordsWithAiFallback(words, 'en', 'standard', {
+      aiBreaker: async (prompt) => {
+        seen = prompt;
+        return { content: null, tokensUsed: 0 };
+      },
+    });
+    expect(seen).toContain('First-pass pieces:');
+    expect(seen).toContain('without a natural boundary');
   });
 });

@@ -1,7 +1,7 @@
 // DP 断句模块总入口 —— Layer1 硬切分 + Layer2 DP 软切分。
 // Layer2：词/字 + 拉丁字符(×5.5) 双目标；略超无好切点可 grace；远超必切。
-// AI 兜底（segmentWordsWithAiFallback）：仅对「必须切且无好切点」的 span 调一次 AI 找断点，
-// 失败一律回退 DP 结果 —— 关闭 AI 与开启失败时，行为与 segmentWords 完全一致。
+// AI 兜底：只在 DP 硬断时问模型；合法且不超限即换上。
+// 多出来的刀必须是好切点。关闭 AI / 结果无效时与 segmentWords 一致。
 
 import { mapPool } from '@/utils/asyncPool';
 import { getProfile, joinTokenTexts, tokenize } from './profiles';
@@ -11,9 +11,10 @@ import { mergeWatchabilitySegments } from './watchabilityMerge';
 import {
   buildAiBreakPrompt,
   computeSpanCuts,
+  dpPartTexts,
+  explainRealizeAiPartition,
   mapBreakMarksToCuts,
   materializeCuts,
-  segmentsWithinLimits,
   MIN_PIECE_MS,
   type AiBreaker,
 } from './aiBreak';
@@ -29,15 +30,24 @@ export {
   joinTokenTexts,
 } from './profiles';
 export {
+  aiAcceptableVsDp,
+  aiNotWorseThanDp,
   buildAiBreakPrompt,
   computeSpanCuts,
+  dpPartTexts,
+  isStructurallyBadCut,
   mapBreakMarksToCuts,
   materializeCuts,
+  projectCutsToPieceBudget,
+  realizeAiPartition,
+  sanitizeAiCuts,
+  scoreCutList,
   segmentsWithinLimits,
   MIN_PIECE_MS,
   type AiBreaker,
   type AiBreakResult,
   type BreakMark,
+  type PartitionScore,
   type SplitPiece,
   type SpanCutInfo,
 } from './aiBreak';
@@ -156,16 +166,16 @@ export interface SegmentWordsAiOptions {
   /** 词内拆分半片最短毫秒，默认 MIN_PIECE_MS。 */
   minPieceMs?: number;
   watchabilityMerge?: boolean;
-  /** 每次 AI 调用结束（采纳或回退）时回调，供统计/调试；tokensUsed 为本次调用消耗。 */
-  onAiResolved?: (spanText: string, accepted: boolean, tokensUsed: number) => void;
+  /** 每次 AI 调用结束（采纳或回退）时回调；reason 说明为何采纳/回退。 */
+  onAiResolved?: (spanText: string, accepted: boolean, tokensUsed: number, reason?: string) => void;
   /** 断句进度：已处理 AI 句数 / 总触发句数（未触发 AI 的文件不会回调）。 */
   onAiProgress?: (resolved: number, total: number) => void;
 }
 
 /**
- * AI 兜底断句：与 segmentWords 同一管线，仅对「必须切且无好切点」的 span
- * 调用 aiBreaker 找断点。任何失败（调用失败 / 无标记 / 超上限）→ 该 span 回退 DP 结果，
- * 未触发 AI 的 span 与 segmentWords 输出逐字节一致。
+ * AI 兜底断句：仅对 DP 硬断的 span 征求候选刀。
+ * 合法（不超限、无坏刀、无残段）即采纳；多出来的刀必须是好切点。
+ * 无效结果 → 回退 DP；未触发 AI 的 span 与 segmentWords 逐字节一致。
  */
 export async function segmentWordsWithAiFallback(
   words: WordWithTime[],
@@ -205,30 +215,57 @@ export async function segmentWordsWithAiFallback(
     const spanText = joinTokenTexts(span.info.tokens.map((t) => t.word), profile);
     let accepted = false;
     let tokensUsed = 0;
+    let reason = 'call-error';
     try {
-      const result = await options.aiBreaker(buildAiBreakPrompt(spanText, profile, limit, charLimit));
+      const result = await options.aiBreaker(
+        buildAiBreakPrompt(
+          spanText,
+          profile,
+          limit,
+          charLimit,
+          dpPartTexts(span.info.tokens, span.info.ranges, profile),
+        ),
+      );
       tokensUsed = result.tokensUsed ?? 0;
       const marked = result.content;
-      if (marked != null) {
+      if (marked == null) {
+        reason = 'empty-content';
+      } else {
         const marks = mapBreakMarksToCuts(marked, span.info.tokens, profile);
-        if (marks.length > 0) {
-          const { pieces, cuts } = materializeCuts(
+        if (marks.length === 0) {
+          reason = 'no-marks-parsed';
+        } else {
+          const materialized = materializeCuts(
             span.info.tokens,
             marks,
             options.minPieceMs ?? MIN_PIECE_MS,
           );
-          if (cuts.length > 0 && segmentsWithinLimits(pieces, cuts, profile, limit, charLimit)) {
-            aiResults.set(span.idx, { pieces, cuts });
-            accepted = true;
+          if (materialized.cuts.length === 0) {
+            reason = 'no-cuts-materialized';
+          } else {
+            const explained = explainRealizeAiPartition(
+              materialized.pieces,
+              materialized.cuts,
+              profile,
+              limit,
+              charLimit,
+              span.info.tokens,
+              span.info.ranges,
+            );
+            reason = explained.reason;
+            if (explained.ok && explained.pieces && explained.cuts) {
+              aiResults.set(span.idx, { pieces: explained.pieces, cuts: explained.cuts });
+              accepted = true;
+            }
           }
         }
       }
     } catch {
-      // AI 任何异常 → 回退 DP
+      reason = 'call-error';
     }
     resolvedCount++;
     options.onAiProgress?.(resolvedCount, aiSpans.length);
-    options.onAiResolved?.(spanText, accepted, tokensUsed);
+    options.onAiResolved?.(spanText, accepted, tokensUsed, reason);
   });
 
   // 第二遍：按 span 顺序产出 DpSegment
