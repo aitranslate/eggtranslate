@@ -10,14 +10,13 @@ interface TranslationEntry {
 }
 
 /**
- * 生成共享提示词（参考区：前后文 / 已确定译法 / 术语）。
+ * 生成共享提示词（参考区：前后文 / 术语）。
  * 这些块只供消歧，不得写入 JSON。
  */
 export const generateSharedPrompt = (
   contextBefore: string, 
   contextAfter: string, 
   terms: string,
-  established?: string,
 ): string => {
   const previousSection = contextBefore.trim() 
     ? `<previous_content>\n${contextBefore.trim()}\n</previous_content>` 
@@ -26,16 +25,12 @@ export const generateSharedPrompt = (
   const subsequentSection = contextAfter.trim()
     ? `<subsequent_content>\n${contextAfter.trim()}\n</subsequent_content>`
     : '';
-
-  const establishedSection = established?.trim()
-    ? `### Established renderings (reuse names and set phrases; do not translate these lines)\n${established.trim()}`
-    : '';
     
   const termsSection = terms.trim()
     ? `### Terminology (format: original -> translation // notes)\n${terms}`
     : '';
 
-  return [previousSection, subsequentSection, establishedSection, termsSection]
+  return [previousSection, subsequentSection, termsSection]
     .filter(Boolean)
     .join('\n\n');
 };
@@ -82,11 +77,11 @@ Match the source register. Spoken dialogue stays colloquial; narration and news 
 </register>
 
 <translation_guidelines>
-1. **Context isolation**: <previous_content>, <subsequent_content>, and established renderings are REFERENCE ONLY. Never translate them. Never copy them into any "direct" field.
+1. **Context isolation**: <previous_content> and <subsequent_content> are REFERENCE ONLY. Never translate them. Never copy them into any "direct" field.
 2. **Accuracy**: Faithfully convey the original meaning — never add, omit, or distort.
 3. **Naturalness**: Use expressions native ${targetLanguage} speakers would actually say.
 4. **Conciseness**: Subtitles must be readable at viewing speed — prefer compact phrasing. Do not pad short lines.
-5. **Consistency**: Reuse renderings already shown after "→" in bilingual context or in established renderings (names, titles, recurring phrases).
+5. **Consistency**: Reuse terminology and renderings already shown after "→" in bilingual context (names, titles, recurring phrases).
 6. **Tone**: Match register to content — casual for dialogue, formal for narration.
 7. **Cultural Adaptation**: Adapt references only when necessary, never at the cost of meaning.
 8. **Context**: Use surrounding subtitles only to resolve ambiguity (pronouns, ellipsis, speaker stance).

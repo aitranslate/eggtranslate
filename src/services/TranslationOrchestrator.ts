@@ -22,8 +22,6 @@ export interface BatchInfo {
   textsToTranslate: string[];
   contextBeforeTexts: string;
   contextAfterTexts: string;
-  /** 窗口之外、更早的已译对照（压缩记忆）。 */
-  establishedTexts?: string;
   relevantTerms: Term[];  // 改为传递术语数组
 }
 
@@ -44,9 +42,7 @@ export interface TranslationCallbacks {
     /** 流式 partial：key 为 "1"|"2"|...，与 texts 下标对应 */
     onPartial?: (translations: Record<string, { direct: string }>) => void,
     /** 格式重试 attempt 从 1 起；>1 时应清本批 overlay */
-    onAttemptStart?: (attempt: number) => void,
-    /** 窗口外已确定的原文→译文，供译名一致 */
-    established?: string
+    onAttemptStart?: (attempt: number) => void
   ) => Promise<{ translations: Record<string, { direct: string }>; tokensUsed: number; partial?: boolean }>;
   /**
    * Apply an entire batch of entry patches in one store mutation.
@@ -89,9 +85,6 @@ interface TranslationOptions {
   taskId: string;
 }
 
-/** 上下文窗口之前已译对照（established）的条数上限；超出只留最近的。 */
-const ESTABLISHED_PAIR_LIMIT = 12;
-
 /** 已完成的行写成「原文 → 译文」，否则只留原文。 */
 export function formatSubtitleContextLine(
   entry: Pick<SubtitleEntry, 'text' | 'translatedText' | 'translationStatus'>
@@ -104,36 +97,13 @@ export function formatSubtitleContextLine(
   return src;
 }
 
-/** 上下文窗口之前的已译对照，最多保留最近 limit 条。 */
-export function collectEstablishedTranslations(
-  entries: Array<Pick<SubtitleEntry, 'text' | 'translatedText' | 'translationStatus'>>,
-  spanStart: number,
-  contextBeforeCount: number,
-  limit: number = ESTABLISHED_PAIR_LIMIT
-): string {
-  const excludeFrom = Math.max(0, spanStart - Math.max(0, contextBeforeCount));
-  const pairs: string[] = [];
-  for (let i = 0; i < excludeFrom; i++) {
-    const e = entries[i];
-    if (
-      e?.translationStatus === 'completed' &&
-      e.text?.trim() &&
-      e.translatedText?.trim()
-    ) {
-      pairs.push(`${e.text.trim()} → ${e.translatedText.trim()}`);
-    }
-  }
-  if (pairs.length <= limit) return pairs.join('\n');
-  return pairs.slice(-limit).join('\n');
-}
-
 export function buildBatchContext(
   entries: SubtitleEntry[],
   spanStart: number,
   spanEnd: number,
   contextBeforeCount: number,
   contextAfterCount: number
-): { contextBeforeTexts: string; contextAfterTexts: string; establishedTexts: string } {
+): { contextBeforeTexts: string; contextAfterTexts: string } {
   const contextBeforeTexts = entries
     .slice(Math.max(0, spanStart - contextBeforeCount), spanStart)
     .map(formatSubtitleContextLine)
@@ -142,12 +112,7 @@ export function buildBatchContext(
     .slice(spanEnd, Math.min(entries.length, spanEnd + contextAfterCount))
     .map(formatSubtitleContextLine)
     .join('\n');
-  const establishedTexts = collectEstablishedTranslations(
-    entries,
-    spanStart,
-    contextBeforeCount
-  );
-  return { contextBeforeTexts, contextAfterTexts, establishedTexts };
+  return { contextBeforeTexts, contextAfterTexts };
 }
 
 /**
@@ -236,7 +201,7 @@ export function createTranslationBatches(
       continue;
     }
 
-    const { contextBeforeTexts, contextAfterTexts, establishedTexts } = buildBatchContext(
+    const { contextBeforeTexts, contextAfterTexts } = buildBatchContext(
       entries,
       startIdx,
       endIdx,
@@ -263,7 +228,6 @@ export function createTranslationBatches(
       textsToTranslate,
       contextBeforeTexts,
       contextAfterTexts,
-      establishedTexts,
       relevantTerms  // 传递术语数组而非格式化字符串
     });
   }
@@ -287,7 +251,6 @@ export async function processBatch(
   try {
     let contextBeforeTexts = batch.contextBeforeTexts;
     let contextAfterTexts = batch.contextAfterTexts;
-    let establishedTexts = batch.establishedTexts ?? '';
     let relevantTerms = batch.relevantTerms;
 
     const live = callbacks.getCurrentEntries?.();
@@ -306,7 +269,6 @@ export async function processBatch(
       );
       contextBeforeTexts = refreshed.contextBeforeTexts;
       contextAfterTexts = refreshed.contextAfterTexts;
-      establishedTexts = refreshed.establishedTexts;
       const batchText = batch.textsToTranslate.join(' ');
       relevantTerms = callbacks.getRelevantTerms(
         batchText,
@@ -345,8 +307,7 @@ export async function processBatch(
       // 重试时清掉上轮半截流式，避免「UI 31 条 / 定稿失败」叠在一起
       (attempt) => {
         if (attempt > 1) callbacks.clearStreamingIds?.(batchEntryIds);
-      },
-      establishedTexts
+      }
     );
 
     const batchUpdates = finalizeBatchTranslations(

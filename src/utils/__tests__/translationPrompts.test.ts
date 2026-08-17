@@ -6,17 +6,15 @@ describe('generateSharedPrompt', () => {
     expect(generateSharedPrompt('', '', '')).toBe('');
   });
 
-  it('带上已确定译法和术语', () => {
+  it('带上前后文和术语', () => {
     const out = generateSharedPrompt(
       'Hello → 你好',
       'Bye',
       'Apple -> 苹果',
-      'John → 约翰'
     );
     expect(out).toContain('<previous_content>\nHello → 你好\n</previous_content>');
     expect(out).toContain('<subsequent_content>\nBye\n</subsequent_content>');
-    expect(out).toContain('Established renderings');
-    expect(out).toContain('John → 约翰');
+    expect(out).not.toContain('Established renderings');
     expect(out).toContain('Apple -> 苹果');
   });
 });

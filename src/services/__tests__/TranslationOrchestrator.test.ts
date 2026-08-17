@@ -7,7 +7,6 @@ import {
   processBatch,
   finalizeBatchTranslations,
   formatSubtitleContextLine,
-  collectEstablishedTranslations,
   buildBatchContext,
   type BatchInfo,
   type TranslationCallbacks,
@@ -195,7 +194,6 @@ describe('createTranslationBatches', () => {
     );
     expect(batches).toHaveLength(1);
     expect(batches[0].contextBeforeTexts).toBe('text-1 → 译-1\ntext-2 → 译-2');
-    expect(batches[0].establishedTexts).toBe('');
   });
 
   it('将 getRelevantTerms 的结果放入 batch.relevantTerms', () => {
@@ -213,20 +211,12 @@ describe('createTranslationBatches', () => {
   });
 });
 
-describe('formatSubtitleContextLine / established memory', () => {
+describe('formatSubtitleContextLine / buildBatchContext', () => {
   it('未完成只输出原文', () => {
     expect(formatSubtitleContextLine(makeEntry(1))).toBe('text-1');
   });
 
-  it('收集窗口外的已译对照，只留最近若干条', () => {
-    const entries = Array.from({ length: 8 }, (_, i) =>
-      makeEntry(i + 1, { translationStatus: 'completed', translatedText: `T${i + 1}` })
-    );
-    const text = collectEstablishedTranslations(entries, 6, 2, 3);
-    expect(text).toBe('text-2 → T2\ntext-3 → T3\ntext-4 → T4');
-  });
-
-  it('buildBatchContext 同时给出邻行与 established', () => {
+  it('buildBatchContext 只给出邻行，不含窗口外整句对照', () => {
     const entries = [
       makeEntry(1, { translationStatus: 'completed', translatedText: 'A' }),
       makeEntry(2, { translationStatus: 'completed', translatedText: 'B' }),
@@ -237,7 +227,7 @@ describe('formatSubtitleContextLine / established memory', () => {
     const ctx = buildBatchContext(entries, 2, 4, 1, 1);
     expect(ctx.contextBeforeTexts).toBe('text-2 → B');
     expect(ctx.contextAfterTexts).toBe('text-5 → E');
-    expect(ctx.establishedTexts).toBe('text-1 → A');
+    expect(ctx).not.toHaveProperty('establishedTexts');
   });
 });
 

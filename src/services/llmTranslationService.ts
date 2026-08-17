@@ -45,8 +45,6 @@ type TranslateBatchOptions = {
    * attempt>1 时应用侧应清掉本批 overlay，避免上次半截流盖住重试。
    */
   onAttemptStart?: (attempt: number) => void;
-  /** 窗口外已确定的原文→译文 */
-  established?: string;
 };
 
 type LlmChatMessage = {
@@ -305,7 +303,6 @@ export async function translateBatch(
     terms = '',
     onPartial,
     onAttemptStart,
-    established = '',
   } = options;
 
   const llm = getActiveLlmConfig(config);
@@ -315,7 +312,7 @@ export async function translateBatch(
   }
 
   const textToTranslate = texts.join('\n');
-  const sharedPrompt = generateSharedPrompt(contextBefore, contextAfter, terms, established);
+  const sharedPrompt = generateSharedPrompt(contextBefore, contextAfter, terms);
   const directPrompt = generateDirectPrompt(
     textToTranslate,
     sharedPrompt,
