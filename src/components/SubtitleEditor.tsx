@@ -10,6 +10,7 @@ import { useErrorHandler } from '@/hooks/useErrorHandler';
 import {
   useFilesStore,
   useFile,
+  countCompletedTranslations,
   ensureFileEntriesLoaded,
   useTaskEntriesLoading,
   useTaskEntriesReady,
@@ -697,8 +698,11 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     return n;
   }, [streamingOverlay, completedEntryIds]);
   const translationStats = useMemo(() => {
-    const total = file?.entryCount ?? 0;
-    const hard = file?.translatedCount ?? 0;
+    const hydrated = entriesReady && fileEntries.length > 0;
+    const total = hydrated ? fileEntries.length : file?.entryCount ?? 0;
+    const hard = hydrated
+      ? countCompletedTranslations(fileEntries)
+      : file?.translatedCount ?? 0;
     const { translated, percentage } = calcDisplayTranslationProgress(
       hard,
       total,
@@ -710,7 +714,13 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
       untranslated: Math.max(0, total - translated),
       percentage,
     };
-  }, [file?.entryCount, file?.translatedCount, streamingLineCount]);
+  }, [
+    entriesReady,
+    fileEntries,
+    file?.entryCount,
+    file?.translatedCount,
+    streamingLineCount,
+  ]);
 
   // 任务级语言优先，旧任务回退全局设置；输入即 file/config 对象本身，避免手写字段依赖漂移
   const taskLangs = useMemo(() => resolveTaskLanguages(file, config), [file, config]);

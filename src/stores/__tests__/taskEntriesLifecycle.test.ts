@@ -15,6 +15,7 @@ import {
   flushFilesStorePersist,
   useFilesStore,
   ensureTaskEntriesLoaded,
+  reconcilePersistedTaskCounts,
   recoverInterruptedPhases,
 } from '../filesStore';
 import { generateStableFileId } from '@/utils/taskIdGenerator';
@@ -136,6 +137,51 @@ describe('entries lifecycle: no wipe of unloaded tasks', () => {
     expect(useFilesStore.getState().tasks[0].subtitle_entries[0]?.text).toBe('from-idb');
     const snap = getEntriesLifecycleSnapshotForTests();
     expect(snap.dirty).not.toContain('task-load');
+  });
+
+  it('ensureTaskEntriesLoaded syncs translatedCount from completed entries', async () => {
+    await saveTaskEntries('task-counts', [
+      makeEntry(1, { translatedText: '一', translationStatus: 'completed' }),
+      makeEntry(2),
+      makeEntry(3, { translatedText: '三', translationStatus: 'completed' }),
+    ]);
+    useFilesStore.setState({
+      tasks: [
+        makeTask({
+          taskId: 'task-counts',
+          subtitle_entries: [],
+          entryCount: 3,
+          translatedCount: 0,
+        }),
+      ],
+    });
+
+    await ensureTaskEntriesLoaded('task-counts');
+    expect(useFilesStore.getState().tasks[0].translatedCount).toBe(2);
+    expect(useFilesStore.getState().tasks[0].entryCount).toBe(3);
+  });
+
+  it('reconcilePersistedTaskCounts fixes stale list counts without hydrating', async () => {
+    await saveTaskEntries('task-stale', [
+      makeEntry(1, { translatedText: '一', translationStatus: 'completed' }),
+      makeEntry(2, { translatedText: '二', translationStatus: 'completed' }),
+    ]);
+    useFilesStore.setState({
+      tasks: [
+        makeTask({
+          taskId: 'task-stale',
+          subtitle_entries: [],
+          entryCount: 2,
+          translatedCount: 0,
+        }),
+      ],
+    });
+
+    await reconcilePersistedTaskCounts();
+    const task = useFilesStore.getState().tasks[0];
+    expect(task.translatedCount).toBe(2);
+    expect(task.subtitle_entries).toEqual([]);
+    expect(isEntriesHydrated('task-stale')).toBe(false);
   });
 
   it('saveTaskEntries strips words at the persistence boundary', async () => {

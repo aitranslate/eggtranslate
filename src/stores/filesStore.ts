@@ -70,6 +70,13 @@ function touchTaskEntriesDirty(taskId: string): void {
   markEntriesHydrated(taskId, { dirty: true });
 }
 
+/** 已定稿译文条数：与续跑跳过规则一致（completed + 非空译文）。 */
+export function countCompletedTranslations(entries: SubtitleEntry[]): number {
+  return entries.filter(
+    (e) => e.translationStatus === "completed" && Boolean(e.translatedText?.trim())
+  ).length;
+}
+
 /** 快速连续写入时合并 IDB persist（翻译热路径） */
 export const FILES_PERSIST_DEBOUNCE_MS = 800;
 
@@ -350,8 +357,9 @@ export async function ensureTaskEntriesLoaded(taskId: string): Promise<void> {
                   subtitle_entries: entries,
                   entryCount: entries.length || t.entryCount,
                   translatedCount:
-                    entries.filter((e) => e.translatedText?.trim()).length ||
-                    t.translatedCount,
+                    entries.length > 0
+                      ? countCompletedTranslations(entries)
+                      : t.translatedCount,
                 }
               : t
           ),
@@ -372,6 +380,74 @@ export async function ensureFileEntriesLoaded(fileId: string): Promise<void> {
   const file = useFilesStore.getState().getFile(fileId);
   if (!file) return;
   await ensureTaskEntriesLoaded(file.taskId);
+}
+
+/**
+ * 启动后用条目库校正主表计数。
+ * 主表 partialize 不含 entries，translatedCount 可能落后于已落盘的 completed 行。
+ * 不把全文灌进内存（除已 hydrate 的任务），只同步 entryCount / translatedCount / 进度。
+ */
+export async function reconcilePersistedTaskCounts(): Promise<void> {
+  const { tasks } = useFilesStore.getState();
+  if (tasks.length === 0) return;
+
+  const snapshots = await Promise.all(
+    tasks.map(async (t) => {
+      if (isEntriesHydrated(t.taskId) && (t.subtitle_entries?.length ?? 0) > 0) {
+        return {
+          taskId: t.taskId,
+          entryCount: t.subtitle_entries.length,
+          translatedCount: countCompletedTranslations(t.subtitle_entries),
+        };
+      }
+      const entries = await loadTaskEntries(t.taskId);
+      if (!entries || entries.length === 0) return null;
+      return {
+        taskId: t.taskId,
+        entryCount: entries.length,
+        translatedCount: countCompletedTranslations(entries),
+      };
+    })
+  );
+
+  const byId = new Map(
+    snapshots.filter((s): s is NonNullable<typeof s> => s != null).map((s) => [s.taskId, s])
+  );
+  if (byId.size === 0) return;
+
+  let changed = false;
+  const next = tasks.map((t) => {
+    const snap = byId.get(t.taskId);
+    if (!snap) return t;
+    const translating = t.phases.translating;
+    const derivedProgress =
+      snap.entryCount > 0
+        ? Math.round((snap.translatedCount / snap.entryCount) * 100)
+        : translating.progress;
+    const progress =
+      translating.status === "completed"
+        ? 100
+        : Math.max(translating.progress || 0, derivedProgress);
+    if (
+      t.entryCount === snap.entryCount &&
+      t.translatedCount === snap.translatedCount &&
+      translating.progress === progress
+    ) {
+      return t;
+    }
+    changed = true;
+    return {
+      ...t,
+      entryCount: snap.entryCount,
+      translatedCount: snap.translatedCount,
+      phases: {
+        ...t.phases,
+        translating: { ...translating, progress },
+      },
+    };
+  });
+  if (!changed) return;
+  useFilesStore.setState({ tasks: next });
 }
 
 const debouncedStateStorage: StateStorage = {

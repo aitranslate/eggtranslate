@@ -9,7 +9,11 @@
  * Call `rehydrateAppStores()` once from main.tsx before createRoot().render.
  */
 
-import { useFilesStore } from './filesStore';
+import {
+  ensureFileEntriesLoaded,
+  reconcilePersistedTaskCounts,
+  useFilesStore,
+} from './filesStore';
 import { useTermsStore } from './termsStore';
 import { useHistoryStore } from './historyStore';
 import { useTranscriptionStore } from './transcriptionStore';
@@ -49,4 +53,10 @@ export async function rehydrateAppStores(): Promise<void> {
       await Promise.resolve(api.rehydrate());
     })
   );
+
+  await reconcilePersistedTaskCounts();
+  const selectedFileId = useFilesStore.getState().selectedFileId;
+  if (selectedFileId) {
+    await ensureFileEntriesLoaded(selectedFileId);
+  }
 }
