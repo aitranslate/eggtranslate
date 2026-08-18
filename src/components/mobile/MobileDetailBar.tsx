@@ -18,8 +18,8 @@ import {
 import { exportFile } from '@/services/SubtitleExporter';
 import { ExportButton } from '@/components/common/ExportButton';
 import { canRetranscribe } from '@/utils/fileUtils';
-import { needsTranscriptionWork } from '@/utils/taskGuards';
 import { formatAiSegmentProgress } from '@/utils/uxHelpers';
+import { resolveTaskPrimary } from '@/utils/taskPrimary';
 import type { ExportFormat } from '@/utils/fileExport';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -63,7 +63,6 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
       : 0;
 
   const isAudioVideo = file.fileType === 'audio' || file.fileType === 'video';
-  const isTranscriptionDone = file.phases.transcribing.status === 'completed';
   const isBusy =
     isActive ||
     isQueued ||
@@ -76,38 +75,12 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
   const isTranscribeFailed = file.phases.transcribing.status === 'failed';
   const transcribeLabel = isTranscribeFailed ? '重新转录' : '转录';
 
-  const canRun = useMemo(() => {
-    if (isQueued) return true;
-    if (isBusy || allPhasesDone) return false;
-    if (isAudioVideo && !isTranscriptionDone && !isTranscribeFailed) return true;
-    if (isAudioVideo && isTranscribeFailed && (file.entryCount ?? 0) === 0) return false;
-    if (pct >= 100) return false;
-    return true;
-  }, [
-    isQueued,
-    isBusy,
-    allPhasesDone,
-    isAudioVideo,
-    isTranscriptionDone,
-    isTranscribeFailed,
-    file.entryCount,
-    pct,
-  ]);
-
-  const idlePrimary = allPhasesDone
-    ? '已完成'
-    : isAudioVideo && needsTranscriptionWork(file)
-      ? isTranscribeFailed || file.phases.segmenting?.status === 'failed'
-        ? '重试'
-        : '转译'
-      : '翻译';
-  const primaryLabel = isQueued
-    ? '取消排队'
-    : isBusy
-      ? idlePrimary === '已完成'
-        ? '翻译'
-        : idlePrimary
-      : idlePrimary;
+  const primary = useMemo(
+    () => resolveTaskPrimary(file, { isQueued, isBusy }),
+    [file, isQueued, isBusy]
+  );
+  const canRun = primary.enabled;
+  const primaryLabel = primary.label;
 
   const [expanded, setExpanded] = useState(false);
 
@@ -126,12 +99,12 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
   }, [isBusy]);
 
   const handlePrimary = useCallback(() => {
-    if (isQueued) {
+    if (primary.action === 'cancel') {
       dequeueTask(file.id);
       return;
     }
     startPrimaryForFile(file);
-  }, [isQueued, file]);
+  }, [primary.action, file]);
 
   const handleTranscribe = useCallback(() => {
     startTranscribeTask(file.id);

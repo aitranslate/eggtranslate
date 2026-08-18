@@ -185,4 +185,23 @@ describe('startTask guards', () => {
     expect(startPrimaryForFile(srt)).toBe(true);
     expect(enqueueTask).toHaveBeenCalledWith('s1');
   });
+
+  it('startPrimaryForFile still starts full after AV transcription fails', () => {
+    useTranslationConfigStore.setState({ isConfigured: true });
+    useTranscriptionStore.setState({ apiKeys: 'sk' });
+    const av = meta({
+      id: 'av-fail',
+      taskId: 'av-fail',
+      fileType: 'video',
+      entryCount: 0,
+      phases: {
+        workflow: 'full',
+        converting: { status: 'completed', progress: 100, tokens: 0 },
+        transcribing: { status: 'failed', progress: 30, tokens: 0, transcriptId: 'tid' },
+        translating: { status: 'upcoming', progress: 0, tokens: 0 },
+      },
+    });
+    expect(startPrimaryForFile(av)).toBe(true);
+    expect(enqueueTask).toHaveBeenCalledWith('av-fail');
+  });
 });

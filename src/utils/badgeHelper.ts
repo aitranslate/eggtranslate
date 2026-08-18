@@ -81,24 +81,6 @@ function getQueueBadge(queuePosition: number): BadgeInfo {
   return { text: `排队中 #${queuePosition}`, color: 'yellow' };
 }
 
-/**
- * 主操作按钮在忙碌时的文案：不再写「处理中」（阶段 chip / 进度已表达）。
- * 保留「翻译」「转译」等动作名，禁用态即可。
- */
-export function resolveBusyPrimaryLabel(opts: {
-  isQueued: boolean;
-  isBusy: boolean;
-  isAudioVideo: boolean;
-  isTranscriptionDone: boolean;
-  idleLabel: string;
-}): string {
-  if (opts.isQueued) return '取消排队';
-  if (!opts.isBusy) return opts.idleLabel;
-  // 忙：显示原动作名（灰显），避免第三处「处理中」
-  if (opts.isAudioVideo && !opts.isTranscriptionDone) return '转译';
-  return opts.idleLabel === '转译' ? opts.idleLabel : '翻译';
-}
-
 /** 阶段 chip「翻译」文案（Agent 路径已移除，恒为「翻译」）。 */
 export function resolveTranslatePhaseLabel(): string {
   return '翻译';

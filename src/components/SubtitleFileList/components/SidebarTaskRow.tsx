@@ -22,9 +22,9 @@ import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useFilesStore } from '@/stores/filesStore';
 import {
   getCardBadge,
-  resolveBusyPrimaryLabel,
   resolveTranslatePhaseLabel,
 } from '@/utils/badgeHelper';
+import { resolveTaskPrimary } from '@/utils/taskPrimary';
 import {
   calcDisplayTranslationProgress,
   countStreamingLines,
@@ -32,7 +32,6 @@ import {
   useStreamingOverlayStore,
 } from '@/stores/streamingOverlayStore';
 import { canRetranscribe } from '@/utils/fileUtils';
-import { needsTranscriptionWork } from '@/utils/taskGuards';
 import type { ExportFormat } from '@/utils/fileExport';
 import { ExportButton } from '@/components/common/ExportButton';
 import { copyToClipboard } from '@/utils/appToast';
@@ -140,7 +139,6 @@ const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
           : 'idle';
 
   const isAudioVideo = file.fileType === 'audio' || file.fileType === 'video';
-  const isTranscriptionDone = file.phases.transcribing.status === 'completed';
   const isBusy =
     isActive ||
     isQueued ||
@@ -154,42 +152,13 @@ const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
   /** 失败后略长，工具条禁止 wrap，避免挤到下一行 */
   const transcribeLabel = isTranscribeFailed ? '重转录' : '转录';
 
-  const canRun = useMemo(() => {
-    if (isQueued) return true; // becomes cancel
-    if (isBusy || allPhasesDone) return false;
-    // 识别失败且尚无字幕：主按钮不可用，先走「重转录」
-    if (isAudioVideo && isTranscribeFailed && (file.entryCount ?? 0) === 0) return false;
-    if (isAudioVideo && !isTranscriptionDone && !isTranscribeFailed) return true; // 转译
-    if (pct >= 100) return false;
-    return true;
-  }, [
-    isQueued,
-    isBusy,
-    allPhasesDone,
-    isAudioVideo,
-    isTranscriptionDone,
-    isTranscribeFailed,
-    file.entryCount,
-    pct,
-  ]);
-
-  const idlePrimary = isFailed
-    ? '重试'
-    : allPhasesDone
-      ? '已完成'
-      : isAudioVideo && !isTranscriptionDone && !isTranscribeFailed
-        ? '转译'
-        : '翻译';
-  const primaryTitle = isAudioVideo && !isTranscriptionDone && !isTranscribeFailed && !isFailed && !allPhasesDone
-    ? '转录翻译'
-    : idlePrimary;
-  const primaryLabel = resolveBusyPrimaryLabel({
-    isQueued,
-    isBusy,
-    isAudioVideo,
-    isTranscriptionDone,
-    idleLabel: idlePrimary,
-  });
+  const primary = useMemo(
+    () => resolveTaskPrimary(file, { isQueued, isBusy }),
+    [file, isQueued, isBusy]
+  );
+  const canRun = primary.enabled;
+  const primaryTitle = primary.title;
+  const primaryLabel = primary.label;
 
   const metaLine = useMemo(() => {
     const parts: string[] = [];
@@ -208,24 +177,19 @@ const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
   const handlePrimary = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      if (isQueued) {
+      if (primary.action === 'cancel') {
         onDequeue(file.id);
         return;
       }
-      if (isAudioVideo && needsTranscriptionWork(file)) {
+      if (primary.action === 'full') {
         void onTranscribeAndTranslate(file);
-      } else {
+        return;
+      }
+      if (primary.action === 'translate') {
         void onStartTranslation(file);
       }
     },
-    [
-      isQueued,
-      isAudioVideo,
-      onDequeue,
-      onTranscribeAndTranslate,
-      onStartTranslation,
-      file,
-    ]
+    [primary.action, onDequeue, onTranscribeAndTranslate, onStartTranslation, file]
   );
 
   // 失败不铺满红进度条；阶段 chip + 状态文案已够

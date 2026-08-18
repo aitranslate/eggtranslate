@@ -16,6 +16,7 @@ import {
   shouldGuardTranscriptionStart,
   shouldGuardTranslationStart,
 } from '@/utils/taskGuards';
+import { resolveTaskPrimary } from '@/utils/taskPrimary';
 import type { SubtitleFileMetadata } from '@/types';
 
 function openTranslationSetup(): false {
@@ -94,8 +95,10 @@ export function startAllUncompleted(): boolean {
   return true;
 }
 
-/** 移动端主按钮：音视频未转录完走 full，否则 translate */
+/** 主按钮：与 resolveTaskPrimary 同一条路径（转译 / 翻译），不因失败改入口 */
 export function startPrimaryForFile(file: SubtitleFileMetadata): boolean {
-  if (needsTranscriptionWork(file)) return startFullTask(file.id);
-  return startTranslateTask(file.id);
+  const { action } = resolveTaskPrimary(file, { isQueued: false, isBusy: false });
+  if (action === 'full') return startFullTask(file.id);
+  if (action === 'translate') return startTranslateTask(file.id);
+  return false;
 }
