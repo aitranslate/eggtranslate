@@ -39,4 +39,12 @@ describe('MobileShell navigation contracts', () => {
     expect(src).toContain('__APP_VERSION__');
     expect(src).toMatch(/titleSub|v\$\{__APP_VERSION__\}|v\{__APP_VERSION__\}/);
   });
+
+  it('keeps top bar to navigation + settings (appearance lives in settings)', () => {
+    expect(src).not.toContain('toggleTheme');
+    expect(src).not.toContain('handleToggleSound');
+    expect(src).not.toMatch(/aria-label=["']切换主题["']/);
+    expect(src).not.toContain('Volume2');
+    expect(src).toContain('MobileListEmpty');
+  });
 });

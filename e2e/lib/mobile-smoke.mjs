@@ -50,6 +50,8 @@ const js = {
   tabbar: `!!document.querySelector('.m-tabbar')`,
   inList: `!!document.querySelector('.m-list')`,
   inDetail: `!!document.querySelector('.m-detail')`,
+  detailPrimary: `!!document.querySelector('[data-testid="mobile-detail-primary"]')`,
+  phaseChips: `!!document.querySelector('[data-testid="task-phase-chips"]')`,
   settingsOpen: `!!document.querySelector('.wb-drawer')`,
   settingsZ: `(()=>{const d=document.querySelector('.wb-drawer');if(!d)return 0;return Number(getComputedStyle(d).zIndex)||0})()`,
   bodyOverflow: `document.body.style.overflow||''`,
@@ -61,9 +63,9 @@ const js = {
   closeSettings: `(()=>{const b=Array.from(document.querySelectorAll('button')).find(x=>(x.getAttribute('aria-label')||'')==='关闭设置');if(b){b.click();return 'closed'}return 'none'})()`,
   clickSample: `(()=>{const b=Array.from(document.querySelectorAll('button')).find(x=>(x.textContent||'').includes('试用示例'));if(!b)return 'nf';b.click();return 'ok'})()`,
   clickBack: `(()=>{const b=document.querySelector('button[aria-label="返回"]');if(!b)return 'nf';b.click();return 'ok'})()`,
-  themeBeforeToggle: `(()=>{const t=document.querySelector('.m-shell')?.getAttribute('data-theme')||'light';const b=document.querySelector('button[aria-label="切换主题"]');if(!b)return 'nf:'+t;b.click();return t})()`,
   themeNow: `document.querySelector('.m-shell')?.getAttribute('data-theme')||''`,
-  themeToggleBack: `document.querySelector('button[aria-label="切换主题"]')?.click();'ok'`,
+  themeClick: (label) =>
+    `(()=>{const s=${JSON.stringify(label)};const b=Array.from(document.querySelectorAll('.wb-drawer button')).find(x=>(x.textContent||'').trim()===s);if(!b)return 'nf';b.click();return 'ok'})()`,
   settingsProbe: `JSON.stringify({
     hasTitle:!!document.querySelector('#wb-settings-title')||document.body.innerText.includes('设置'),
     mobileClass:!!document.querySelector('.wb-drawer.is-mobile-sheet'),
@@ -159,8 +161,11 @@ export function runMobileSmoke({
     if (!probe.menu) report.pass('mobile_no_hamburger');
     else report.fail('mobile_no_hamburger', 'hamburger still present');
 
-    if ((probe.title || '').includes('项目')) report.pass('mobile_list_title', probe.title);
-    else report.fail('mobile_list_title', String(probe.title || JSON.stringify(probe)));
+    if ((probe.title || '').includes('蛋蛋字幕翻译') || (probe.title || '').includes('项目')) {
+      report.pass('mobile_list_title', probe.title);
+    } else {
+      report.fail('mobile_list_title', String(probe.title || JSON.stringify(probe)));
+    }
 
     if (!isTrue(probe.shell)) {
       // 壳都没挂上，后续导航无意义
@@ -272,25 +277,31 @@ export function runMobileSmoke({
     else report.fail('mobile_body_unlock', String(evalResult(results, 10)));
   }
 
-  // 4) 主题
+  // 4) 主题（设置 → 外观）
   {
     const { results } = ab.batch(
       [
-        ['eval', js.themeBeforeToggle],
+        ['eval', js.clickAria('设置')],
+        ['wait', '700'],
+        ['eval', js.themeNow],
+        ['eval', js.themeClick('深色')],
         ['wait', '350'],
         ['eval', js.themeNow],
         ['screenshot', shot('07-theme')],
-        ['eval', js.themeToggleBack],
+        ['eval', js.themeClick('浅色')],
         ['wait', '250'],
+        ['eval', js.closeSettings],
+        ['wait', '400'],
       ],
       { timeout: 45000 }
     );
-    const before = String(evalResult(results, 0) || '');
-    const after = String(evalResult(results, 2) || '');
-    if (!before.startsWith('nf') && before !== after && (after === 'dark' || after === 'light')) {
+    const before = String(evalResult(results, 2) || '');
+    const clicked = String(evalResult(results, 3) || '');
+    const after = String(evalResult(results, 5) || '');
+    if (clicked === 'ok' && before !== after && (after === 'dark' || after === 'light')) {
       report.pass('mobile_theme_toggle', `${before} -> ${after}`);
     } else {
-      report.fail('mobile_theme_toggle', `${before} -> ${after}`);
+      report.fail('mobile_theme_toggle', `${before} / ${clicked} / ${after}`);
     }
   }
 
@@ -301,11 +312,13 @@ export function runMobileSmoke({
         ['eval', js.clickSample],
         ['wait', '2500'],
         ['eval', js.inDetail],
+        ['eval', js.detailPrimary],
         ['eval', js.tabbar],
         ['eval', js.clickBack],
         ['wait', '600'],
         ['eval', js.inList],
         ['eval', js.tabbar],
+        ['eval', js.phaseChips],
         ['screenshot', shot('08-sample-back')],
       ],
       { timeout: 90000 }
@@ -319,21 +332,25 @@ export function runMobileSmoke({
         `click=${evalResult(results, 0)} detail=${evalResult(results, 2)}`
       );
     }
-    if (!isTrue(evalResult(results, 3))) report.pass('mobile_tabbar_hidden_in_detail');
+    if (isTrue(evalResult(results, 3))) report.pass('mobile_detail_primary');
+    else report.fail('mobile_detail_primary', 'primary action not visible');
+    if (!isTrue(evalResult(results, 4))) report.pass('mobile_tabbar_hidden_in_detail');
     else report.fail('mobile_tabbar_hidden_in_detail');
 
     if (
-      evalResult(results, 4) === 'ok' &&
-      isTrue(evalResult(results, 6)) &&
-      isTrue(evalResult(results, 7))
+      evalResult(results, 5) === 'ok' &&
+      isTrue(evalResult(results, 7)) &&
+      isTrue(evalResult(results, 8))
     ) {
       report.pass('mobile_back_to_list');
     } else {
       report.fail(
         'mobile_back_to_list',
-        `back=${evalResult(results, 4)} list=${evalResult(results, 6)} tab=${evalResult(results, 7)}`
+        `back=${evalResult(results, 5)} list=${evalResult(results, 7)} tab=${evalResult(results, 8)}`
       );
     }
+    if (isTrue(evalResult(results, 9))) report.pass('mobile_list_phase_chips');
+    else report.fail('mobile_list_phase_chips', 'list card missing 翻译 n/m chips');
   }
 
   ab.batch([['screenshot', shot('99-final')]], { timeout: 20000 });

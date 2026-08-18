@@ -13,31 +13,19 @@ import {
   Square,
   Mic,
   Trash2,
-  Loader2,
   Copy,
 } from 'lucide-react';
 import type { SubtitleFileMetadata } from '@/types';
-import { ALL_PHASES } from '@/types';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useFilesStore } from '@/stores/filesStore';
-import {
-  getCardBadge,
-  resolveTranslatePhaseLabel,
-} from '@/utils/badgeHelper';
 import { resolveTaskPrimary } from '@/utils/taskPrimary';
-import {
-  calcDisplayTranslationProgress,
-  countStreamingLines,
-  EMPTY_STREAMING_OVERLAY,
-  useStreamingOverlayStore,
-} from '@/stores/streamingOverlayStore';
 import { canRetranscribe } from '@/utils/fileUtils';
 import type { ExportFormat } from '@/utils/fileExport';
 import { ExportButton } from '@/components/common/ExportButton';
+import { TaskPhaseChips } from '@/components/common/TaskPhaseChips';
+import { useTaskDisplayModel } from '@/hooks/useTaskDisplayModel';
 import { copyToClipboard } from '@/utils/appToast';
 import {
-  formatAiSegmentProgress,
-  formatPhaseCountProgress,
   getFailedPhaseError,
   shouldShowTaskErrorDetail,
 } from '@/utils/uxHelpers';
@@ -81,38 +69,8 @@ const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
 }) => {
   const keytermGroups = useTranscriptionStore((s) => s.keytermGroups);
   const setSelectedKeytermGroupId = useFilesStore((s) => s.setSelectedKeytermGroupId);
-  const phaseTranslateLabel = resolveTranslatePhaseLabel();
-
-  const displayPhases = useMemo(() => {
-    const base =
-      file.fileType === 'srt'
-        ? ALL_PHASES.filter(
-            (p) => p !== 'converting' && p !== 'transcribing' && p !== 'segmenting'
-          )
-        : ALL_PHASES.filter((p) => p !== 'converting');
-    // AI 断句 chip 仅在该任务创建时带 AI 断句阶段才显示
-    return base.filter((p) => p !== 'segmenting' || Boolean(file.phases.segmenting));
-  }, [file.fileType, file.phases.segmenting]);
-
-  const allPhasesDone = useMemo(
-    () => displayPhases.every((p) => file.phases[p]?.status === 'completed'),
-    [displayPhases, file.phases]
-  );
-
-  const badge = getCardBadge(file.phases, displayPhases, isQueued, queuePosition);
-  // 侧栏进度轨与流式可见行同步（不写 filesStore）
-  const streamOverlay = useStreamingOverlayStore(
-    (s) => s.overlays[file.id] ?? EMPTY_STREAMING_OVERLAY
-  );
-  const translateCounts = useMemo(() => {
-    const { translated, total, percentage } = calcDisplayTranslationProgress(
-      file.translatedCount ?? 0,
-      file.entryCount ?? 0,
-      countStreamingLines(streamOverlay)
-    );
-    return { translated, total, percentage };
-  }, [file.translatedCount, file.entryCount, streamOverlay]);
-  const pct = translateCounts.percentage;
+  const { displayPhases, translateCounts, badge, allPhasesDone, isBusy, pct } =
+    useTaskDisplayModel(file, { isQueued, queuePosition, isActive });
 
   const isFailed = badge.color === 'red';
   const failedInfo = useMemo(() => getFailedPhaseError(file.phases), [file.phases]);
@@ -141,14 +99,6 @@ const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
           : 'idle';
 
   const isAudioVideo = file.fileType === 'audio' || file.fileType === 'video';
-  const isBusy =
-    isActive ||
-    isQueued ||
-    file.phases.converting.status === 'active' ||
-    file.phases.transcribing.status === 'active' ||
-    file.phases.segmenting?.status === 'active' ||
-    file.phases.translating.status === 'active';
-
   const canTranscribe = isAudioVideo && !isBusy && canRetranscribe(file) && !allPhasesDone;
   const isTranscribeFailed = file.phases.transcribing.status === 'failed';
   /** 失败后略长，工具条禁止 wrap，避免挤到下一行 */
@@ -285,55 +235,13 @@ const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
       {/* 选中展开：阶段 chip / 空白可点选整卡；仅表单控件拦截冒泡 */}
       <div className="wb-proj-panel">
         <div className="wb-proj-panel-inner">
-          <div className="wb-proj-phases">
-            {displayPhases.map((phase) => {
-              const st = file.phases[phase]?.status;
-              const err = file.phases[phase]?.errorMessage;
-              const seg = file.phases.segmenting;
-              const label =
-                phase === 'transcribing'
-                  ? '识别'
-                  : phase === 'segmenting'
-                    ? st === 'active'
-                      ? formatAiSegmentProgress(seg) ?? 'AI断句'
-                      : 'AI断句'
-                    : formatPhaseCountProgress(
-                        phaseTranslateLabel,
-                        translateCounts.translated,
-                        translateCounts.total
-                      );
-              return (
-                <span
-                  key={phase}
-                  className={`wb-proj-phase st-${st || 'upcoming'}`}
-                  title={
-                    st === 'active'
-                      ? `${label}中`
-                      : st === 'completed'
-                        ? `${label}完成`
-                        : st === 'failed'
-                          ? err?.trim()
-                            ? `${label}失败：${err}`
-                            : `${label}失败`
-                          : label
-                  }
-                >
-                  {st === 'completed' ? (
-                    '✓'
-                  ) : st === 'failed' ? (
-                    <span className="wb-proj-phase-x" aria-hidden>
-                      ×
-                    </span>
-                  ) : st === 'active' ? (
-                    <Loader2 className="wb-proj-phase-spin" aria-hidden />
-                  ) : (
-                    '·'
-                  )}
-                  <span>{label}</span>
-                </span>
-              );
-            })}
-          </div>
+          <TaskPhaseChips
+            className="wb-proj-phases"
+            phases={displayPhases}
+            filePhases={file.phases}
+            translated={translateCounts.translated}
+            total={translateCounts.total}
+          />
 
           <div className="wb-proj-toolbar">
             {isAudioVideo && keytermGroups.length > 0 && (

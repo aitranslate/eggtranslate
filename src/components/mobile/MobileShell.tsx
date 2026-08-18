@@ -1,5 +1,10 @@
 /**
  * 移动端专用壳：列表 ↔ 详情，设置全屏抽屉
+ *
+ * 信息架构：
+ * - 顶栏只负责导航 / 设置；主题与音效在设置「外观」
+ * - 空列表是一块空态；有任务后只留紧凑工具条
+ * - 详情底栏常驻主操作（见 MobileDetailBar）
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -8,15 +13,9 @@ import {
   BookOpen,
   FolderKanban,
   History,
-  Moon,
-  Plus,
   Settings,
-  Sparkles,
-  Sun,
   Trash2,
   Upload,
-  Volume2,
-  VolumeX,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { SubtitleEditor } from '@/components/SubtitleEditor';
@@ -29,6 +28,7 @@ import {
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { MobileTaskCard } from '@/components/mobile/MobileTaskCard';
 import { MobileDetailBar } from '@/components/mobile/MobileDetailBar';
+import { MobileListEmpty } from '@/components/mobile/MobileListEmpty';
 import { useFiles, useSelectedFile, useFilesStore } from '@/stores/filesStore';
 import { useQueueStore } from '@/stores/queueStore';
 import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
@@ -36,8 +36,6 @@ import { useHistoryStore } from '@/stores/historyStore';
 import { useTermsStore } from '@/stores/termsStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useThemeStore } from '@/stores/themeStore';
-import { useSoundStore } from '@/stores/soundStore';
-import { playAppSound } from '@/utils/appSound';
 import { clearAll } from '@/services/filesService';
 import { startAllUncompleted } from '@/services/startTask';
 import { importSampleSubtitle } from '@/utils/importSampleSubtitle';
@@ -72,16 +70,7 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
   const openHistory = useWorkspaceStore((s) => s.openHistory);
 
   const theme = useThemeStore((s) => s.theme);
-  const toggleTheme = useThemeStore((s) => s.toggleTheme);
-  const soundEnabled = useSoundStore((s) => s.soundEnabled);
-  const setSoundEnabled = useSoundStore((s) => s.setSoundEnabled);
   const { handleError } = useErrorHandler();
-
-  const handleToggleSound = useCallback(() => {
-    const next = !useSoundStore.getState().soundEnabled;
-    setSoundEnabled(next);
-    if (next) playAppSound('confirm');
-  }, [setSoundEnabled]);
 
   const [logoShake, setLogoShake] = useState(false);
   const shakeBrandLogo = useCallback(() => {
@@ -103,6 +92,7 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
 
   const inDetail = stage === 'editor' && !!selectedFileId;
   const inList = stage === 'editor' && !selectedFileId;
+  const hasTasks = files.length > 0;
 
   const handleOpenTask = useCallback(
     (file: SubtitleFileMetadata) => {
@@ -148,16 +138,15 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
     if (stage === 'terms') return '术语';
     if (stage === 'history') return '历史';
     if (inDetail) return selectedFile?.name || '任务';
-    // 列表首页与桌面一致：产品名 + 版本（勿用「项目」占位）
     return '蛋蛋字幕翻译';
   }, [stage, inDetail, selectedFile?.name]);
 
   const titleSub = useMemo(() => {
     if (!inList) return null;
     const ver = `v${__APP_VERSION__}`;
-    if (files.length > 0) return `${ver} · ${files.length} 个任务`;
+    if (hasTasks) return `${ver} · ${files.length} 个任务`;
     return ver;
-  }, [inList, files.length]);
+  }, [inList, hasTasks, files.length]);
 
   /**
    * 布局契约：`.m-shell` 只放壳层槽位（顶栏 / 主区 / 底栏）。
@@ -207,35 +196,6 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
           </div>
         </div>
         <div className="m-top-right">
-          {/* 列表页主 CTA 已是导入，顶栏 + 仅在非列表时保留 */}
-          {!inList && !inDetail && (
-            <button
-              type="button"
-              className="m-icon-btn"
-              onClick={openFilePicker}
-              aria-label="导入文件"
-            >
-              <Plus className="h-5 w-5" strokeWidth={2.25} />
-            </button>
-          )}
-          <button
-            type="button"
-            className="m-icon-btn"
-            onClick={toggleTheme}
-            aria-label="切换主题"
-          >
-            {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-          </button>
-          <button
-            type="button"
-            className="m-icon-btn"
-            onClick={handleToggleSound}
-            aria-label={soundEnabled ? '关闭音效' : '开启音效'}
-            aria-pressed={soundEnabled}
-            title={soundEnabled ? '关闭音效' : '开启音效'}
-          >
-            {soundEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
-          </button>
           <button
             type="button"
             className={`m-icon-btn ${!isConfigured ? 'warn' : ''}`}
@@ -248,7 +208,7 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
         </div>
       </header>
 
-      {!isConfigured && inList && (
+      {!isConfigured && inList && hasTasks && (
         <button type="button" className="m-banner" onClick={() => openSettings('translation')}>
           <span>未配置翻译 API，点此设置</span>
           <Settings className="h-3.5 w-3.5 opacity-70" />
@@ -274,96 +234,57 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
 
         {inList && (
           <div className="m-list">
-            <div className="m-hero">
-              {!isConfigured ? (
-                <>
-                  <button
-                    type="button"
-                    className="m-hero-primary"
-                    onClick={() => void handleSample()}
-                    disabled={sampleLoading}
-                  >
-                    <Sparkles className="h-5 w-5" />
-                    {sampleLoading ? '导入中…' : '试用示例字幕'}
-                  </button>
-                  <button type="button" className="m-hero-secondary" onClick={openFilePicker}>
-                    <Upload className="h-4 w-4" />
-                    导入文件
-                  </button>
-                  <button
-                    type="button"
-                    className="m-hero-secondary"
-                    onClick={() => openSettings('translation')}
-                  >
-                    <Settings className="h-4 w-4" />
-                    配置 API
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button type="button" className="m-hero-primary" onClick={openFilePicker}>
-                    <Upload className="h-5 w-5" />
-                    导入文件
+            {!hasTasks ? (
+              <MobileListEmpty
+                isConfigured={isConfigured}
+                sampleLoading={sampleLoading}
+                onConfigure={() => openSettings('translation')}
+                onImport={openFilePicker}
+                onSample={() => void handleSample()}
+              />
+            ) : (
+              <>
+                <div className="m-list-tools">
+                  <button type="button" className="m-chip-btn primary" onClick={openFilePicker}>
+                    <Upload className="h-3.5 w-3.5" />
+                    导入
                   </button>
                   <button
                     type="button"
-                    className="m-hero-secondary"
-                    onClick={() => void handleSample()}
-                    disabled={sampleLoading}
+                    className="m-chip-btn"
+                    onClick={() => startAllUncompleted()}
                   >
-                    <Sparkles className="h-4 w-4" />
-                    {sampleLoading ? '导入中…' : '试用示例字幕'}
+                    全部开始
                   </button>
-                </>
-              )}
-              <p className="m-hero-hint">
-                {files.length === 0
-                  ? '导入字幕或音视频开始'
-                  : '点选项目打开详情'}
-              </p>
-            </div>
+                  <button
+                    type="button"
+                    className="m-chip-btn"
+                    onClick={() => setShowClearConfirm(true)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    清空
+                  </button>
+                </div>
 
-            {files.length > 0 && (
-              <div className="m-list-tools">
-                <button
-                  type="button"
-                  className="m-chip-btn primary"
-                  onClick={() => startAllUncompleted()}
-                >
-                  全部开始
-                </button>
-                <button
-                  type="button"
-                  className="m-chip-btn"
-                  onClick={() => setShowClearConfirm(true)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  清空
-                </button>
-              </div>
+                <div className="m-task-list">
+                  {files.map((file) => {
+                    const queuePosition = queueMeta.get(file.id) ?? 0;
+                    const isActive = activeTaskId === file.id;
+                    const isQueued = queuePosition > 0 && !isActive;
+                    return (
+                      <MobileTaskCard
+                        key={file.id}
+                        file={file}
+                        isQueued={isQueued}
+                        queuePosition={queuePosition}
+                        isActive={isActive}
+                        onOpen={handleOpenTask}
+                      />
+                    );
+                  })}
+                </div>
+              </>
             )}
-
-            <div className="m-task-list">
-              {files.length === 0 ? (
-                <div className="m-empty-list">暂无项目，导入后显示在这里</div>
-              ) : (
-                files.map((file) => {
-                  const queuePosition = queueMeta.get(file.id) ?? 0;
-                  const isActive = activeTaskId === file.id;
-                  const isQueued = queuePosition > 0 && !isActive;
-                  return (
-                    <MobileTaskCard
-                      key={file.id}
-                      file={file}
-                      isQueued={isQueued}
-                      queuePosition={queuePosition}
-                      isActive={isActive}
-                      onOpen={handleOpenTask}
-                    />
-                  );
-                })
-              )}
-            </div>
           </div>
         )}
 

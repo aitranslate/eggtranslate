@@ -1,12 +1,11 @@
 /**
- * 移动端任务详情底栏：默认收起为把手，展开后显示热词 / 导出 / 转录 / 转译。
- * 忙碌时自动展开；列表滚动时收起（非忙碌）。
+ * 移动端任务详情底栏：常驻操作坞。
+ * 主按钮始终可见；进度与桌面阶段 chip 同一套 n/m。
  */
 
-import { useMemo, useCallback, useState, useEffect } from 'react';
-import { Play, Square, Mic, Loader2, ChevronUp, ChevronDown } from 'lucide-react';
+import { useMemo, useCallback } from 'react';
+import { Play, Square, Mic, Loader2 } from 'lucide-react';
 import type { SubtitleFileMetadata } from '@/types';
-import { ALL_PHASES } from '@/types';
 import { useFilesStore } from '@/stores/filesStore';
 import { useQueueStore } from '@/stores/queueStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
@@ -18,14 +17,12 @@ import {
 import { exportFile } from '@/services/SubtitleExporter';
 import { ExportButton } from '@/components/common/ExportButton';
 import { canRetranscribe } from '@/utils/fileUtils';
-import { formatAiSegmentProgress } from '@/utils/uxHelpers';
+import { formatTaskPhaseChipLabel } from '@/utils/badgeHelper';
 import { resolveTaskPrimary } from '@/utils/taskPrimary';
+import { useTaskDisplayModel } from '@/hooks/useTaskDisplayModel';
 import type { ExportFormat } from '@/utils/fileExport';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
-
-/** 编辑器列表滚动时派发，底栏非忙碌则收起 */
-export const MOBILE_DETAIL_SCROLL_EVENT = 'egg-mobile-detail-scroll';
 
 interface MobileDetailBarProps {
   file: SubtitleFileMetadata;
@@ -42,35 +39,13 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
   const isActive = activeTaskId === file.id;
   const isQueued = queuePosition > 0 && !isActive;
 
-  const displayPhases = useMemo(() => {
-    const base =
-      file.fileType === 'srt'
-        ? ALL_PHASES.filter(
-            (p) => p !== 'converting' && p !== 'transcribing' && p !== 'segmenting'
-          )
-        : ALL_PHASES.filter((p) => p !== 'converting');
-    return base.filter((p) => p !== 'segmenting' || Boolean(file.phases.segmenting));
-  }, [file.fileType, file.phases.segmenting]);
-
-  const allPhasesDone = useMemo(
-    () => displayPhases.every((p) => file.phases[p]?.status === 'completed'),
-    [displayPhases, file.phases]
-  );
-
-  const pct =
-    (file.entryCount ?? 0) > 0
-      ? Math.round(((file.translatedCount ?? 0) / (file.entryCount ?? 1)) * 100)
-      : 0;
+  const { allPhasesDone, isBusy, translateCounts, badge } = useTaskDisplayModel(file, {
+    isQueued,
+    queuePosition,
+    isActive,
+  });
 
   const isAudioVideo = file.fileType === 'audio' || file.fileType === 'video';
-  const isBusy =
-    isActive ||
-    isQueued ||
-    file.phases.converting.status === 'active' ||
-    file.phases.transcribing.status === 'active' ||
-    file.phases.segmenting?.status === 'active' ||
-    file.phases.translating.status === 'active';
-
   const canTranscribe = isAudioVideo && !isBusy && canRetranscribe(file) && !allPhasesDone;
   const isTranscribeFailed = file.phases.transcribing.status === 'failed';
   const transcribeLabel = isTranscribeFailed ? '重新转录' : '转录';
@@ -81,22 +56,6 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
   );
   const canRun = primary.enabled;
   const primaryLabel = primary.label;
-
-  const [expanded, setExpanded] = useState(false);
-
-  // 忙碌时自动展开，便于取消/看状态
-  useEffect(() => {
-    if (isBusy) setExpanded(true);
-  }, [isBusy]);
-
-  // 列表滚动：非忙碌则收起
-  useEffect(() => {
-    const onScroll = () => {
-      if (!isBusy) setExpanded(false);
-    };
-    window.addEventListener(MOBILE_DETAIL_SCROLL_EVENT, onScroll);
-    return () => window.removeEventListener(MOBILE_DETAIL_SCROLL_EVENT, onScroll);
-  }, [isBusy]);
 
   const handlePrimary = useCallback(() => {
     if (primary.action === 'cancel') {
@@ -122,66 +81,41 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
     [file.taskId, file.name, handleError]
   );
 
-  const summaryLeft = useMemo(() => {
-    const total = file.entryCount ?? 0;
-    const done = file.translatedCount ?? 0;
-    if (isBusy) {
-      if (file.phases.transcribing.status === 'active') return '转录中…';
-      if (file.phases.segmenting?.status === 'active') {
-        return formatAiSegmentProgress(file.phases.segmenting) ?? 'AI断句中…';
-      }
-      if (file.phases.translating.status === 'active') return '翻译中…';
-      if (isQueued) return `排队 #${queuePosition}`;
-      return '处理中…';
+  const statusText = useMemo(() => {
+    if (file.phases.transcribing.status === 'active') return '转录中…';
+    if (file.phases.segmenting?.status === 'active') {
+      return formatTaskPhaseChipLabel('segmenting', {
+        status: 'active',
+        segmenting: file.phases.segmenting,
+        translated: translateCounts.translated,
+        total: translateCounts.total,
+      });
     }
-    if (total <= 0) return '暂无字幕';
-    return `${done}/${total} 已译 · ${pct}%`;
+    if (isQueued) return badge.text;
+    if ((file.entryCount ?? 0) > 0) {
+      return formatTaskPhaseChipLabel('translating', {
+        translated: translateCounts.translated,
+        total: translateCounts.total,
+      });
+    }
+    if (isBusy) return '处理中…';
+    return '暂无字幕';
   }, [
-    file.entryCount,
-    file.translatedCount,
     file.phases.transcribing.status,
     file.phases.segmenting,
-    file.phases.translating.status,
+    file.entryCount,
+    translateCounts.translated,
+    translateCounts.total,
     isBusy,
     isQueued,
-    queuePosition,
-    pct,
+    badge.text,
   ]);
 
-  if (!expanded) {
-    return (
-      <div className="m-detail-bar is-collapsed">
-        <button
-          type="button"
-          className="m-detail-bar-summary"
-          onClick={() => setExpanded(true)}
-          aria-expanded={false}
-          aria-label="展开操作：热词、导出、转录、翻译"
-        >
-          <span className="m-detail-bar-grip" aria-hidden />
-          <span className="m-detail-bar-summary-text">{summaryLeft}</span>
-          <span className="m-detail-bar-summary-hint">
-            操作
-            <ChevronUp className="h-3.5 w-3.5" />
-          </span>
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="m-detail-bar is-expanded">
-      <button
-        type="button"
-        className="m-detail-bar-collapse"
-        onClick={() => setExpanded(false)}
-        aria-expanded
-        aria-label="收起操作栏"
-      >
-        <span className="m-detail-bar-grip" aria-hidden />
-        <span>收起</span>
-        <ChevronDown className="h-3.5 w-3.5" />
-      </button>
+    <div className="m-detail-bar">
+      <div className="m-detail-status" data-testid="mobile-detail-status">
+        {statusText}
+      </div>
 
       {isAudioVideo && keytermGroups.length > 0 && (
         <label className="m-detail-keyterm">
@@ -228,6 +162,7 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
           className={`m-btn primary ${isQueued ? 'muted' : ''}`}
           disabled={!canRun && !isQueued}
           onClick={handlePrimary}
+          data-testid="mobile-detail-primary"
         >
           {isBusy && !isQueued ? (
             <Loader2 className="h-4 w-4 m-spin shrink-0" />

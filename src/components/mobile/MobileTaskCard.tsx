@@ -1,16 +1,16 @@
 /**
- * 移动端项目行：轻量列表，操作放详情页底栏
+ * 移动端项目行：与桌面侧栏同一套阶段 chip / 翻译 n/m，操作放详情底栏。
  */
 
 import { memo, useCallback, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { ChevronRight, Copy, FileText, Music, Video, Loader2 } from 'lucide-react';
+import { ChevronRight, Copy, FileText, Music, Video } from 'lucide-react';
 import type { SubtitleFileMetadata } from '@/types';
-import { ALL_PHASES } from '@/types';
-import { getCardBadge } from '@/utils/badgeHelper';
 import { getFailedPhaseError, shouldShowTaskErrorDetail } from '@/utils/uxHelpers';
 import { copyToClipboard } from '@/utils/appToast';
 import { formatFileSize, formatDuration } from '@/components/SubtitleFileList/utils/fileHelpers';
+import { TaskPhaseChips } from '@/components/common/TaskPhaseChips';
+import { useTaskDisplayModel } from '@/hooks/useTaskDisplayModel';
 
 interface MobileTaskCardProps {
   file: SubtitleFileMetadata;
@@ -33,21 +33,10 @@ export const MobileTaskCard = memo(function MobileTaskCard({
   isActive,
   onOpen,
 }: MobileTaskCardProps) {
-  const displayPhases = useMemo(() => {
-    const base =
-      file.fileType === 'srt'
-        ? ALL_PHASES.filter(
-            (p) => p !== 'converting' && p !== 'transcribing' && p !== 'segmenting'
-          )
-        : ALL_PHASES.filter((p) => p !== 'converting');
-    return base.filter((p) => p !== 'segmenting' || Boolean(file.phases.segmenting));
-  }, [file.fileType, file.phases.segmenting]);
-
-  const badge = getCardBadge(file.phases, displayPhases, isQueued, queuePosition);
-  const pct =
-    (file.entryCount ?? 0) > 0
-      ? Math.round(((file.translatedCount ?? 0) / (file.entryCount ?? 1)) * 100)
-      : 0;
+  const { displayPhases, translateCounts, badge, isBusy, pct } = useTaskDisplayModel(
+    file,
+    { isQueued, queuePosition, isActive }
+  );
 
   const isFailed = badge.color === 'red';
   const failedInfo = useMemo(() => getFailedPhaseError(file.phases), [file.phases]);
@@ -90,6 +79,9 @@ export const MobileTaskCard = memo(function MobileTaskCard({
     [failedInfo]
   );
 
+  const showRail = !isFailed && (isRunning || isQueued || (pct > 0 && pct < 100));
+  const showBadgeText = isQueued || isFailed || (isBusy && badge.text !== '处理中');
+
   return (
     <div
       role="button"
@@ -104,19 +96,24 @@ export const MobileTaskCard = memo(function MobileTaskCard({
       }}
     >
       <div className={`m-task-ico type-${file.fileType || 'srt'}`} aria-hidden>
-        {isRunning ? (
-          <Loader2 className="h-4 w-4 m-spin" />
-        ) : (
-          <TypeIcon type={file.fileType} />
-        )}
+        <TypeIcon type={file.fileType} />
       </div>
       <div className="m-task-body">
         <div className="m-task-title">{file.name}</div>
         <div className="m-task-sub">
-          {/* 状态交给阶段 chip / 进度条，副标题只放元信息 */}
           <span className={`m-task-dot tone-${tone}`} aria-hidden />
           {meta ? <span className="m-task-meta">{meta}</span> : null}
+          {showBadgeText ? <span className="m-task-badge">{badge.text}</span> : null}
         </div>
+        {displayPhases.length > 0 && (
+          <TaskPhaseChips
+            className="m-task-phases"
+            phases={displayPhases}
+            filePhases={file.phases}
+            translated={translateCounts.translated}
+            total={translateCounts.total}
+          />
+        )}
         {isFailed && shouldShowTaskErrorDetail(failedInfo) && failedInfo && (
           <div
             className="m-task-error"
@@ -137,7 +134,7 @@ export const MobileTaskCard = memo(function MobileTaskCard({
             </button>
           </div>
         )}
-        {!isFailed && (isRunning || isQueued || (pct > 0 && pct < 100)) && (
+        {showRail && (
           <div className="m-task-rail">
             <i
               style={{

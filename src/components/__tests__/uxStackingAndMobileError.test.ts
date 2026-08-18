@@ -49,6 +49,17 @@ describe('confirm dialog stacking above settings', () => {
     expect(src).toContain('showDiscardConfirm');
     expect(src).toContain('放弃未保存');
   });
+
+  it('SettingsModal has an appearance section for theme and sound', () => {
+    const src = read('components/SettingsModal.tsx');
+    expect(src).toContain('AppearanceSettings');
+    expect(src).toContain('settings-section-appearance');
+    const appearance = read('components/SettingsModal/AppearanceSettings.tsx');
+    expect(appearance).toContain('setTheme');
+    expect(appearance).toContain('setSoundEnabled');
+    expect(appearance).toContain('aria-label="主题"');
+    expect(appearance).toContain('aria-label="音效"');
+  });
 });
 
 describe('mobile failed task error + copy', () => {
@@ -60,6 +71,8 @@ describe('mobile failed task error + copy', () => {
     expect(src).toContain('copyToClipboard');
     expect(src).toContain('stopPropagation');
     expect(src).toMatch(/aria-label=["']复制错误信息["']/);
+    expect(src).toContain('TaskPhaseChips');
+    expect(src).toContain('useTaskDisplayModel');
   });
 
   it('getFailedPhaseError is the shipped message source', () => {

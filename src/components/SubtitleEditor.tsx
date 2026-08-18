@@ -3,7 +3,6 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { backdropFade, overlayPanelMotion } from '@/motion';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Search, FileText, X, ChevronDown, ChevronUp } from 'lucide-react';
-import { MOBILE_DETAIL_SCROLL_EVENT } from '@/components/mobile/MobileDetailBar';
 import { useShallow } from 'zustand/react/shallow';
 import { SubtitleEntry } from '@/types';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -569,7 +568,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     virtualizer.measure();
   }, [virtualizer, filterType, searchTerm, fileId, isMobile, filteredEntries.length, mobileChromeOpen]);
 
-  // 移动端：滚动字幕列表时收起顶栏 chrome，并通知底栏收起
+  // 移动端：滚动字幕列表时收起顶栏搜索/筛选，给行内容腾位
   useEffect(() => {
     if (!isMobile) return;
     const el = parentRef.current;
@@ -583,7 +582,6 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
       if (!searchInput && filterType === 'all') {
         setMobileChromeOpen(false);
       }
-      window.dispatchEvent(new CustomEvent(MOBILE_DETAIL_SCROLL_EVENT));
     };
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
@@ -600,10 +598,9 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const onStartEdit = useCallback(
     (entry: SubtitleEntry, field: FocusField = 'translation') => {
       if (isTaskBusy) return;
-      // 进入行编辑：收起移动端 chrome / 通知底栏收起，给键盘腾位
+      // 进入行编辑：收起移动端搜索栏，给键盘腾位
       if (isMobile) {
         setMobileChromeOpen(false);
-        window.dispatchEvent(new CustomEvent(MOBILE_DETAIL_SCROLL_EVENT));
       }
       setEditingId(entry.id);
       setFocusField(field);

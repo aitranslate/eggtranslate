@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslationConfigStore, useTranslationConfig } from '@/stores/translationConfigStore';
 import { TranslationSettings } from './SettingsModal/TranslationSettings';
+import { AppearanceSettings } from './SettingsModal/AppearanceSettings';
 import { TranscriptionSettings } from './TranscriptionSettings';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { backdropFade, edgeDrawerMotion } from '@/motion';
@@ -264,6 +265,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     sections="params"
                   />
                 </div>
+              </section>
+
+              <section className="wb-drawer-section" id="settings-section-appearance">
+                <header className="wb-prefs-section-head">
+                  <h3>外观</h3>
+                  <p>主题与提示音立即生效，不必点保存</p>
+                </header>
+                <AppearanceSettings />
               </section>
             </div>
 
