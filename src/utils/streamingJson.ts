@@ -5,13 +5,18 @@
 
 type StreamingDirects = Record<string, string>;
 
+export type StreamingDirectEntry = {
+  direct: string;
+  /** direct 字符串已闭合；未闭合的是正在增长的最后一行，不能当检查点。 */
+  complete: boolean;
+};
+
 /**
- * 从 partial/complete JSON 字符串中提取各条目的 direct 译文（可含未闭合字符串）。
+ * 从 partial/complete JSON 抽出各条 direct，并标明该字符串是否已闭合。
  */
-export function extractStreamingDirects(raw: string): StreamingDirects {
+export function extractStreamingEntries(raw: string): Record<string, StreamingDirectEntry> {
   if (!raw) return {};
 
-  // 去掉 markdown 代码围栏前缀，定位到第一个 {
   let s = raw.trim();
   const fence = s.match(/^```(?:json)?\s*/i);
   if (fence) {
@@ -21,7 +26,7 @@ export function extractStreamingDirects(raw: string): StreamingDirects {
   if (brace < 0) return {};
   if (brace > 0) s = s.slice(brace);
 
-  const result: StreamingDirects = {};
+  const result: Record<string, StreamingDirectEntry> = {};
   const keyRe = /"(\d+)"\s*:\s*\{/g;
   const matches: Array<{ key: string; objStart: number; matchStart: number }> = [];
   let m: RegExpExecArray | null;
@@ -35,19 +40,30 @@ export function extractStreamingDirects(raw: string): StreamingDirects {
 
   for (let i = 0; i < matches.length; i++) {
     const { key, objStart } = matches[i];
-    // 对象边界：下一个同级 "N": { 或文本尾
     const objEnd = i + 1 < matches.length ? matches[i + 1].matchStart : s.length;
     const objSlice = s.slice(objStart, objEnd);
     const directMatch = objSlice.match(/"direct"\s*:\s*"/);
     if (!directMatch || directMatch.index === undefined) continue;
 
     const strStart = directMatch.index + directMatch[0].length;
-    const { value } = readJsonStringFragment(objSlice, strStart);
+    const { value, complete } = readJsonStringFragment(objSlice, strStart);
     if (value.length > 0) {
-      result[key] = value;
+      result[key] = { direct: value, complete };
     }
   }
 
+  return result;
+}
+
+/**
+ * 从 partial/complete JSON 字符串中提取各条目的 direct 译文（可含未闭合字符串）。
+ */
+export function extractStreamingDirects(raw: string): StreamingDirects {
+  const entries = extractStreamingEntries(raw);
+  const result: StreamingDirects = {};
+  for (const [key, entry] of Object.entries(entries)) {
+    result[key] = entry.direct;
+  }
   return result;
 }
 

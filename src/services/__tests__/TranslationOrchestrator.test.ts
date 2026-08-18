@@ -565,7 +565,7 @@ describe('processBatch batch apply', () => {
       { id: 2, text: '世' },
     ]);
 
-    // 定稿：清 overlay + 一次 batch 落库
+    // 未报 onCommitted：仍等整批定稿再落库
     expect(clearStreamingIds).toHaveBeenCalledWith([1, 2]);
     expect(batchUpdateEntries).toHaveBeenCalledTimes(1);
     expect(batchUpdateEntries.mock.calls[0][0]).toEqual([
@@ -573,6 +573,79 @@ describe('processBatch batch apply', () => {
       { id: 2, text: 'text-2', translatedText: '世界', status: 'completed' },
     ]);
     expect(progressCb).toHaveBeenCalledWith(2, 4);
+  });
+
+  it('commits closed streaming lines immediately and only finalizes the rest', async () => {
+    const entries = [makeEntry(1), makeEntry(2), makeEntry(3)];
+    const batchUpdateEntries = vi.fn();
+    const applyStreamingPartials = vi.fn();
+    const clearStreamingIds = vi.fn();
+    const persistCheckpoint = vi.fn();
+
+    const callbacks: TranslationCallbacks = {
+      translateBatch: vi.fn(
+        async (
+          _texts,
+          _signal?,
+          _before?,
+          _after?,
+          _terms?,
+          onPartial?,
+          _onAttemptStart?,
+          onCommitted?
+        ) => {
+          onPartial?.({ '1': { direct: '你' } });
+          await onCommitted?.({ '1': { direct: '你好' } });
+          onPartial?.({ '2': { direct: '世' } });
+          return {
+            translations: {
+              '1': { direct: '你好' },
+              '2': { direct: '世界' },
+              '3': { direct: '完' },
+            },
+            tokensUsed: 6,
+          };
+        }
+      ),
+      batchUpdateEntries,
+      applyStreamingPartials,
+      clearStreamingIds,
+      persistCheckpoint,
+      updateProgress: vi.fn().mockResolvedValue(undefined),
+      getRelevantTerms: vi.fn(() => [] as Term[]),
+      formatTermsForPrompt: vi.fn(() => ''),
+    };
+
+    const batch: BatchInfo = {
+      batchIndex: 0,
+      untranslatedEntries: entries,
+      textsToTranslate: entries.map((e) => e.text),
+      contextBeforeTexts: '',
+      contextAfterTexts: '',
+      relevantTerms: [],
+    };
+
+    const progressCb = vi.fn().mockResolvedValue(undefined);
+    await processBatch(
+      batch,
+      new AbortController(),
+      callbacks,
+      callbacks.formatTermsForPrompt,
+      progressCb
+    );
+
+    expect(applyStreamingPartials.mock.calls[0][0]).toEqual([{ id: 1, text: '你' }]);
+    expect(batchUpdateEntries.mock.calls[0][0]).toEqual([
+      { id: 1, text: 'text-1', translatedText: '你好', status: 'completed' },
+    ]);
+    expect(clearStreamingIds).toHaveBeenCalledWith([1]);
+    expect(batchUpdateEntries.mock.calls[1][0]).toEqual([
+      { id: 2, text: 'text-2', translatedText: '世界', status: 'completed' },
+      { id: 3, text: 'text-3', translatedText: '完', status: 'completed' },
+    ]);
+    expect(progressCb).toHaveBeenNthCalledWith(1, 1);
+    expect(progressCb).toHaveBeenNthCalledWith(2, 2, 6);
+    expect(persistCheckpoint).toHaveBeenCalled();
   });
 
   it('marks LLM-missing keys as missing (not silent completed empty)', async () => {

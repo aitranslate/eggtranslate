@@ -40,7 +40,7 @@ utils / constants      → 纯函数：解析、prompt、限流、错误映射
 |------|--------|----------|
 | ASR | `phases.transcribing.transcriptId` + `egg_checkpoint:{taskId}` 词表 | `submit` 后立刻落盘 id，刷新后只 `GET /v2/transcript/{id}` |
 | AI 断句 | checkpoint.`aiBreaks[spanIdx]` | 跳过已落盘且 spanText 未变的 LLM 调用 |
-| 翻译 | `subtitle_entries.translationStatus` | 每批定稿立刻 flush；未齐不标 `completed` |
+| 翻译 | `subtitle_entries.translationStatus` | 流式某行 JSON 闭合即标 `completed` 落库；未闭合行只在 overlay |
 
 `recoverInterruptedPhases` 把 `active` 标成 `failed` 但保留 id / `asrReady`。队列不自动开跑，用户点重试后从检查点继续。
 
@@ -102,7 +102,7 @@ startTranslation
 2. `runTask` → `startTranslation(fileId)`
 3. `translationConfigStore.startTranslation` 打开会话 AbortController
 4. `executeTranslation` 按 batch 调用 `llmTranslationService.translateBatch`
-5. 流式：`streamingOverlayStore`；定稿：`filesStore.batchUpdateEntries` + phase
+5. 流式：未闭合 overlay；行闭合即 `batchUpdateEntries`；批次结束 persistCheckpoint
 6. 结束：`stopTranslation`、可选 `saveTranslationHistory`
 
 ### 转录
@@ -112,8 +112,9 @@ startTranslation
 
 ## 热路径注意点
 
-- 流式 partial **禁止**写 `filesStore`（会 debounce 刷 IDB 卡 UI）
-- 批次结束用 `batchUpdateEntries`，不要逐行 `updateEntry`
+- 流式未闭合 **禁止**写 `filesStore`（只打 overlay）
+- 行闭合后用 `batchUpdateEntries` 落 `completed`，不要每个 token 刷 IDB
+- 批次结束 `persistCheckpoint` flush；不要逐行 `updateEntry`
 - phase `completed` / `failed` 与 `addTask` 会 `flushFilesStorePersist`
 
 ## 文档关系

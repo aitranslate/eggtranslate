@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   extractStreamingDirects,
+  extractStreamingEntries,
   readJsonStringFragment,
   createThrottle,
 } from '../streamingJson';
@@ -66,6 +67,16 @@ describe('extractStreamingDirects', () => {
   it('returns empty for non-json preamble', () => {
     expect(extractStreamingDirects('thinking...')).toEqual({});
     expect(extractStreamingDirects('')).toEqual({});
+  });
+
+  it('marks closed directs complete and growing last line incomplete', () => {
+    const raw = `{
+  "1": { "origin": "Hello", "direct": "你好" },
+  "2": { "origin": "World", "direct": "世`;
+    expect(extractStreamingEntries(raw)).toEqual({
+      '1': { direct: '你好', complete: true },
+      '2': { direct: '世', complete: false },
+    });
   });
 
   it('grows character by character on partial input', () => {

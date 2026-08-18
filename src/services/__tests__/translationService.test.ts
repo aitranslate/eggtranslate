@@ -252,6 +252,7 @@ describe('translationService', () => {
       await callbacks.batchUpdateEntries([
         { id: 1, text: 't1', translatedText: '译1', status: 'completed' },
       ]);
+      await callbacks.persistCheckpoint?.();
     });
 
     await startTranslation(generateStableFileId('t-flush'), {

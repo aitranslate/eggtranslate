@@ -188,7 +188,8 @@ export async function startTranslation(
           contextAfter,
           terms,
           onPartial,
-          onAttemptStart
+          onAttemptStart,
+          onCommitted
         ) =>
           deps.translateBatch(config, texts, {
             signal,
@@ -197,11 +198,12 @@ export async function startTranslation(
             terms,
             onPartial,
             onAttemptStart,
+            onCommitted,
           }),
-        batchUpdateEntries: async (updates) => {
+        batchUpdateEntries: (updates) => {
           deps.batchUpdateEntries(fileId, updates);
-          await deps.flushPersist();
         },
+        persistCheckpoint: () => deps.flushPersist(),
         // 流式只打内存 overlay，不碰 filesStore / persist
         applyStreamingPartials: (updates) => {
           deps.applyStreamingPartials(fileId, updates);

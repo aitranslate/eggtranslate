@@ -18,7 +18,7 @@ import type { LlmProfile, TranslationConfig } from '@/types';
 import { callLLM, callLLMStream } from '@/utils/llmApi';
 import { jsonrepair } from 'jsonrepair';
 import { generateSharedPrompt, generateDirectPrompt } from '@/utils/translationPrompts';
-import { extractStreamingDirects } from '@/utils/streamingJson';
+import { extractStreamingDirects, extractStreamingEntries } from '@/utils/streamingJson';
 import {
   getActiveLlmConfig,
   getActiveProfile,
@@ -40,6 +40,13 @@ type TranslateBatchOptions = {
   terms?: string;
   /** 流式过程中：已解析出的 partial direct，按 "1"|"2"|... 索引 */
   onPartial?: (translations: Record<string, { direct: string }>) => void;
+  /**
+   * 某条 JSON 已闭合（可作检查点）。同一 key 只报一次。
+   * 未闭合的最后一行不会出现在这里。
+   */
+  onCommitted?: (
+    translations: Record<string, { direct: string }>
+  ) => void | Promise<void>;
   /**
    * 每次尝试开始时调用（attempt 从 1 起）。
    * attempt>1 时应用侧应清掉本批 overlay，避免上次半截流盖住重试。
@@ -302,6 +309,7 @@ export async function translateBatch(
     contextAfter = '',
     terms = '',
     onPartial,
+    onCommitted,
     onAttemptStart,
   } = options;
 
@@ -334,6 +342,20 @@ export async function translateBatch(
   let bestPartial: TranslateBatchResult | null = null;
   /** 各次 attempt 的 usage 累计（含失败轮），避免只记最后一次 */
   let tokensAcc = 0;
+  /** 已向调用方报过闭合检查点的 key，跨纠错轮不重复提交 */
+  const committedKeys = new Set<string>();
+
+  const commitClosed = async (translations: Record<string, { direct: string }>) => {
+    if (!onCommitted) return;
+    const newly: Record<string, { direct: string }> = {};
+    for (const [key, value] of Object.entries(translations)) {
+      const direct = typeof value?.direct === 'string' ? value.direct : '';
+      if (!direct.trim() || committedKeys.has(key)) continue;
+      committedKeys.add(key);
+      newly[key] = { direct };
+    }
+    if (Object.keys(newly).length > 0) await onCommitted(newly);
+  };
 
   for (let attempt = 1; attempt <= MAX_FORMAT_ATTEMPTS; attempt++) {
     onAttemptStart?.(attempt);
@@ -344,31 +366,48 @@ export async function translateBatch(
     let latestAccumulated = '';
     let parseRaf = 0;
 
-    const emitPartialsFromLatest = () => {
+    const emitPartialsFromLatest = async () => {
       parseRaf = 0;
-      if (!onPartial || !latestAccumulated) return;
-      const directs = extractStreamingDirects(latestAccumulated);
-      const keys = Object.keys(directs);
+      if (!latestAccumulated) return;
+      const entries = extractStreamingEntries(latestAccumulated);
+      const keys = Object.keys(entries);
       if (keys.length === 0) return;
-      const sig = keys.map((k) => `${k}:${directs[k].length}`).join('|');
+      const sig = keys
+        .map((k) => `${k}:${entries[k].direct.length}:${entries[k].complete ? 1 : 0}`)
+        .join('|');
       if (sig === lastPartialSig) return;
       lastPartialSig = sig;
-      const partial: Record<string, { direct: string }> = {};
-      for (const k of keys) {
-        partial[k] = { direct: directs[k] };
+
+      if (onPartial) {
+        const partial: Record<string, { direct: string }> = {};
+        for (const k of keys) {
+          partial[k] = { direct: entries[k].direct };
+        }
+        onPartial(partial);
       }
-      onPartial(partial);
+
+      const newly: Record<string, { direct: string }> = {};
+      for (const [k, entry] of Object.entries(entries)) {
+        if (!entry.complete || !entry.direct.trim() || committedKeys.has(k)) continue;
+        committedKeys.add(k);
+        newly[k] = { direct: entry.direct };
+      }
+      if (onCommitted && Object.keys(newly).length > 0) await onCommitted(newly);
     };
 
     const scheduleEmit = (accumulated: string) => {
       // 始终记下流式累积：异常抢救/定稿不依赖是否挂了 onPartial
       latestAccumulated = accumulated;
-      if (!onPartial) return;
+      if (!onPartial && !onCommitted) return;
       if (parseRaf !== 0) return;
       parseRaf =
         typeof requestAnimationFrame === 'function'
-          ? requestAnimationFrame(emitPartialsFromLatest)
-          : (setTimeout(emitPartialsFromLatest, 16) as unknown as number);
+          ? requestAnimationFrame(() => {
+              void emitPartialsFromLatest();
+            })
+          : (setTimeout(() => {
+              void emitPartialsFromLatest();
+            }, 16) as unknown as number);
     };
 
     const cancelParseRaf = () => {
@@ -448,7 +487,7 @@ export async function translateBatch(
         if (llmResult.content) scheduleEmit(llmResult.content);
       } finally {
         cancelParseRaf();
-        if (latestAccumulated) emitPartialsFromLatest();
+        if (latestAccumulated) await emitPartialsFromLatest();
       }
 
       tokensAcc += llmResult.tokensUsed || 0;
@@ -460,6 +499,7 @@ export async function translateBatch(
           : latestAccumulated || llmResult.content;
 
       const directResult = parseTranslationContent(rawForParse);
+      await commitClosed(directResult);
       const filled = countFilledKeys(directResult, texts);
 
       if (filled === 0) {
@@ -531,6 +571,7 @@ export async function translateBatch(
       // 尝试从本轮累积流里抢救
       if (latestAccumulated?.trim()) {
         const salvaged = parseTranslationContent(latestAccumulated);
+        await commitClosed(salvaged);
         const filled = countFilledKeys(salvaged, texts);
         if (filled > 0) {
           rememberPartial(salvaged);

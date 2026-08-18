@@ -170,6 +170,27 @@ describe('translateBatch', () => {
     expect(callLLMStream).toHaveBeenCalled();
   });
 
+  it('emits onCommitted only after a direct string is closed', async () => {
+    const onCommitted = vi.fn();
+    vi.mocked(callLLMStream).mockImplementation(async (_c, _m, opts) => {
+      opts?.onDelta?.('', '{"1":{"origin":"Hello","direct":"你');
+      opts?.onDelta?.('', '{"1":{"origin":"Hello","direct":"你好"}');
+      return {
+        content: JSON.stringify({ '1': { origin: 'Hello', direct: '你好' } }),
+        tokensUsed: 3,
+      };
+    });
+
+    await translateBatch(baseConfig(), ['Hello'], { onCommitted });
+    expect(onCommitted).toHaveBeenCalled();
+    const committed = onCommitted.mock.calls.flatMap((c) => Object.keys(c[0] as object));
+    expect(committed).toContain('1');
+    expect(onCommitted.mock.calls.every((c) => {
+      const payload = c[0] as Record<string, { direct: string }>;
+      return payload['1']?.direct === '你好';
+    })).toBe(true);
+  });
+
   it('retries incomplete stream result then accepts partial on last attempt', async () => {
     const onAttemptStart = vi.fn();
     // 三次都不齐：缺 key "2"；tokens 应累计；第 2/3 轮应带对话纠错

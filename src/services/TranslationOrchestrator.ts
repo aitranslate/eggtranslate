@@ -42,7 +42,11 @@ export interface TranslationCallbacks {
     /** 流式 partial：key 为 "1"|"2"|...，与 texts 下标对应 */
     onPartial?: (translations: Record<string, { direct: string }>) => void,
     /** 格式重试 attempt 从 1 起；>1 时应清本批 overlay */
-    onAttemptStart?: (attempt: number) => void
+    onAttemptStart?: (attempt: number) => void,
+    /** 流式中已闭合的行，可立刻按条落库 */
+    onCommitted?: (
+      translations: Record<string, { direct: string }>
+    ) => void | Promise<void>
   ) => Promise<{ translations: Record<string, { direct: string }>; tokensUsed: number; partial?: boolean }>;
   /**
    * Apply an entire batch of entry patches in one store mutation.
@@ -63,6 +67,8 @@ export interface TranslationCallbacks {
   applyStreamingPartials?: (updates: Array<{ id: number; text: string }>) => void;
   /** 批次定稿或失败后清掉对应条目的流式 overlay */
   clearStreamingIds?: (ids: number[]) => void;
+  /** 一批定稿后立刻 flush 检查点（行级提交只写内存，靠 persist 防抖） */
+  persistCheckpoint?: () => void | Promise<void>;
   /** 从 store 读当前条目（补扫 missing/pending 用） */
   getCurrentEntries?: () => SubtitleEntry[];
   updateProgress: (
@@ -247,6 +253,30 @@ export async function processBatch(
 ): Promise<{ batchIndex: number; success: boolean }> {
   logger.info(`开始处理批次 ${batch.batchIndex + 1}，包含 ${batch.untranslatedEntries.length} 个未翻译条目`);
   const batchEntryIds = batch.untranslatedEntries.map((e) => e.id);
+  const committedIds = new Set<number>();
+
+  const commitClosedLines = async (
+    translations: Record<string, { direct: string }>
+  ): Promise<void> => {
+    const updates: BatchEntryUpdate[] = [];
+    for (const [key, value] of Object.entries(translations)) {
+      const resultIndex = parseInt(key, 10) - 1;
+      const entry = batch.untranslatedEntries[resultIndex];
+      const direct = typeof value?.direct === 'string' ? value.direct : '';
+      if (!entry || committedIds.has(entry.id) || !direct.trim()) continue;
+      committedIds.add(entry.id);
+      updates.push({
+        id: entry.id,
+        text: entry.text,
+        translatedText: direct,
+        status: 'completed',
+      });
+    }
+    if (updates.length === 0) return;
+    callbacks.clearStreamingIds?.(updates.map((u) => u.id));
+    await callbacks.batchUpdateEntries(updates);
+    await updateProgressCallback(updates.length);
+  };
 
   try {
     let contextBeforeTexts = batch.contextBeforeTexts;
@@ -288,7 +318,9 @@ export async function processBatch(
       for (const [key, value] of Object.entries(partial)) {
         const resultIndex = parseInt(key, 10) - 1;
         const entry = batch.untranslatedEntries[resultIndex];
-        if (!entry || typeof value !== 'object' || !value.direct) continue;
+        if (!entry || committedIds.has(entry.id) || typeof value !== 'object' || !value.direct) {
+          continue;
+        }
         streamingUpdates.push({ id: entry.id, text: value.direct });
       }
 
@@ -304,37 +336,43 @@ export async function processBatch(
       contextAfterTexts,
       termsText,  // 使用格式化后的术语
       onPartial,
-      // 重试时清掉上轮半截流式，避免「UI 31 条 / 定稿失败」叠在一起
+      // 重试时只清未落库的 overlay，已 completed 的行保留
       (attempt) => {
-        if (attempt > 1) callbacks.clearStreamingIds?.(batchEntryIds);
-      }
+        if (attempt > 1) {
+          callbacks.clearStreamingIds?.(
+            batchEntryIds.filter((id) => !committedIds.has(id))
+          );
+        }
+      },
+      commitClosedLines
     );
 
-    const batchUpdates = finalizeBatchTranslations(
+    const remainingUpdates = finalizeBatchTranslations(
       batch.untranslatedEntries,
       translationResult.translations
-    );
-    const filledCount = batchUpdates.filter((u) => u.status === 'completed').length;
-    const missingCount = batchUpdates.filter((u) => u.status === 'missing').length;
+    ).filter((update) => !committedIds.has(update.id));
+    const filledCount = remainingUpdates.filter((u) => u.status === 'completed').length;
+    const missingCount = remainingUpdates.filter((u) => u.status === 'missing').length;
 
-    // 先清 overlay 再落正式数据，避免一帧内 overlay 盖住 completed
-    callbacks.clearStreamingIds?.(batchEntryIds);
+    callbacks.clearStreamingIds?.(batchEntryIds.filter((id) => !committedIds.has(id)));
 
-    if (batchUpdates.length > 0) {
-      // One store mutation for the whole batch (not one per line)
-      await callbacks.batchUpdateEntries(batchUpdates);
-
-      // 进度只计有独立译文的行；missing 不计入 completed
+    if (remainingUpdates.length > 0) {
+      await callbacks.batchUpdateEntries(remainingUpdates);
       await updateProgressCallback(filledCount, translationResult.tokensUsed);
-
-      logger.info(
-        `批次 ${batch.batchIndex + 1} 定稿：completed=${filledCount} missing=${missingCount}，消耗 ${translationResult.tokensUsed} tokens`
-      );
+    } else if (translationResult.tokensUsed > 0) {
+      await updateProgressCallback(0, translationResult.tokensUsed);
     }
+
+    await callbacks.persistCheckpoint?.();
+
+    logger.info(
+      `批次 ${batch.batchIndex + 1} 定稿：committed=${committedIds.size} +completed=${filledCount} missing=${missingCount}，消耗 ${translationResult.tokensUsed} tokens`
+    );
 
     return { batchIndex: batch.batchIndex, success: true };
   } catch (error) {
-    callbacks.clearStreamingIds?.(batchEntryIds);
+    callbacks.clearStreamingIds?.(batchEntryIds.filter((id) => !committedIds.has(id)));
+    await callbacks.persistCheckpoint?.();
     if (error instanceof Error && error.name !== 'AbortError') {
       const appError = toAppError(error);
       logger.error(`批次 ${batch.batchIndex + 1} 翻译失败:`, appError.message);
