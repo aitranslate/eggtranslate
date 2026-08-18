@@ -11,11 +11,10 @@
 
 借鉴 VS Code / Linear / Aegisub 的结构语言：
 
-- **三层结构**：`--wb-bg` 灰壳（顶栏/侧栏/状态栏/画布）→ `--wb-panel` 内容面（编辑器/卡片/抽屉）→ `--wb-panel-2` 凹槽（**hover 行底 / chip / 分段轨**，不再用作主表单输入填充）。浅色下壳是灰、内容是白；深色下壳更暗、内容更亮——两个主题同一层级模型。
+- **三层结构**：`--wb-bg` 灰壳（顶栏/侧栏/画布）→ `--wb-panel` 内容面（编辑器/卡片/抽屉）→ `--wb-panel-2` 凹槽（**hover 行底 / chip / 分段轨**，不再用作主表单输入填充）。浅色下壳是灰、内容是白；深色下壳更暗、内容更亮——两个主题同一层级模型。
 - **主表单输入（方案 A）**：术语/历史搜索、添加行、设置与 `.apple-input` 统一为 **白底（`--wb-panel`）+ 细边（`--wb-border`）**；hover 只加深边；focus 保持白底 + 品牌描边/环。避免「灰胶囊 → 突然变白」的跳变。
 - **窗口标题栏**：44px，三段网格（左品牌 / 正中分段导航 / 右系统钮），导航永远居中。
-- **仪表状态栏**：26px，11.5px 字号，计数用等宽数字。
-- **密度**：UI 正文 13px、辅助 11.5–12.5px；桌面字幕行固定 **68px**（`.se-row`）；900px 视口下可用列表区约可放 **~11 行**（顶栏 44 + 状态栏 26 + 工具栏/表头后剩余 ÷ 68）。移动端为堆叠可变高卡片，虚拟列表 `estimateSize ≈ 128`，由 `measureElement` 实测校正。
+- **密度**：UI 正文 13px、辅助 11.5–12.5px；桌面字幕行固定 **68px**（`.se-row`）；900px 视口下可用列表区约可放 **~11 行**（顶栏 44 + 工具栏/表头后剩余 ÷ 68）。移动端为堆叠可变高卡片，虚拟列表 `estimateSize ≈ 128`，由 `measureElement` 实测校正。
 - **细滚动条**：全局 10px（视觉 6px、padding-box 内缩），Firefox `scrollbar-width: thin`——宽滚动条是「网页感」最强信号，不允许出现。
 - **键盘优先**：`.workbench` 与 `.m-shell` 下 `:focus-visible` 均为 2px brand 环；`::selection` 品牌浅底；快捷键渲染为 `kbd` 键帽。
 - **断点**：`<900px` 走 `MobileShell`（`useIsMobile` / `MOBILE_BREAKPOINT_PX = 900`）；`≥900px` 走桌面 workbench 双栏。与 `workbench.css` 堆叠媒体查询对齐，避免 768–900 半桌面无底栏路径。
@@ -38,7 +37,7 @@
 
 | Token | 值 | 用途 |
 |-------|-----|------|
-| `--wb-bg` | `#f2f3f5` | 灰壳：顶栏/侧栏/状态栏/画布 |
+| `--wb-bg` | `#f2f3f5` | 灰壳：顶栏/侧栏/画布 |
 | `--wb-panel` | `#ffffff` | 内容面：编辑器/卡片/抽屉 |
 | `--wb-panel-2` | `#e9ebef` | 凹槽：hover 行底 / chip / 分段轨（**非**主输入填充） |
 | `--wb-border` / `--wb-border-strong` | `#e3e5ea` / `#d2d5db` | 发丝线 / 强线 |
@@ -93,13 +92,12 @@
 | Token | 值 | 用途 |
 |-------|-----|------|
 | `--wb-top-h` | `44px` | 标题栏 |
-| `--wb-status-h` | `26px` | 状态栏 |
 | `--wb-sidebar-w` | `288px` | 侧栏 |
 | `--apple-control-h` | `36px` | 表单默认按钮/输入 |
 | `--apple-control-h-sm` | `32px` | 工具条控件 |
 | `--apple-control-h-lg` | `40px` | 少数强调行 |
 
-壳层网格：`.workbench` = `grid-template-rows: var(--wb-top-h) 1fr var(--wb-status-h)`，浮层（设置抽屉、菜单、确认框）必须是 `.workbench` 的**兄弟节点**，不能当 grid 子项。
+壳层网格：`.workbench` = `grid-template-rows: var(--wb-top-h) 1fr`，浮层（设置抽屉、菜单、确认框）必须是 `.workbench` 的**兄弟节点**，不能当 grid 子项。
 
 ---
 
@@ -129,7 +127,6 @@
 - **主导航**：标题栏正中 `.wb-seg.wb-seg-nav` 分段控件；active 段 = 内容面凸起 + 发丝边（灰壳上的白片）
 - **侧栏任务行**：选中 = `--wb-panel` 白块凸起 + 内嵌发丝边 + 左 2px 品牌色条；hover = `--wb-panel-2`
 - **字幕网格**：表头 10.5px 大写 + 底部发丝线；行间 1px 发丝分隔，无卡片、无大留白；时间码 mono 11.5px；编辑中行 = brand soft 底 + 左 2px brand 条
-- **状态栏**：左 = 状态点 + `Provider · 模型` + 任务/队列；右 = `Tokens n`（mono）
 - **空工作区**：居中虚线拖放面板 + brand-soft 图标方块 + 主/次 CTA + `kbd` 键帽
 - **弹窗/抽屉**：`--wb-panel` 底、`--apple-radius-card-large` 圆角；遮罩 `bg-black/40 backdrop-blur-sm`
 

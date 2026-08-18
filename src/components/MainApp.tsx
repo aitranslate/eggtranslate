@@ -23,7 +23,6 @@ import {
   SurfaceFallback,
 } from './lazySurfaces';
 import { prefetchMobileShell } from './lazyPrefetch';
-import { StatusBar } from './StatusBar';
 import { EmptyWorkspaceHero } from '@/components/EmptyWorkspaceHero';
 import { useFileCount, useFilesStore } from '@/stores/filesStore';
 import { useIsTranslationConfigured } from '@/stores/translationConfigStore';
@@ -204,13 +203,12 @@ export const MainApp: React.FC = () => {
   }
 
   /**
-   * 布局契约：`.workbench` 只放网格槽位（顶栏 / 侧栏 / 主舞台 / 状态栏）。
-   * 设置、菜单、引导等浮层必须是 workbench 的**兄弟节点**，不能当 grid 子项——
-   * 否则 Suspense 占位或未 portal 的节点会生成隐式第 4 行，把状态栏顶上去。
+   * 布局契约：`.workbench` 只放网格槽位（顶栏 / 侧栏 / 主舞台）。
+   * 设置、菜单等浮层必须是 workbench 的**兄弟节点**，不能当 grid 子项。
    */
   return (
     <>
-    {/* file input 在 grid 外，避免占槽位挤出状态栏 */}
+    {/* file input 在 grid 外，避免占槽位 */}
     {fileInput}
     <div
       className={`workbench apple-style${isDragging ? ' is-file-drag' : ''}`}
@@ -392,8 +390,6 @@ export const MainApp: React.FC = () => {
           )}
         </AnimatePresence>
       </main>
-
-      <StatusBar />
     </div>
 
     {/* 浮层：在布局壳外，不参与 workbench grid */}

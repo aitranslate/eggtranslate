@@ -25,7 +25,7 @@ describe('MainApp workbench shell', () => {
     expect(src).toContain('useWorkspaceStore');
     expect(src).toContain('selectedFileId');
     expect(src).toContain('SubtitleFileList');
-    expect(src).toContain('StatusBar');
+    expect(src).not.toContain('StatusBar');
     expect(src).toContain('工作区');
   });
 
@@ -39,15 +39,14 @@ describe('MainApp workbench shell', () => {
   });
 
   it('keeps workbench grid pure: overlays are siblings outside .workbench', () => {
-    // 布局壳在 StatusBar 后闭合；设置挂载在「浮层」注释之后
-    expect(src).toMatch(/<StatusBar\s*\/>\s*<\/div>/);
+    // 布局壳在 </main> 后闭合；设置挂载在「浮层」注释之后
+    expect(src).toMatch(/<\/main>\s*<\/div>/);
     expect(src).toMatch(
-      /<StatusBar\s*\/>\s*<\/div>\s*\{\/\*\s*浮层[\s\S]*?<LazySettingsModal/
+      /<\/main>\s*<\/div>\s*\{\/\*\s*浮层[\s\S]*?<LazySettingsModal/
     );
-    // 设置不得再出现在 workbench 开标签与 StatusBar 之间
     const wbOpen = src.indexOf('className={`workbench');
-    const status = src.indexOf('<StatusBar');
-    const slice = src.slice(wbOpen, status);
+    const mainClose = src.lastIndexOf('</main>');
+    const slice = src.slice(wbOpen, mainClose);
     expect(slice).not.toMatch(/<LazySettingsModal/);
   });
 

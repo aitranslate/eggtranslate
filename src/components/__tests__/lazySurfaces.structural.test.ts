@@ -103,7 +103,7 @@ describe('lazy surface wiring', () => {
     expect(mobile).toMatch(/LazySurface\s+fallback=\{null\}/);
     // 源头：浮层与布局壳兄弟
     expect(main).toMatch(
-      /<StatusBar\s*\/>\s*<\/div>\s*\{\/\*\s*浮层[\s\S]*?<LazySettingsModal/
+      /<\/main>\s*<\/div>\s*\{\/\*\s*浮层[\s\S]*?<LazySettingsModal/
     );
     expect(mobile).toMatch(
       /\{\/\*\s*浮层：在 m-shell 外[\s\S]*?<LazySettingsModal/
