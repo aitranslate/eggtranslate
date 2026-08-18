@@ -35,7 +35,7 @@ const js = {
   })()`,
   probe: `JSON.stringify({
     shell:!!document.querySelector('.m-shell'),
-    tabbar:!!document.querySelector('.m-tabbar'),
+    tabbar:!!document.querySelector('.m-nav'),
     menu:!!document.querySelector('button[aria-label="菜单"]')||!!document.querySelector('button[aria-label="打开菜单"]'),
     w:window.innerWidth,
     title:document.querySelector('.m-top-title')?.textContent||'',
@@ -45,19 +45,20 @@ const js = {
     bodyLen:document.body?.innerText?.length||0,
     rootKids:document.getElementById('root')?.childElementCount||0
   })`,
-  title: `document.querySelector('.m-top-title')?.textContent?.trim()||''`,
-  activeTab: `document.querySelector('.m-tab.is-active')?.textContent?.trim()||''`,
-  tabbar: `!!document.querySelector('.m-tabbar')`,
+  title: `document.querySelector('.m-nav button.is-active')?.textContent?.trim()||document.querySelector('.m-top-title')?.textContent?.trim()||''`,
+  activeTab: `document.querySelector('.m-nav button.is-active')?.textContent?.trim()||''`,
+  tabbar: `!!document.querySelector('.m-nav')`,
   inList: `!!document.querySelector('.m-list')`,
   inDetail: `!!document.querySelector('.m-detail')`,
-  detailPrimary: `!!document.querySelector('[data-testid="mobile-detail-primary"]')`,
+  detailPrimary: `!!document.querySelector('[data-testid="mobile-dock-primary"]')`,
+  dock: `!!document.querySelector('[data-testid="mobile-task-dock"]')`,
   phaseChips: `!!document.querySelector('[data-testid="task-phase-chips"]')`,
   settingsOpen: `!!document.querySelector('.wb-drawer')`,
   settingsZ: `(()=>{const d=document.querySelector('.wb-drawer');if(!d)return 0;return Number(getComputedStyle(d).zIndex)||0})()`,
   bodyOverflow: `document.body.style.overflow||''`,
   panelNoDesktopHeader: `(()=>{const h=document.querySelector('.m-shell .wb-panel-header');if(!h)return true;return getComputedStyle(h).display==='none'})()`,
   clickTab: (t) =>
-    `(()=>{const s=${JSON.stringify(t)};const b=Array.from(document.querySelectorAll('.m-tab')).find(x=>(x.textContent||'').includes(s));if(!b)return 'nf';b.click();return 'ok'})()`,
+    `(()=>{const s=${JSON.stringify(t)};const b=Array.from(document.querySelectorAll('.m-nav button')).find(x=>(x.textContent||'').includes(s));if(!b)return 'nf';b.click();return 'ok'})()`,
   clickAria: (label) =>
     `(()=>{const b=document.querySelector('button[aria-label=${JSON.stringify(label)}]');if(!b)return 'nf';b.click();return 'ok'})()`,
   closeSettings: `(()=>{const b=Array.from(document.querySelectorAll('button')).find(x=>(x.getAttribute('aria-label')||'')==='关闭设置');if(b){b.click();return 'closed'}return 'none'})()`,
@@ -155,8 +156,8 @@ export function runMobileSmoke({
     if (isTrue(probe.shell)) report.pass('mobile_shell', `w=${probe.w} mm=${probe.mm}`);
     else report.fail('mobile_shell', JSON.stringify(probe));
 
-    if (isTrue(probe.tabbar)) report.pass('mobile_tabbar');
-    else report.fail('mobile_tabbar', JSON.stringify(probe));
+    if (isTrue(probe.tabbar)) report.pass('mobile_topnav');
+    else report.fail('mobile_topnav', JSON.stringify(probe));
 
     if (!probe.menu) report.pass('mobile_no_hamburger');
     else report.fail('mobile_no_hamburger', 'hamburger still present');
@@ -202,8 +203,8 @@ export function runMobileSmoke({
     } else {
       report.fail('mobile_nav_terms', `${evalResult(results, 0)}/${evalResult(results, 2)}`);
     }
-    if (isTrue(evalResult(results, 4))) report.pass('mobile_tabbar_on_terms');
-    else report.fail('mobile_tabbar_on_terms');
+    if (isTrue(evalResult(results, 4))) report.pass('mobile_nav_on_terms');
+    else report.fail('mobile_nav_on_terms');
     if (isTrue(evalResult(results, 5))) report.pass('mobile_panel_header_hidden');
     else report.fail('mobile_panel_header_hidden');
 
@@ -312,12 +313,13 @@ export function runMobileSmoke({
         ['eval', js.clickSample],
         ['wait', '2500'],
         ['eval', js.inDetail],
-        ['eval', js.detailPrimary],
+        ['eval', js.dock],
         ['eval', js.tabbar],
         ['eval', js.clickBack],
         ['wait', '600'],
         ['eval', js.inList],
-        ['eval', js.tabbar],
+        ['eval', js.dock],
+        ['eval', js.detailPrimary],
         ['eval', js.phaseChips],
         ['screenshot', shot('08-sample-back')],
       ],
@@ -332,24 +334,28 @@ export function runMobileSmoke({
         `click=${evalResult(results, 0)} detail=${evalResult(results, 2)}`
       );
     }
-    if (isTrue(evalResult(results, 3))) report.pass('mobile_detail_primary');
-    else report.fail('mobile_detail_primary', 'primary action not visible');
-    if (!isTrue(evalResult(results, 4))) report.pass('mobile_tabbar_hidden_in_detail');
-    else report.fail('mobile_tabbar_hidden_in_detail');
+    if (!isTrue(evalResult(results, 3))) report.pass('mobile_editor_no_dock');
+    else report.fail('mobile_editor_no_dock', 'command dock should stay on the list');
+    if (!isTrue(evalResult(results, 4))) report.pass('mobile_nav_hidden_in_editor');
+    else report.fail('mobile_nav_hidden_in_editor');
 
-    if (
-      evalResult(results, 5) === 'ok' &&
-      isTrue(evalResult(results, 7)) &&
-      isTrue(evalResult(results, 8))
-    ) {
+    if (evalResult(results, 5) === 'ok' && isTrue(evalResult(results, 7))) {
       report.pass('mobile_back_to_list');
     } else {
       report.fail(
         'mobile_back_to_list',
-        `back=${evalResult(results, 5)} list=${evalResult(results, 7)} tab=${evalResult(results, 8)}`
+        `back=${evalResult(results, 5)} list=${evalResult(results, 7)}`
       );
     }
-    if (isTrue(evalResult(results, 9))) report.pass('mobile_list_phase_chips');
+    if (isTrue(evalResult(results, 8)) && isTrue(evalResult(results, 9))) {
+      report.pass('mobile_list_dock');
+    } else {
+      report.fail(
+        'mobile_list_dock',
+        `dock=${evalResult(results, 8)} primary=${evalResult(results, 9)}`
+      );
+    }
+    if (isTrue(evalResult(results, 10))) report.pass('mobile_list_phase_chips');
     else report.fail('mobile_list_phase_chips', 'list card missing 翻译 n/m chips');
   }
 

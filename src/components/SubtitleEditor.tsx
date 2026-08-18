@@ -30,6 +30,7 @@ import { generateStableFileId } from '@/utils/taskIdGenerator';
 import { formatMatchCount, swapLanguages } from '@/utils/uxHelpers';
 import { resolveTaskLanguages } from '@/utils/taskLanguages';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { useTranscriptionStore } from '@/stores/transcriptionStore';
 
 const EMPTY_ENTRIES: SubtitleEntry[] = [];
 /** 桌面虚拟列表行高：与 `.se-row { height: 68px }` 对齐 */
@@ -407,7 +408,12 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
   const file = useFile(fileId);
   const updateEntry = useFilesStore((state) => state.updateEntry);
   const setTaskLanguages = useFilesStore((state) => state.setTaskLanguages);
+  const setSelectedKeytermGroupId = useFilesStore((state) => state.setSelectedKeytermGroupId);
+  const keytermGroups = useTranscriptionStore((state) => state.keytermGroups);
   const config = useTranslationConfig();
+  const isAudioVideo = file?.fileType === 'audio' || file?.fileType === 'video';
+  const asrDone = file?.phases.transcribing.status === 'completed';
+  const showKeytermSelect = Boolean(isMobile && isAudioVideo && keytermGroups.length > 0);
 
   // 懒加载条目：主表 rehydrate 不含大数组（lifecycle：hydrate 后才是权威）
   useEffect(() => {
@@ -890,7 +896,7 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
         {hasSearchOrFilter ? ' · 筛选中' : ''}
       </span>
       <span className="se-mobile-chrome-summary-hint">
-        {mobileChromeOpen ? '收起' : '语言 · 搜索'}
+        {mobileChromeOpen ? '收起' : showKeytermSelect ? '语言 · 热词 · 搜索' : '语言 · 搜索'}
         {mobileChromeOpen ? (
           <ChevronUp className="h-3.5 w-3.5" />
         ) : (
@@ -908,6 +914,28 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
           {mobileChromeOpen ? (
             <>
               {fileChrome}
+              {showKeytermSelect && file && (
+                <label className="se-mobile-keyterm">
+                  <span>热词</span>
+                  <select
+                    value={file.selectedKeytermGroupId ?? ''}
+                    onChange={(e) =>
+                      setSelectedKeytermGroupId(file.id, e.target.value || null)
+                    }
+                    aria-label="热词分组"
+                    data-testid="editor-keyterm-select"
+                    title={asrDone ? '下次转录才生效' : '本任务热词分组'}
+                  >
+                    <option value="">无</option>
+                    {keytermGroups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
+                  {asrDone ? <span className="se-mobile-keyterm-hint">下次转录才生效</span> : null}
+                </label>
+              )}
               {searchToolbar}
             </>
           ) : null}

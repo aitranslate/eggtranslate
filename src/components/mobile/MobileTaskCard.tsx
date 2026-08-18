@@ -1,5 +1,5 @@
 /**
- * 移动端项目行：与桌面侧栏同一套阶段 chip / 翻译 n/m，操作放详情底栏。
+ * 移动端项目行：点主体选中，点箭头进编辑器。命令在列表底坞。
  */
 
 import { memo, useCallback, useMemo } from 'react';
@@ -14,9 +14,11 @@ import { useTaskDisplayModel } from '@/hooks/useTaskDisplayModel';
 
 interface MobileTaskCardProps {
   file: SubtitleFileMetadata;
+  selected: boolean;
   isQueued: boolean;
   queuePosition: number;
   isActive: boolean;
+  onSelect: (file: SubtitleFileMetadata) => void;
   onOpen: (file: SubtitleFileMetadata) => void;
 }
 
@@ -28,9 +30,11 @@ function TypeIcon({ type }: { type?: SubtitleFileMetadata['fileType'] }) {
 
 export const MobileTaskCard = memo(function MobileTaskCard({
   file,
+  selected,
   isQueued,
   queuePosition,
   isActive,
+  onSelect,
   onOpen,
 }: MobileTaskCardProps) {
   const { displayPhases, translateCounts, badge, isBusy, pct } = useTaskDisplayModel(
@@ -79,21 +83,30 @@ export const MobileTaskCard = memo(function MobileTaskCard({
     [failedInfo]
   );
 
+  const handleOpen = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onOpen(file);
+    },
+    [onOpen, file]
+  );
+
   const showRail = !isFailed && (isRunning || isQueued || (pct > 0 && pct < 100));
   const showBadgeText = isQueued || isFailed || (isBusy && badge.text !== '处理中');
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      className={`m-task tone-${tone}`}
-      onClick={() => onOpen(file)}
+      className={`m-task tone-${tone}${selected ? ' is-selected' : ''}`}
+      data-testid="mobile-task-card"
+      data-selected={selected ? 'true' : 'false'}
+      onClick={() => onSelect(file)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          onOpen(file);
+          onSelect(file);
         }
       }}
+      tabIndex={0}
     >
       <div className={`m-task-ico type-${file.fileType || 'srt'}`} aria-hidden>
         <TypeIcon type={file.fileType} />
@@ -144,7 +157,15 @@ export const MobileTaskCard = memo(function MobileTaskCard({
           </div>
         )}
       </div>
-      <ChevronRight className="m-task-chevron" aria-hidden />
+      <button
+        type="button"
+        className="m-task-open"
+        aria-label="打开字幕"
+        data-testid="mobile-task-open"
+        onClick={handleOpen}
+      >
+        <ChevronRight className="m-task-chevron" aria-hidden />
+      </button>
     </div>
   );
 });

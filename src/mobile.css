@@ -2,7 +2,6 @@
 
 .m-shell {
   --m-top-h: 52px;
-  --m-tab-h: 56px;
   --m-bar-h: 64px;
   --m-pad: 14px;
   --m-safe-t: env(safe-area-inset-top, 0px);
@@ -164,6 +163,71 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: min(72vw, 18rem);
+}
+
+.m-top-title-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.m-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--wb-panel-2);
+  border: 1px solid var(--wb-border);
+}
+
+.m-nav-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--wb-text-3);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.m-nav-item.is-active {
+  background: var(--wb-panel);
+  color: var(--wb-text);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    inset 0 0 0 1px var(--wb-border);
+}
+
+.m-top-export {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+}
+
+.m-top-export button {
+  width: 36px !important;
+  height: 36px !important;
 }
 
 .m-top-sub {
@@ -367,12 +431,13 @@
 
 /* Task card */
 .m-task {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
   min-height: 64px;
-  padding: 12px 12px 12px 10px;
+  padding: 12px 4px 12px 10px;
   border-radius: 14px;
   border: 1px solid var(--wb-border);
   background: var(--wb-panel);
@@ -382,6 +447,24 @@
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
+}
+
+.m-task.is-selected {
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.03),
+    inset 0 0 0 1px var(--wb-border);
+}
+
+.m-task.is-selected:not(.tone-fail)::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--wb-brand);
+  pointer-events: none;
 }
 
 .m-task:active {
@@ -550,6 +633,27 @@
 
 .m-task-rail.fail > i {
   background: var(--apple-danger, #ff3b30);
+}
+
+.m-task-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--wb-text-3);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.m-task-open:active {
+  background: var(--wb-panel-2);
 }
 
 .m-task-chevron {
@@ -779,7 +883,7 @@
   width: 100%;
 }
 
-.m-detail-bar {
+.m-dock {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -790,8 +894,25 @@
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
 }
 
-.m-detail-status {
+.m-dock-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   min-width: 0;
+}
+
+.m-dock-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--wb-text);
+}
+
+.m-dock-status {
+  flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -801,28 +922,34 @@
   color: var(--wb-text-2);
 }
 
-/* 热词：标签靠左 + 下拉占剩余，不整行居中大胶囊 */
-.m-detail-keyterm {
+.m-dock-idle {
+  margin: 0;
+  min-height: 48px;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--wb-text-3);
+}
+
+.se-mobile-keyterm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  width: 100%;
-  min-width: 0;
+  padding: 8px 12px 10px;
   font-size: 13px;
   color: var(--wb-text-2);
 }
 
-.m-detail-keyterm > span {
-  flex: 0 0 auto;
+.se-mobile-keyterm > span:first-child {
+  flex-shrink: 0;
   font-weight: 550;
-  color: var(--wb-text-2);
 }
 
-.m-detail-keyterm select {
+.se-mobile-keyterm select {
   flex: 1 1 auto;
   min-width: 0;
-  max-width: min(100%, 280px);
   min-height: 40px;
   border-radius: 10px;
   border: 1px solid var(--wb-border);
@@ -831,19 +958,12 @@
   font-family: inherit;
   font-size: 14px;
   padding: 0 10px;
-  outline: none;
-  text-align: left;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-.m-detail-keyterm select:hover {
-  border-color: var(--wb-border-strong);
-}
-
-.m-detail-keyterm select:focus {
-  border-color: var(--wb-brand);
-  box-shadow: 0 0 0 3px var(--wb-brand-soft);
-  background: var(--wb-panel);
+.se-mobile-keyterm-hint {
+  flex: 1 0 100%;
+  font-size: 11.5px;
+  color: var(--wb-text-3);
 }
 
 /* 操作行：禁止换行；导出固定宽，其余均分 */
@@ -891,37 +1011,7 @@
   height: 48px !important;
 }
 
-/* Tab bar */
-.m-tabbar {
-  flex-shrink: 0;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  min-height: calc(var(--m-tab-h) + var(--m-safe-b));
-  padding-bottom: var(--m-safe-b);
-  background: var(--wb-panel);
-  border-top: 1px solid var(--wb-border);
-}
 
-.m-tab {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  min-height: var(--m-tab-h);
-  border: none;
-  background: transparent;
-  color: var(--wb-text-3);
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.m-tab.is-active {
-  color: var(--wb-brand);
-}
 
 /* Settings: 高 z-index + 窄屏强制不透明全屏（不依赖 JS class） */
 .wb-drawer-backdrop {

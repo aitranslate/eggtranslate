@@ -1,10 +1,9 @@
 /**
- * 移动端专用壳：列表 ↔ 详情，设置全屏抽屉
+ * 移动端壳：列表是驾驶舱，编辑器是检修间。
  *
- * 信息架构：
- * - 顶栏只负责导航 / 设置；主题与音效在设置「外观」
- * - 空列表是一块空态；有任务后只留紧凑工具条
- * - 详情底栏常驻主操作（见 MobileDetailBar）
+ * - 顶栏：项目 / 术语 / 历史
+ * - 点卡片 = 选中（底坞跟这条）；点箭头 = 打开字幕
+ * - 底坞只在项目列表，随选中任务发令
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -26,8 +25,9 @@ import {
   LazyTermsManager,
 } from '@/components/lazySurfaces';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { ExportButton } from '@/components/common/ExportButton';
 import { MobileTaskCard } from '@/components/mobile/MobileTaskCard';
-import { MobileDetailBar } from '@/components/mobile/MobileDetailBar';
+import { MobileTaskDock } from '@/components/mobile/MobileTaskDock';
 import { MobileListEmpty } from '@/components/mobile/MobileListEmpty';
 import { useFiles, useSelectedFile, useFilesStore } from '@/stores/filesStore';
 import { useQueueStore } from '@/stores/queueStore';
@@ -38,8 +38,10 @@ import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { clearAll } from '@/services/filesService';
 import { startAllUncompleted } from '@/services/startTask';
+import { exportFile } from '@/services/SubtitleExporter';
 import { importSampleSubtitle } from '@/utils/importSampleSubtitle';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import type { ExportFormat } from '@/utils/fileExport';
 import type { SubtitleFileMetadata } from '@/types';
 
 export interface MobileShellProps {
@@ -64,21 +66,16 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
 
   const stage = useWorkspaceStore((s) => s.stage);
   const settingsOpen = useWorkspaceStore((s) => s.settingsOpen);
+  const mobileEditorOpen = useWorkspaceStore((s) => s.mobileEditorOpen);
   const openEditor = useWorkspaceStore((s) => s.openEditor);
+  const openMobileEditor = useWorkspaceStore((s) => s.openMobileEditor);
+  const closeMobileEditor = useWorkspaceStore((s) => s.closeMobileEditor);
   const openSettings = useWorkspaceStore((s) => s.openSettings);
   const openTerms = useWorkspaceStore((s) => s.openTerms);
   const openHistory = useWorkspaceStore((s) => s.openHistory);
 
   const theme = useThemeStore((s) => s.theme);
   const { handleError } = useErrorHandler();
-
-  const [logoShake, setLogoShake] = useState(false);
-  const shakeBrandLogo = useCallback(() => {
-    setLogoShake(false);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => setLogoShake(true));
-    });
-  }, []);
 
   useEffect(() => {
     if (settingsOpen) setSettingsMounted(true);
@@ -90,22 +87,38 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
     return map;
   }, [taskQueue]);
 
-  const inDetail = stage === 'editor' && !!selectedFileId;
-  const inList = stage === 'editor' && !selectedFileId;
+  const inDetail = stage === 'editor' && mobileEditorOpen && !!selectedFileId;
+  const inList = stage === 'editor' && !inDetail;
   const hasTasks = files.length > 0;
+
+  useEffect(() => {
+    if (mobileEditorOpen && !selectedFileId) closeMobileEditor();
+  }, [mobileEditorOpen, selectedFileId, closeMobileEditor]);
+
+  useEffect(() => {
+    if (!inList || !hasTasks) return;
+    if (selectedFileId && files.some((f) => f.id === selectedFileId)) return;
+    setSelectedFileId(files[0].id);
+  }, [inList, hasTasks, selectedFileId, files, setSelectedFileId]);
+
+  const handleSelectTask = useCallback(
+    (file: SubtitleFileMetadata) => {
+      setSelectedFileId(file.id);
+    },
+    [setSelectedFileId]
+  );
 
   const handleOpenTask = useCallback(
     (file: SubtitleFileMetadata) => {
       setSelectedFileId(file.id);
-      openEditor();
+      openMobileEditor();
     },
-    [setSelectedFileId, openEditor]
+    [setSelectedFileId, openMobileEditor]
   );
 
   const handleBack = useCallback(() => {
-    setSelectedFileId(null);
-    openEditor();
-  }, [setSelectedFileId, openEditor]);
+    closeMobileEditor();
+  }, [closeMobileEditor]);
 
   const handleSample = useCallback(async () => {
     setSampleLoading(true);
@@ -113,7 +126,7 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
       const id = await importSampleSubtitle();
       if (id) {
         setSelectedFileId(id);
-        openEditor();
+        openMobileEditor();
         toast.success('已导入示例字幕');
       }
     } catch (err) {
@@ -121,7 +134,7 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
     } finally {
       setSampleLoading(false);
     }
-  }, [handleError, setSelectedFileId, openEditor]);
+  }, [handleError, setSelectedFileId, openMobileEditor]);
 
   const handleClearAll = useCallback(async () => {
     try {
@@ -134,6 +147,19 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
     }
   }, [handleError]);
 
+  const handleExport = useCallback(
+    async (format: ExportFormat) => {
+      if (!selectedFile) return;
+      try {
+        await exportFile(selectedFile.taskId, selectedFile.name, format);
+        toast.success('导出成功');
+      } catch (error) {
+        handleError(error, { context: { operation: '导出', fileName: selectedFile.name } });
+      }
+    },
+    [selectedFile, handleError]
+  );
+
   const title = useMemo(() => {
     if (stage === 'terms') return '术语';
     if (stage === 'history') return '历史';
@@ -141,15 +167,8 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
     return '蛋蛋字幕翻译';
   }, [stage, inDetail, selectedFile?.name]);
 
-  const titleSub = useMemo(() => {
-    if (!inList) return null;
-    const ver = `v${__APP_VERSION__}`;
-    if (hasTasks) return `${ver} · ${files.length} 个任务`;
-    return ver;
-  }, [inList, hasTasks, files.length]);
-
   /**
-   * 布局契约：`.m-shell` 只放壳层槽位（顶栏 / 主区 / 底栏）。
+   * 布局契约：`.m-shell` 只放壳层槽位（顶栏 / 主区 / 底坞）。
    * 设置抽屉等浮层放在壳外，避免 Suspense 占位挤进 flex 列把底栏顶歪。
    */
   return (
@@ -158,54 +177,81 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
       {fileInput}
 
       <header className="m-top">
-        <div className="m-top-left">
-          {inDetail || stage !== 'editor' ? (
-            <button
-              type="button"
-              className="m-icon-btn"
-              onClick={() => {
-                if (stage !== 'editor') openEditor();
-                else handleBack();
-              }}
-              aria-label="返回"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              className={`m-logo-btn${logoShake ? ' is-shake' : ''}`}
-              title={`蛋蛋字幕翻译 v${__APP_VERSION__}`}
-              aria-label={`蛋蛋字幕翻译 v${__APP_VERSION__}`}
-              onClick={shakeBrandLogo}
-              onAnimationEnd={() => setLogoShake(false)}
-            >
-              <img
-                src="/favicon.svg"
-                alt=""
-                width={28}
-                height={28}
-                className="m-logo"
-                draggable={false}
-              />
-            </button>
-          )}
-          <div className="m-top-titles">
-            <h1 className="m-top-title">{title}</h1>
-            {titleSub ? <span className="m-top-sub">{titleSub}</span> : null}
-          </div>
-        </div>
-        <div className="m-top-right">
-          <button
-            type="button"
-            className={`m-icon-btn ${!isConfigured ? 'warn' : ''}`}
-            onClick={() => openSettings()}
-            aria-label="设置"
-          >
-            <Settings className="h-5 w-5" />
-            {!isConfigured && <span className="m-dot-warn" />}
-          </button>
-        </div>
+        {inDetail ? (
+          <>
+            <div className="m-top-left">
+              <button
+                type="button"
+                className="m-icon-btn"
+                onClick={handleBack}
+                aria-label="返回"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <h1 className="m-top-title">{title}</h1>
+            </div>
+            <div className="m-top-right">
+              <div className="m-top-export">
+                <ExportButton
+                  variant="icon"
+                  disabled={(selectedFile?.entryCount ?? 0) === 0}
+                  hasTranslation={(selectedFile?.translatedCount ?? 0) > 0}
+                  onSelect={(fmt) => void handleExport(fmt)}
+                />
+              </div>
+              <button
+                type="button"
+                className={`m-icon-btn ${!isConfigured ? 'warn' : ''}`}
+                onClick={() => openSettings()}
+                aria-label="设置"
+              >
+                <Settings className="h-5 w-5" />
+                {!isConfigured && <span className="m-dot-warn" />}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <nav className="m-nav" aria-label="主导航">
+              <button
+                type="button"
+                className={`m-nav-item ${stage === 'editor' ? 'is-active' : ''}`}
+                onClick={openEditor}
+              >
+                <FolderKanban className="h-3.5 w-3.5" />
+                项目
+              </button>
+              <button
+                type="button"
+                className={`m-nav-item ${stage === 'terms' ? 'is-active' : ''}`}
+                onClick={openTerms}
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                术语{termsCount > 0 ? ` ${termsCount}` : ''}
+              </button>
+              <button
+                type="button"
+                className={`m-nav-item ${stage === 'history' ? 'is-active' : ''}`}
+                onClick={openHistory}
+              >
+                <History className="h-3.5 w-3.5" />
+                历史{historyCount > 0 ? ` ${historyCount}` : ''}
+              </button>
+            </nav>
+            <h1 className="m-top-title m-top-title-sr">{title}</h1>
+            <div className="m-top-right">
+              <button
+                type="button"
+                className={`m-icon-btn ${!isConfigured ? 'warn' : ''}`}
+                onClick={() => openSettings()}
+                aria-label="设置"
+              >
+                <Settings className="h-5 w-5" />
+                {!isConfigured && <span className="m-dot-warn" />}
+              </button>
+            </div>
+          </>
+        )}
       </header>
 
       {!isConfigured && inList && hasTasks && (
@@ -275,9 +321,11 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
                       <MobileTaskCard
                         key={file.id}
                         file={file}
+                        selected={selectedFileId === file.id}
                         isQueued={isQueued}
                         queuePosition={queuePosition}
                         isActive={isActive}
+                        onSelect={handleSelectTask}
                         onOpen={handleOpenTask}
                       />
                     );
@@ -293,40 +341,11 @@ export const MobileShell: React.FC<MobileShellProps> = ({ openFilePicker, fileIn
             <div className="m-detail-editor">
               <SubtitleEditor variant="panel" fileId={selectedFileId} />
             </div>
-            {selectedFile && <MobileDetailBar file={selectedFile} />}
           </div>
         )}
       </main>
 
-      {/* 主路径用底栏；术语/历史时也显示便于切换 */}
-      {(inList || stage === 'terms' || stage === 'history') && !settingsOpen && (
-        <nav className="m-tabbar" aria-label="主导航">
-          <button
-            type="button"
-            className={`m-tab ${stage === 'editor' ? 'is-active' : ''}`}
-            onClick={openEditor}
-          >
-            <FolderKanban className="h-4 w-4" />
-            <span>项目</span>
-          </button>
-          <button
-            type="button"
-            className={`m-tab ${stage === 'terms' ? 'is-active' : ''}`}
-            onClick={openTerms}
-          >
-            <BookOpen className="h-4 w-4" />
-            <span>术语{termsCount > 0 ? ` ${termsCount}` : ''}</span>
-          </button>
-          <button
-            type="button"
-            className={`m-tab ${stage === 'history' ? 'is-active' : ''}`}
-            onClick={openHistory}
-          >
-            <History className="h-4 w-4" />
-            <span>历史{historyCount > 0 ? ` ${historyCount}` : ''}</span>
-          </button>
-        </nav>
-      )}
+      {inList && hasTasks && !settingsOpen && <MobileTaskDock file={selectedFile ?? null} />}
 
     </div>
 

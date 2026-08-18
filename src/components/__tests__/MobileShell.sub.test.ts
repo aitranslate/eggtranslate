@@ -5,14 +5,25 @@ import { join } from 'node:path';
 describe('MobileShell navigation contracts', () => {
   const src = readFileSync(join(__dirname, '../mobile/MobileShell.tsx'), 'utf8');
 
-  it('exposes bottom tab bar for workspace / terms / history', () => {
-    expect(src).toContain('m-tabbar');
+  it('puts project / terms / history in the top nav (not a bottom tab bar)', () => {
+    expect(src).toContain('m-nav');
+    expect(src).not.toContain('m-tabbar');
     expect(src).toContain('openEditor');
     expect(src).toContain('openTerms');
     expect(src).toContain('openHistory');
     expect(src).toMatch(/stage === 'editor'/);
     expect(src).toMatch(/stage === 'terms'/);
     expect(src).toMatch(/stage === 'history'/);
+  });
+
+  it('splits list selection from opening the subtitle editor', () => {
+    expect(src).toContain('mobileEditorOpen');
+    expect(src).toContain('openMobileEditor');
+    expect(src).toContain('closeMobileEditor');
+    expect(src).toContain('handleSelectTask');
+    expect(src).toContain('handleOpenTask');
+    expect(src).toContain('MobileTaskDock');
+    expect(src).not.toContain('MobileDetailBar');
   });
 
   it('mounts LazyTermsManager and LazyHistoryModal as panel surfaces', () => {
@@ -34,10 +45,8 @@ describe('MobileShell navigation contracts', () => {
     expect(src).not.toContain('@radix-ui');
   });
 
-  it('shows product name and app version on list home (not bare 项目)', () => {
+  it('shows product name on list home (not bare 项目 as the only title)', () => {
     expect(src).toContain('蛋蛋字幕翻译');
-    expect(src).toContain('__APP_VERSION__');
-    expect(src).toMatch(/titleSub|v\$\{__APP_VERSION__\}|v\{__APP_VERSION__\}/);
   });
 
   it('keeps top bar to navigation + settings (appearance lives in settings)', () => {

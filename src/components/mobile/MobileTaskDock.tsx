@@ -1,19 +1,14 @@
 /**
- * 移动端任务详情底栏：常驻操作坞。
- * 主按钮始终可见；进度与桌面阶段 chip 同一套 n/m。
+ * 项目列表命令坞：只对当前选中任务发令。
+ * 热词 / 语言不在这里，进编辑器任务条。
  */
 
 import { useMemo, useCallback } from 'react';
 import { Play, Square, Mic, Loader2 } from 'lucide-react';
 import type { SubtitleFileMetadata } from '@/types';
-import { useFilesStore } from '@/stores/filesStore';
 import { useQueueStore } from '@/stores/queueStore';
-import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { dequeueTask } from '@/services/queueService';
-import {
-  startPrimaryForFile,
-  startTranscribeTask,
-} from '@/services/startTask';
+import { startPrimaryForFile, startTranscribeTask } from '@/services/startTask';
 import { exportFile } from '@/services/SubtitleExporter';
 import { ExportButton } from '@/components/common/ExportButton';
 import { canRetranscribe } from '@/utils/fileUtils';
@@ -24,15 +19,24 @@ import type { ExportFormat } from '@/utils/fileExport';
 import toast from 'react-hot-toast';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 
-interface MobileDetailBarProps {
-  file: SubtitleFileMetadata;
+interface MobileTaskDockProps {
+  file: SubtitleFileMetadata | null;
 }
 
-export function MobileDetailBar({ file }: MobileDetailBarProps) {
+export function MobileTaskDock({ file }: MobileTaskDockProps) {
+  if (!file) {
+    return (
+      <div className="m-dock is-idle" data-testid="mobile-task-dock">
+        <p className="m-dock-idle">点选一个任务</p>
+      </div>
+    );
+  }
+  return <MobileTaskDockActive file={file} />;
+}
+
+function MobileTaskDockActive({ file }: { file: SubtitleFileMetadata }) {
   const taskQueue = useQueueStore((s) => s.taskQueue);
   const activeTaskId = useQueueStore((s) => s.activeTaskId);
-  const keytermGroups = useTranscriptionStore((s) => s.keytermGroups);
-  const setSelectedKeytermGroupId = useFilesStore((s) => s.setSelectedKeytermGroupId);
   const { handleError } = useErrorHandler();
 
   const queuePosition = taskQueue.indexOf(file.id) + 1;
@@ -54,8 +58,6 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
     () => resolveTaskPrimary(file, { isQueued, isBusy }),
     [file, isQueued, isBusy]
   );
-  const canRun = primary.enabled;
-  const primaryLabel = primary.label;
 
   const handlePrimary = useCallback(() => {
     if (primary.action === 'cancel') {
@@ -112,28 +114,13 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
   ]);
 
   return (
-    <div className="m-detail-bar">
-      <div className="m-detail-status" data-testid="mobile-detail-status">
-        {statusText}
+    <div className="m-dock" data-testid="mobile-task-dock">
+      <div className="m-dock-meta">
+        <span className="m-dock-name">{file.name}</span>
+        <span className="m-dock-status" data-testid="mobile-detail-status">
+          {statusText}
+        </span>
       </div>
-
-      {isAudioVideo && keytermGroups.length > 0 && (
-        <label className="m-detail-keyterm">
-          <span>热词</span>
-          <select
-            value={file.selectedKeytermGroupId ?? ''}
-            onChange={(e) => setSelectedKeytermGroupId(file.id, e.target.value || null)}
-            aria-label="热词分组"
-          >
-            <option value="">无</option>
-            {keytermGroups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
 
       <div className={`m-detail-actions${isAudioVideo ? ' has-transcribe' : ''}`}>
         <div className="m-export-wrap">
@@ -160,9 +147,9 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
         <button
           type="button"
           className={`m-btn primary ${isQueued ? 'muted' : ''}`}
-          disabled={!canRun && !isQueued}
+          disabled={!primary.enabled && !isQueued}
           onClick={handlePrimary}
-          data-testid="mobile-detail-primary"
+          data-testid="mobile-dock-primary"
         >
           {isBusy && !isQueued ? (
             <Loader2 className="h-4 w-4 m-spin shrink-0" />
@@ -171,7 +158,7 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
           ) : (
             <Play className="h-4 w-4 shrink-0" />
           )}
-          <span className="m-btn-label">{primaryLabel}</span>
+          <span className="m-btn-label">{primary.label}</span>
         </button>
       </div>
     </div>
