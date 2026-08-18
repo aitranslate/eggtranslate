@@ -41,13 +41,6 @@ type TranslationServiceDeps = {
   isConfigured: () => boolean;
   beginSession: (taskId: string) => Promise<AbortController>;
   endSession: () => void;
-  updateUiProgress: (
-    current: number,
-    total: number,
-    phase: 'direct' | 'completed',
-    status: string,
-    taskId?: string
-  ) => Promise<void>;
   updatePhase: (
     fileId: string,
     phase: 'translating',
@@ -84,8 +77,6 @@ function createDefaultDeps(): TranslationServiceDeps {
     isConfigured: () => useTranslationConfigStore.getState().isConfigured,
     beginSession: (taskId) => useTranslationConfigStore.getState().startTranslation(taskId),
     endSession: () => useTranslationConfigStore.getState().stopTranslation(),
-    updateUiProgress: (current, total, phase, status, taskId) =>
-      useTranslationConfigStore.getState().updateProgress(current, total, phase, status, taskId),
     updatePhase: (fileId, phase, update) =>
       useFilesStore.getState().updatePhase(fileId, phase, update),
     batchUpdateEntries: (fileId, updates) =>
@@ -215,14 +206,12 @@ export async function startTranslation(
         updateProgress: async (
           current: number,
           total: number,
-          phase: 'direct' | 'completed',
-          status: string,
-          taskId: string,
+          _phase: 'direct' | 'completed',
+          _status: string,
+          _taskId: string,
           newTokens?: number
         ) => {
-          await deps.updateUiProgress(current, total, phase, status, taskId);
-
-          // 进度与 token 解耦；tokensDelta 在 store 内原子累加（并发 batch 安全）
+          // 只写任务 phases（chip / 续跑用）。不再写全局 UI progress。
           const progress = total > 0 ? Math.round((current / total) * 100) : 0;
           if (newTokens !== undefined && newTokens > 0) {
             deps.updatePhase(fileId, 'translating', {

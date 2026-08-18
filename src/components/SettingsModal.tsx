@@ -31,8 +31,6 @@ import { isTranscriptionApiConfigured } from '@/utils/taskGuards';
 interface SettingsModalProps {
   isOpen?: boolean;
   onClose?: () => void;
-  /** @deprecated 抽屉模式为主 */
-  variant?: 'panel' | 'modal' | 'drawer';
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({

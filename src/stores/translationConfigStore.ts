@@ -3,7 +3,7 @@
  *
  * 职责边界：
  * - 持久化：多服务商 LLM 档案、语言与批次参数、模型列表缓存
- * - 会话态：是否翻译中、进度条、AbortController、token 累计展示
+ * - 会话态：是否翻译中、AbortController
  *
  * 不包含 LLM 调用 / 批译逻辑 —— 见 services/llmTranslationService.ts
  * 不包含多文件队列编排 —— 见 services/translationService.ts + queueService.ts
@@ -11,12 +11,11 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { TranslationConfig, TranslationProgress, LlmProfile } from '@/types';
+import { TranslationConfig } from '@/types';
 import type { LlmModelInfo } from '@/utils/listLlmModels';
 import {
   createDefaultProfiles,
   ensureProfiles,
-  getActiveProfile,
   isTranslationLlmConfigured,
 } from '@/utils/llmProfiles';
 
@@ -24,8 +23,6 @@ interface TranslationConfigStore {
   config: TranslationConfig;
   isConfigured: boolean;
   isTranslating: boolean;
-  progress: TranslationProgress;
-  tokensUsed: number;
   currentTaskId: string;
   abortController: AbortController | null;
   /** 按 profile id 缓存的模型列表，避免每次打开设置都重新获取 */
@@ -36,15 +33,6 @@ interface TranslationConfigStore {
   /** 开始一次翻译会话：创建 AbortController 并标记 isTranslating */
   startTranslation: (taskId?: string) => Promise<AbortController>;
   stopTranslation: () => void;
-  resetProgress: () => Promise<void>;
-  updateProgress: (
-    current: number,
-    total: number,
-    phase: 'direct' | 'completed',
-    status: string,
-    taskId?: string,
-    newTokens?: number
-  ) => Promise<void>;
 }
 
 const defaultProfiles = createDefaultProfiles();
@@ -58,13 +46,6 @@ const DEFAULT_CONFIG: TranslationConfig = {
   threadCount: 4,
   contextBefore: 5,
   contextAfter: 3,
-};
-
-const DEFAULT_PROGRESS: TranslationProgress = {
-  current: 0,
-  total: 0,
-  phase: 'direct',
-  status: '准备中...',
 };
 
 function withConfigured(config: TranslationConfig) {
@@ -81,8 +62,6 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
       config: DEFAULT_CONFIG,
       isConfigured: false,
       isTranslating: false,
-      progress: DEFAULT_PROGRESS,
-      tokensUsed: 0,
       currentTaskId: '',
       abortController: null,
       cachedModelLists: {},
@@ -107,7 +86,6 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
           abortController: controller,
           isTranslating: true,
           currentTaskId: taskId || '',
-          progress: { ...DEFAULT_PROGRESS, status: '翻译中...' },
         });
         return controller;
       },
@@ -118,23 +96,8 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
         set({
           isTranslating: false,
           currentTaskId: '',
-          progress: DEFAULT_PROGRESS,
           abortController: null,
         });
-      },
-
-      resetProgress: async () => {
-        set({
-          isTranslating: false,
-          progress: DEFAULT_PROGRESS,
-          tokensUsed: 0,
-          currentTaskId: '',
-          abortController: null,
-        });
-      },
-
-      updateProgress: async (current, total, phase, status) => {
-        set({ progress: { current, total, phase, status } });
       },
     }),
     {
@@ -166,9 +129,6 @@ export const useTranslationConfigStore = create<TranslationConfigStore>()(
 
 export const useTranslationConfig = () => useTranslationConfigStore((state) => state.config);
 
-export const useActiveLlmProfile = () =>
-  useTranslationConfigStore((state) => getActiveProfile(state.config));
-
 export const useIsTranslationConfigured = () =>
   useTranslationConfigStore((state) => state.isConfigured);
 
@@ -182,6 +142,3 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
     }
   ).__eggTranslationConfigStore = useTranslationConfigStore;
 }
-
-export const useTranslationTokensUsed = () =>
-  useTranslationConfigStore((state) => state.tokensUsed);

@@ -2,7 +2,6 @@
 
 .m-shell {
   --m-top-h: 52px;
-  --m-bar-h: 64px;
   --m-pad: 14px;
   --m-safe-t: env(safe-area-inset-top, 0px);
   --m-safe-b: env(safe-area-inset-bottom, 0px);
@@ -859,15 +858,10 @@
   order: 4;
 }
 
-/* 工具行：进度条一行，搜索 + 筛选一行 */
+/* 工具行：搜索 + 筛选 */
 .m-shell .se-toolbar {
   gap: 8px;
   padding: 8px 10px;
-}
-
-.m-shell .se-toolbar-progress {
-  flex: 1 1 100%;
-  max-width: none;
 }
 
 .m-shell .se-toolbar-filters {

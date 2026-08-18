@@ -9,14 +9,7 @@
  * 不需要：导入转码、DP 断句等纯 CPU。
  */
 
-export {
-  CHECKPOINT_VERSION,
-  asrWordsFingerprint,
-  type AiBreakSpanCheckpoint,
-  type AsrCheckpointWord,
-  type AsrJobCheckpoint,
-  type TaskCheckpoint,
-} from './types';
+export { asrWordsFingerprint, type AsrCheckpointWord } from './types';
 
 export {
   fingerprintApiKey,

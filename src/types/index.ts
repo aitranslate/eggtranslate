@@ -69,15 +69,6 @@ export interface TranslationConfig {
   rpm?: number;
 }
 
-// 翻译进度类型
-export interface TranslationProgress {
-  current: number;
-  total: number;
-  phase: 'direct' | 'completed';
-  status: string;
-  taskId?: string; // 当前任务ID
-}
-
 // 术语类型
 export interface Term {
   original: string;

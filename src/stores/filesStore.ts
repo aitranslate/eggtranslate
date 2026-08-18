@@ -248,7 +248,6 @@ interface FilesState {
 
   getFile: (fileId: string) => SubtitleFileMetadata | undefined;
   getAllFiles: () => SubtitleFileMetadata[];
-  getTranslationProgress: (fileId: string) => { completed: number; total: number };
   getFileEntries: (fileId: string) => SubtitleEntry[];
 }
 
@@ -786,12 +785,6 @@ export const useFilesStore = create<FilesState>()(
 
       getAllFiles: () => {
         return get().tasks.map((t) => convertTaskToMetadata(t));
-      },
-
-      getTranslationProgress: (fileId) => {
-        const file = get().getFile(fileId);
-        if (!file) return { completed: 0, total: 0 };
-        return { completed: file.translatedCount || 0, total: file.entryCount || 0 };
       },
 
       getFileEntries: (fileId) => {
