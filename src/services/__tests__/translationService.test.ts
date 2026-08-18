@@ -145,13 +145,30 @@ describe('translationService', () => {
   it('calls executeTranslation on the batch path', async () => {
     useFilesStore.setState({ tasks: [makeFile('t-batch')] });
     configuredState();
-    executeTranslation.mockResolvedValue(undefined);
+    executeTranslation.mockImplementation(async () => {
+      useFilesStore.setState((s) => ({
+        tasks: s.tasks.map((t) =>
+          t.taskId === 't-batch'
+            ? {
+                ...t,
+                subtitle_entries: t.subtitle_entries.map((e) => ({
+                  ...e,
+                  translationStatus: 'completed' as const,
+                  translatedText: 'ok',
+                })),
+              }
+            : t
+        ),
+      }));
+    });
 
     const fileId = generateStableFileId('t-batch');
     const result = await startTranslation(fileId);
 
     expect(executeTranslation).toHaveBeenCalled();
     expect(result).not.toBeNull();
+    const task = useFilesStore.getState().tasks.find((t) => t.taskId === 't-batch');
+    expect(task?.phases.translating.status).toBe('completed');
   });
 
   it('prefers task source/target languages over global config', async () => {
@@ -166,6 +183,20 @@ describe('translationService', () => {
     configuredState();
     executeTranslation.mockImplementation(async (_opts, callbacks) => {
       expect(callbacks).toBeTruthy();
+      useFilesStore.setState((s) => ({
+        tasks: s.tasks.map((t) =>
+          t.taskId === 't-lang'
+            ? {
+                ...t,
+                subtitle_entries: t.subtitle_entries.map((e) => ({
+                  ...e,
+                  translationStatus: 'completed' as const,
+                  translatedText: 'ok',
+                })),
+              }
+            : t
+        ),
+      }));
     });
 
     await startTranslation(generateStableFileId('t-lang'));
@@ -188,6 +219,48 @@ describe('translationService', () => {
     const task = useFilesStore.getState().tasks.find((t) => t.taskId === 't-fail');
     expect(task?.phases.translating.status).toBe('failed');
     expect(task?.phases.translating.errorMessage).toMatch(/boom/);
+  });
+
+  it('does not mark completed when some lines are still missing', async () => {
+    useFilesStore.setState({
+      tasks: [
+        makeFile('t-partial', 'upcoming', {
+          subtitle_entries: [
+            { ...entry(1), translationStatus: 'completed', translatedText: '已译' },
+            entry(2),
+          ],
+          translatedCount: 1,
+        }),
+      ],
+    });
+    configuredState();
+    executeTranslation.mockResolvedValue(undefined);
+
+    const result = await startTranslation(generateStableFileId('t-partial'));
+    const task = useFilesStore.getState().tasks.find((t) => t.taskId === 't-partial');
+    expect(task?.phases.translating.status).toBe('failed');
+    expect(task?.phases.translating.errorMessage).toMatch(/部分翻译/);
+    expect(result).not.toBeNull();
+  });
+
+  it('flushes persist after each finalized batch', async () => {
+    useFilesStore.setState({ tasks: [makeFile('t-flush')] });
+    configuredState();
+    const flushPersist = vi.fn().mockResolvedValue(undefined);
+    const batchUpdateEntries = vi.fn();
+    executeTranslation.mockImplementation(async (_opts, callbacks) => {
+      await callbacks.batchUpdateEntries([
+        { id: 1, text: 't1', translatedText: '译1', status: 'completed' },
+      ]);
+    });
+
+    await startTranslation(generateStableFileId('t-flush'), {
+      flushPersist,
+      batchUpdateEntries,
+    });
+
+    expect(batchUpdateEntries).toHaveBeenCalledTimes(1);
+    expect(flushPersist).toHaveBeenCalled();
   });
 
   it('AbortError does not mark failed', async () => {

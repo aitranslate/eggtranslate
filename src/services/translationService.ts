@@ -198,8 +198,9 @@ export async function startTranslation(
             onPartial,
             onAttemptStart,
           }),
-        batchUpdateEntries: (updates) => {
+        batchUpdateEntries: async (updates) => {
           deps.batchUpdateEntries(fileId, updates);
+          await deps.flushPersist();
         },
         // 流式只打内存 overlay，不碰 filesStore / persist
         applyStreamingPartials: (updates) => {
@@ -243,9 +244,27 @@ export async function startTranslation(
       return null;
     }
 
-    // 完成翻译 — 更新 tasks（内存操作）；updatePhase(completed) 会 flush persist
     deps.clearStreamingFile(fileId);
+    const lastEntries = deps.getTaskEntries(file.taskId);
+    const done = lastEntries.filter((e) => e.translationStatus === 'completed').length;
+    const total = lastEntries.length;
     const finalTokens = deps.getTokensUsed(fileId);
+
+    if (total > 0 && done < total) {
+      const progress = Math.round((done / total) * 100);
+      deps.updatePhase(fileId, 'translating', {
+        status: 'failed',
+        progress,
+        tokens: finalTokens,
+        errorMessage: `部分翻译：${done}/${total} 条已完成，可继续`,
+      });
+      await deps.flushPersist();
+      deps.notifySuccess(`${file.name} 部分翻译（${done}/${total}）`);
+      logger.info(`部分翻译 ${done}/${total}，总消耗 ${finalTokens} tokens`);
+      const finalPhases = deps.getFile(fileId)?.phases;
+      return { tokens: finalTokens, entries: lastEntries, phases: finalPhases! };
+    }
+
     deps.updatePhase(fileId, 'translating', {
       status: 'completed',
       progress: 100,
@@ -253,7 +272,6 @@ export async function startTranslation(
     });
     await deps.flushPersist();
 
-    const lastEntries = deps.getTaskEntries(file.taskId);
     const finalPhases = deps.getFile(fileId)?.phases;
     deps.notifySuccess(`${file.name} 翻译完成`);
     logger.info(`任务完成，总消耗 ${finalTokens} tokens`);

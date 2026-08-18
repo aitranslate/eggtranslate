@@ -482,6 +482,36 @@ describe('segmentWordsWithAiFallback', () => {
     expect(steps).toEqual([[0, 1], [1, 1]]);
   });
 
+  it('resumeSpans 命中相同 spanText 时不调用 LLM，仍采纳已存标记', async () => {
+    const words = longUnpunctuatedEn();
+    const marked =
+      words.map((x) => x.text).join(' ').slice(0, words.map((x) => x.text).join(' ').indexOf('word12')) +
+      '[BR] ' +
+      words.map((x) => x.text).join(' ').slice(words.map((x) => x.text).join(' ').indexOf('word12'));
+    const first = await segmentWordsWithAiFallback(words, 'en', 'standard', {
+      aiBreaker: async () => ({ content: marked, tokensUsed: 11 }),
+    });
+    const spanText = first.map((s) => s.text).join(' ').replace(/\s*\|\s*/g, ' ');
+    void spanText;
+    const persist: Array<{ spanIdx: number; tokensUsed: number }> = [];
+    let calls = 0;
+    const resumed = await segmentWordsWithAiFallback(words, 'en', 'standard', {
+      aiBreaker: async () => {
+        calls += 1;
+        return { content: null, tokensUsed: 0 };
+      },
+      resumeSpans: new Map([
+        [0, { spanText: words.map((x) => x.text).join(' '), content: marked, tokensUsed: 11 }],
+      ]),
+      onAiSpanPersist: async (span) => {
+        persist.push({ spanIdx: span.spanIdx, tokensUsed: span.tokensUsed });
+      },
+    });
+    expect(calls).toBe(0);
+    expect(persist).toEqual([]);
+    expect(resumed.map((s) => s.text)).toEqual(first.map((s) => s.text));
+  });
+
   it('采纳的 AI 分段带 aiSplit；回退 DP 不带', async () => {
     const accepted = await segmentWordsWithAiFallback(longUnpunctuatedEn(), 'en', 'standard', {
       aiBreaker: async (prompt) => {

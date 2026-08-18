@@ -166,6 +166,8 @@ export async function clearAll(): Promise<void> {
     useFilesStore.getState().clearAllTasks();
     useQueueStore.getState().setTaskQueue([]);
     useQueueStore.getState().setActiveTaskId(null);
+    const { clearAllTaskCheckpoints } = await import('@/services/checkpoint');
+    await clearAllTaskCheckpoints();
     for (const task of tasks) {
       await removeMp3Data(task.taskId);
     }

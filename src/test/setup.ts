@@ -7,6 +7,7 @@ vi.mock('localforage', () => ({
     getItem: vi.fn().mockResolvedValue(null),
     setItem: vi.fn().mockResolvedValue(undefined),
     removeItem: vi.fn().mockResolvedValue(undefined),
+    keys: vi.fn().mockResolvedValue([]),
     config: vi.fn(),
     driver: vi.fn(),
   },

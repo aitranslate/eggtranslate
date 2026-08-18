@@ -151,6 +151,12 @@ export interface PhaseProgress {
   entryCount?: number;    // 该阶段处理的条目数（语音识别/翻译/断句）
   totalEntries?: number;  // 总条目数
   keytermGroupName?: string; // 该阶段使用的热词分组名（仅转录/翻译时记录）
+  /** AssemblyAI transcript UUID；submit 后立刻写入，刷新后凭此 GET 续跑 */
+  transcriptId?: string;
+  /** 创建该 transcript 的 API Key 指纹（多 Key 时必须对上才能 GET） */
+  transcriptKeyFp?: string;
+  /** 词级 ASR 结果已写入检查点，可跳过识别只跑断句 */
+  asrReady?: boolean;
 }
 
 // ProgressPhase: 阶段名称类型

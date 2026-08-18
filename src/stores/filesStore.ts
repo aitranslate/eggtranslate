@@ -93,21 +93,27 @@ export function recoverInterruptedPhases(task: SingleTask): SingleTask {
   const newPhases = { ...task.phases };
   for (const phase of ["converting", "transcribing", "segmenting", "translating"] as const) {
     if (newPhases[phase]?.status === "active") {
+      // 保留 transcriptId / asrReady 等续跑字段
       newPhases[phase] = {
+        ...newPhases[phase],
         status: "failed",
-        progress: newPhases[phase].progress || 0,
-        tokens: newPhases[phase].tokens || 0,
-      } as PhaseProgress;
+      };
       taskChanged = true;
     }
   }
-  // 断句中刷新：识别已标完成但字幕未入库 → 识别一并失败，才能重转录
+  // 断句中刷新且没有字幕：
+  // - 已有词表或 transcript.id → 识别保持 completed / 保留 id，重试只续断句或 poll
+  // - 否则识别一并失败，才能整段重来
   const noEntries =
     (task.entryCount ?? 0) === 0 && (task.subtitle_entries?.length ?? 0) === 0;
+  const asrResumable = Boolean(
+    newPhases.transcribing?.asrReady || newPhases.transcribing?.transcriptId
+  );
   if (
     newPhases.segmenting?.status === "failed" &&
     newPhases.transcribing?.status === "completed" &&
-    noEntries
+    noEntries &&
+    !asrResumable
   ) {
     newPhases.transcribing = {
       ...newPhases.transcribing,
@@ -131,6 +137,9 @@ const PHASE_PROGRESS_KEYS = [
   'entryCount',
   'totalEntries',
   'keytermGroupName',
+  'transcriptId',
+  'transcriptKeyFp',
+  'asrReady',
 ] as const satisfies readonly (keyof PhaseProgress)[];
 
 function isSamePhaseProgress(a: PhaseProgress, b: PhaseProgress): boolean {

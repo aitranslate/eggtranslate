@@ -140,6 +140,18 @@ interface SegmentWordsAiOptions {
   onAiResolved?: (spanText: string, accepted: boolean, tokensUsed: number, reason?: string) => void;
   /** 断句进度：已处理 AI 句数 / 总触发句数（未触发 AI 的文件不会回调）。 */
   onAiProgress?: (resolved: number, total: number) => void;
+  /**
+   * 续跑：已落盘的 span（key=spanIdx）。
+   * spanText 一致才跳过 LLM，再走同一套解码。
+   */
+  resumeSpans?: Map<number, { spanText: string; content: string | null; tokensUsed: number }>;
+  /** 每次真实或回放 LLM 结果后立刻落盘（含 content=null）。 */
+  onAiSpanPersist?: (span: {
+    spanIdx: number;
+    spanText: string;
+    content: string | null;
+    tokensUsed: number;
+  }) => void | Promise<void>;
 }
 
 /**
@@ -187,16 +199,28 @@ export async function segmentWordsWithAiFallback(
     let tokensUsed = 0;
     let reason = 'call-error';
     try {
-      const result = await options.aiBreaker(
-        buildAiBreakPrompt(
-          spanText,
-          profile,
-          limit,
-          charLimit,
-          dpPartTexts(span.info.tokens, span.info.ranges, profile),
-        ),
-      );
+      const cached = options.resumeSpans?.get(span.idx);
+      const cacheHit = Boolean(cached && cached.spanText === spanText);
+      const result = cacheHit
+        ? { content: cached!.content, tokensUsed: 0 }
+        : await options.aiBreaker(
+            buildAiBreakPrompt(
+              spanText,
+              profile,
+              limit,
+              charLimit,
+              dpPartTexts(span.info.tokens, span.info.ranges, profile),
+            ),
+          );
       tokensUsed = result.tokensUsed ?? 0;
+      if (!cacheHit) {
+        await options.onAiSpanPersist?.({
+          spanIdx: span.idx,
+          spanText,
+          content: result.content,
+          tokensUsed,
+        });
+      }
       const marked = result.content;
       if (marked == null) {
         reason = 'empty-content';

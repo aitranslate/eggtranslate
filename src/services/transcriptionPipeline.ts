@@ -1,11 +1,12 @@
 /**
- * 转录流程：已就绪 MP3 → AssemblyAI → 字幕条目
- * 转码在 addFile 完成，这里只上传/转录。
+ * 转录流程：ASR（可续跑）→ DP / AI 断句 → 字幕条目
+ * 转码在 addFile 完成，这里只上传/提交/轮询/断句。
  */
 
 import { SubtitleEntry } from '@/types';
 import { assemblyaiService } from './assemblyaiService';
 import { formatTime } from '@/utils/timeUtils';
+import type { AsrCheckpointWord } from '@/services/checkpoint';
 
 interface ProgressCallbacks {
   onUploading?: () => void;
@@ -20,16 +21,44 @@ interface ProgressCallbacks {
   onError?: (error: string) => void;
 }
 
+export type TranscriptionPipelineOptions = {
+  useAiSegmentation?: boolean;
+  resume?: {
+    transcriptId?: string;
+    keyFingerprint?: string;
+    words?: AsrCheckpointWord[];
+    language?: string;
+  };
+  onAsrSubmitted?: (info: {
+    transcriptId: string;
+    keyFingerprint: string;
+  }) => void | Promise<void>;
+  onAsrCompleted?: (info: {
+    words: AsrCheckpointWord[];
+    language: string;
+    transcriptId: string;
+    keyFingerprint: string;
+  }) => void | Promise<void>;
+  aiBreakResume?: Map<
+    number,
+    { spanText: string; content: string | null; tokensUsed: number }
+  >;
+  onAiSpanPersist?: (span: {
+    spanIdx: number;
+    spanText: string;
+    content: string | null;
+    tokensUsed: number;
+  }) => void | Promise<void>;
+};
+
 /**
- * @param audioFile - addFile 缓存的 ASR 音频（MP3 / AAC / 原音频）
- * @param keyterms - 热词
- * @param callbacks - 进度回调
+ * @param audioFile - addFile 缓存的 ASR 音频；纯续跑（已有 id / 词表）可为 null
  */
 export const runTranscriptionPipeline = async (
-  audioFile: File,
+  audioFile: File | null,
   keyterms: string[] = [],
   callbacks: ProgressCallbacks = {},
-  options: { useAiSegmentation?: boolean } = {}
+  options: TranscriptionPipelineOptions = {}
 ): Promise<{
   entries: SubtitleEntry[];
   language: string;
@@ -37,35 +66,92 @@ export const runTranscriptionPipeline = async (
   tokensUsed?: number;
 }> => {
   try {
-    const { sentences, language, tokensUsed } =
-      await assemblyaiService.transcribeWithSmartSegmentation(
-        audioFile,
-        { keyterms, useAiSegmentation: options.useAiSegmentation },
-        (status, percent) => {
+    let words: AsrCheckpointWord[];
+    let language: string;
+
+    const cachedWords = options.resume?.words;
+    if (cachedWords && cachedWords.length >= 0 && options.resume?.language) {
+      words = cachedWords;
+      language = options.resume.language;
+    } else {
+      callbacks.onTranscribing?.();
+      callbacks.onUploading?.();
+      const asr = await assemblyaiService.transcribeAudio(audioFile, {
+        keyterms,
+        resumeTranscriptId: options.resume?.transcriptId,
+        resumeKeyFingerprint: options.resume?.keyFingerprint,
+        onSubmitted: options.onAsrSubmitted,
+        onProgress: (status, percent) => {
           if (status === 'transcribing') {
             callbacks.onProgress?.(percent);
             callbacks.onTranscribing?.();
             callbacks.onUploading?.();
-          } else if (status === 'segmenting') {
-            callbacks.onProgress?.(percent);
-            callbacks.onSegmenting?.();
-          } else if (status === 'completed') {
-            callbacks.onCompleted?.();
           }
         },
-        (resolved, total) => callbacks.onAiProgress?.(resolved, total),
-        (delta) => callbacks.onAiTokens?.(delta)
+      });
+      words = asr.words;
+      language = asr.language;
+      await options.onAsrCompleted?.({
+        words: asr.words,
+        language: asr.language,
+        transcriptId: asr.transcriptId,
+        keyFingerprint: asr.keyFingerprint,
+      });
+    }
+
+    callbacks.onProgress?.(80);
+    callbacks.onSegmenting?.();
+
+    const preset =
+      (await import('@/stores/transcriptionStore')).useTranscriptionStore.getState()
+        .subtitleLengthPreset || 'standard';
+    const { segmentWords, segmentWordsWithAiFallback } = await import(
+      '@/services/sentenceSegmentation'
+    );
+
+    let segments;
+    let aiTokensUsed = 0;
+    if (options.useAiSegmentation) {
+      const { createAiSentenceBreaker } = await import(
+        '@/services/aiSentenceBreakerService'
       );
+      const { useTranslationConfigStore } = await import(
+        '@/stores/translationConfigStore'
+      );
+      const threadCount =
+        useTranslationConfigStore.getState().config.threadCount || 4;
+      segments = await segmentWordsWithAiFallback(words, language, preset, {
+        aiBreaker: createAiSentenceBreaker(),
+        concurrency: threadCount,
+        watchabilityMerge: true,
+        resumeSpans: options.aiBreakResume,
+        onAiSpanPersist: options.onAiSpanPersist,
+        onAiProgress: (resolved, total) => {
+          callbacks.onAiProgress?.(resolved, total);
+          const denom = Math.max(total, 1);
+          callbacks.onProgress?.(80 + Math.round((20 * resolved) / denom));
+        },
+        onAiResolved: (_text, _accepted, tokensUsed) => {
+          if (tokensUsed > 0) {
+            aiTokensUsed += tokensUsed;
+            callbacks.onAiTokens?.(tokensUsed);
+          }
+        },
+      });
+    } else {
+      segments = segmentWords(words, language, preset, {
+        watchabilityMerge: true,
+      });
+    }
 
     const entries: SubtitleEntry[] = [];
     let entryId = 1;
 
-    for (const sentence of sentences) {
-      // 断句完成后不再携带 word 级时间戳：UI/导出/IDB 均不需要，源头即剥离
+    for (const sentence of segments) {
       entries.push({
         id: entryId++,
-        startTime: formatTime(sentence.start / 1000),
-        endTime: formatTime(sentence.end / 1000),
+        startTime: formatTime(sentence.startTime / 1000),
+        endTime: formatTime(sentence.endTime / 1000),
         text: sentence.text,
         translatedText: '',
         translationStatus: 'pending',
@@ -78,7 +164,7 @@ export const runTranscriptionPipeline = async (
     return {
       entries,
       language,
-      tokensUsed,
+      tokensUsed: aiTokensUsed,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -176,7 +176,8 @@ export async function loadFromFile(
  */
 export async function removeMp3Data(taskId: string): Promise<void> {
   const { removeAsrAudio } = await import('@/utils/asrAudioStorage');
-  await removeAsrAudio(taskId);
+  const { removeTaskCheckpoint } = await import('@/services/checkpoint');
+  await Promise.all([removeAsrAudio(taskId), removeTaskCheckpoint(taskId)]);
 }
 
 // ============================================

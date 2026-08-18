@@ -12,12 +12,16 @@ import { saveTranslationHistory } from './TranslationOrchestrator';
 import type { SubtitleFileMetadata } from '@/types';
 import { logger } from '@/utils/logger';
 import { playAppSound } from '@/utils/appSound';
+import { needsTranscriptionWork } from '@/utils/taskGuards';
 
 function isTaskCompleted(file: SubtitleFileMetadata): boolean {
+  if (file.phases.workflow === 'transcribe') {
+    return file.phases.transcribing.status === 'completed' && !needsTranscriptionWork(file);
+  }
   const isSrt = file.fileType === 'srt' || !file.fileType;
   return (
     file.phases.translating.status === 'completed' &&
-    (isSrt || file.phases.transcribing.status === 'completed')
+    (isSrt || !needsTranscriptionWork(file))
   );
 }
 
@@ -89,7 +93,7 @@ export function enqueueAllUncompleted(): void {
     if (isTaskCompleted(file)) continue;
 
     const isAudioVideo = file.fileType === 'audio' || file.fileType === 'video';
-    const needsTranscription = isAudioVideo && file.phases.transcribing.status !== 'completed';
+    const needsTranscription = isAudioVideo && needsTranscriptionWork(file);
 
     // 音视频未转录 → 转录+翻译全流程；已转录 / SRT → 仅翻译
     useFilesStore.getState().setWorkflow(file.id, needsTranscription ? 'full' : 'translate');
@@ -127,8 +131,7 @@ async function startTask(): Promise<string | null> {
 
 async function runTask(file: SubtitleFileMetadata): Promise<void> {
   const fileId = file.id;
-  const isAudioVideo = file.fileType === 'audio' || file.fileType === 'video';
-  const needsTranscription = isAudioVideo && file.phases.transcribing.status !== 'completed';
+  const needsTranscription = needsTranscriptionWork(file);
 
   if (needsTranscription) {
     // workflow 由按钮在 enqueueTask 前设置，runTask 据此决定是否继续翻译

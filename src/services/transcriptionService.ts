@@ -1,10 +1,10 @@
 /**
  * 转录 Service
  * 取 IndexedDB 中 addFile 已就绪的 ASR 音频（MP3 / AAC 抽轨 / 原音频）
- * → AssemblyAI → 写字幕。不再在转录阶段转码。
+ * → AssemblyAI（submit + id 续跑）→ 写字幕。
  */
 
-import { useFilesStore } from '@/stores/filesStore';
+import { useFilesStore, flushFilesStorePersist } from '@/stores/filesStore';
 import { useHistoryStore } from '@/stores/historyStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { runTranscriptionPipeline } from './transcriptionPipeline';
@@ -12,72 +12,109 @@ import { saveTranslationHistory } from './TranslationOrchestrator';
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
 import { loadAsrAudioFile } from '@/utils/asrAudioStorage';
+import { needsTranscriptionWork } from '@/utils/taskGuards';
+import {
+  asrWordsFingerprint,
+  loadTaskCheckpoint,
+  saveAiBreakSpan,
+  saveTaskCheckpoint,
+} from '@/services/checkpoint';
 import toast from 'react-hot-toast';
 
 export async function startTranscription(fileId: string): Promise<void> {
   const file = useFilesStore.getState().getFile(fileId);
   if (!file || file.fileType === 'srt') return;
 
-  if (file.phases.transcribing.status === 'completed') {
+  if (!needsTranscriptionWork(file)) {
     logger.info('转录已完成，跳过');
     return;
   }
 
-  // 立即把 phase 标为 active，让 UI（badge、stepper 节点）即时反映。
-  // 任何失败路径都会在 catch / early-return 之前把状态标为 failed，
-  // 避免出现"按钮 处理中 但 phase 还是 未开始"的不一致状态。
-  useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'active', progress: -1, tokens: 0 });
+  const prevTr = file.phases.transcribing;
+  useFilesStore.getState().updatePhase(fileId, 'transcribing', {
+    status: 'active',
+    progress: prevTr.transcriptId || prevTr.asrReady ? prevTr.progress : -1,
+    transcriptId: prevTr.transcriptId,
+    transcriptKeyFp: prevTr.transcriptKeyFp,
+    asrReady: prevTr.asrReady,
+    language: prevTr.language,
+  });
 
   let segmentingActive = false;
+  let asrCompleted = Boolean(prevTr.asrReady);
 
   try {
-    // 音频必须在 addFile 阶段准备好（小 MP3 / 抽轨 AAC / 原音频）。
+    const checkpoint = await loadTaskCheckpoint(file.taskId);
+    const resumeWords =
+      prevTr.asrReady && checkpoint?.words && checkpoint.language
+        ? { words: checkpoint.words, language: checkpoint.language }
+        : undefined;
+
     const asrFile = await loadAsrAudioFile(file.taskId);
-    if (!asrFile) {
-      useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed', progress: 0 });
+    if (!asrFile && !resumeWords && !prevTr.transcriptId && !checkpoint?.asr?.transcriptId) {
+      useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed' });
       toast.error('音频缓存丢失，请重新上传文件');
       return;
     }
 
     const { apiKeys } = useTranscriptionStore.getState();
-    if (!apiKeys.trim()) {
-      useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed', progress: 0 });
+    if (!apiKeys.trim() && !resumeWords) {
+      useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed' });
       toast.error('请先在设置中配置 AssemblyAI API Key');
       return;
     }
 
-    const { keytermGroups } = useTranscriptionStore.getState();
+    const { keytermGroups, subtitleLengthPreset } = useTranscriptionStore.getState();
     const task = useFilesStore.getState().tasks.find((t) => t.taskId === file.taskId);
     const groupId = task?.selectedKeytermGroupId;
-    // 任务级热词选择优先级最高：只要任务卡片选了热词组，就用，
-    // 不受全局 keytermsEnabled 开关影响（开关只控制 UI 是否显示下拉）
     const selectedKeytermGroup = groupId
       ? keytermGroups.find((g) => g.id === groupId)
       : null;
     const allKeyterms = selectedKeytermGroup?.keyterms ?? [];
 
-    // workflow 由调用方（按钮）在 enqueueTask 前设置：
-    //   - 仅转录 → 'transcribe'（音视频默认）
-    //   - 一键转译 → 'full'
-    //   - 仅翻译 → 'translate'（SRT 默认）
-    // 这里不再强制覆盖，否则会抹掉"一键转译"的意图。
-    // 记录该次转录使用的热词组名，UI 卡片可展示
     if (selectedKeytermGroup) {
       useFilesStore.getState().updatePhase(fileId, 'transcribing', {
         keytermGroupName: selectedKeytermGroup.name,
       });
     }
 
-    logger.info(
-      `[transcription] 上传 ${asrFile.name} ${(asrFile.size / 1024 / 1024).toFixed(2)}MB (${asrFile.type})`
-    );
+    if (asrFile) {
+      logger.info(
+        `[transcription] 上传 ${asrFile.name} ${(asrFile.size / 1024 / 1024).toFixed(2)}MB (${asrFile.type})`
+      );
+    } else {
+      logger.info('[transcription] 无本地音频，使用检查点续跑');
+    }
 
-    // 任务级 AI 断句开关（创建任务时从全局设置快照，之后改设置不影响本任务）
     const aiEnabled = file.aiSegmentationEnabled === true;
-    // ASR 等待期间预加载断句模块，避免识别完再卡在「AI断句中」
     if (aiEnabled && import.meta.env.MODE !== 'test') {
       void import('@/services/sentenceSegmentation');
       void import('@/services/aiSentenceBreakerService');
+    }
+
+    const preset = subtitleLengthPreset || 'standard';
+    const resumeFingerprint = checkpoint?.asrFingerprint;
+    const expectedFp =
+      resumeWords && checkpoint?.language
+        ? asrWordsFingerprint(resumeWords.words, checkpoint.language, preset)
+        : undefined;
+    const aiBreakResume = new Map<
+      number,
+      { spanText: string; content: string | null; tokensUsed: number }
+    >();
+    if (
+      aiEnabled &&
+      expectedFp &&
+      resumeFingerprint === expectedFp &&
+      checkpoint?.aiBreaks
+    ) {
+      for (const span of Object.values(checkpoint.aiBreaks)) {
+        aiBreakResume.set(span.spanIdx, {
+          spanText: span.spanText,
+          content: span.content,
+          tokensUsed: span.tokensUsed,
+        });
+      }
     }
 
     const result = await runTranscriptionPipeline(
@@ -85,10 +122,13 @@ export async function startTranscription(fileId: string): Promise<void> {
       allKeyterms,
       {
         onTranscribing: () => {
+          if (asrCompleted) return;
+          const live = useFilesStore.getState().getFile(fileId)?.phases.transcribing;
           useFilesStore.getState().updatePhase(fileId, 'transcribing', {
             status: 'active',
-            progress: -1,
-            tokens: 0,
+            transcriptId: live?.transcriptId,
+            transcriptKeyFp: live?.transcriptKeyFp,
+            asrReady: live?.asrReady,
           });
         },
         onProgress: (percent) => {
@@ -98,28 +138,29 @@ export async function startTranscription(fileId: string): Promise<void> {
             { progress: percent }
           );
         },
-        // ASR 返回、断句开始：识别完成 → AI 断句阶段激活
         onSegmenting: () => {
           if (!aiEnabled || segmentingActive) return;
           segmentingActive = true;
+          const live = useFilesStore.getState().getFile(fileId)?.phases.transcribing;
           useFilesStore.getState().updatePhase(fileId, 'transcribing', {
             status: 'completed',
             progress: 100,
+            asrReady: true,
+            transcriptId: live?.transcriptId,
+            transcriptKeyFp: live?.transcriptKeyFp,
+            language: live?.language,
           });
           useFilesStore.getState().updatePhase(fileId, 'segmenting', {
             status: 'active',
             progress: -1,
-            tokens: 0,
           });
         },
-        // AI 断句兜底进度：写入 entryCount/totalEntries，UI 显示「AI断句 n/m」
         onAiProgress: (resolved, total) => {
           useFilesStore.getState().updatePhase(fileId, 'segmenting', {
             entryCount: resolved,
             totalEntries: total,
           });
         },
-        // 与翻译相同：每次真实 LLM 调用立刻 tokensDelta，状态栏右下角即时累加
         onAiTokens: (delta) => {
           if (delta <= 0) return;
           useFilesStore.getState().updatePhase(fileId, 'segmenting', {
@@ -127,10 +168,56 @@ export async function startTranscription(fileId: string): Promise<void> {
           });
         },
       },
-      { useAiSegmentation: aiEnabled }
+      {
+        useAiSegmentation: aiEnabled,
+        resume: {
+          transcriptId: prevTr.transcriptId || checkpoint?.asr?.transcriptId,
+          keyFingerprint: prevTr.transcriptKeyFp || checkpoint?.asr?.keyFingerprint,
+          words: resumeWords?.words,
+          language: resumeWords?.language,
+        },
+        onAsrSubmitted: async ({ transcriptId, keyFingerprint }) => {
+          useFilesStore.getState().updatePhase(fileId, 'transcribing', {
+            status: 'active',
+            transcriptId,
+            transcriptKeyFp: keyFingerprint,
+          });
+          await saveTaskCheckpoint(file.taskId, {
+            asr: { transcriptId, keyFingerprint, status: 'submitted' },
+          });
+          await flushFilesStorePersist();
+        },
+        onAsrCompleted: async ({ words, language, transcriptId, keyFingerprint }) => {
+          asrCompleted = true;
+          const fp = asrWordsFingerprint(words, language, preset);
+          useFilesStore.getState().updatePhase(fileId, 'transcribing', {
+            progress: 80,
+            language,
+            asrReady: true,
+            transcriptId,
+            transcriptKeyFp: keyFingerprint,
+          });
+          await saveTaskCheckpoint(file.taskId, {
+            asr: {
+              transcriptId,
+              keyFingerprint,
+              status: 'completed',
+              language,
+            },
+            words,
+            language,
+            preset,
+            asrFingerprint: fp,
+          });
+          await flushFilesStorePersist();
+        },
+        aiBreakResume,
+        onAiSpanPersist: async (span) => {
+          await saveAiBreakSpan(file.taskId, span);
+        },
+      }
     );
 
-    // 先写 phase 元数据，再 replaceTaskEntries（权威 hydrate + dirty flush）
     useFilesStore.setState((state) => ({
       tasks: state.tasks.map((t) =>
         t.taskId === file.taskId
@@ -140,21 +227,22 @@ export async function startTranscription(fileId: string): Promise<void> {
                 ...t.phases,
                 converting: { status: 'completed', progress: 100, tokens: 0 },
                 transcribing: {
+                  ...t.phases.transcribing,
                   status: 'completed',
                   progress: 100,
                   tokens: 0,
                   language: result.language,
                   entryCount: result.entries.length,
                   totalEntries: result.entries.length,
+                  asrReady: true,
                   keytermGroupName: selectedKeytermGroup?.name,
                 },
-                // AI 断句阶段的 LLM 消耗统一记录在此（历史/状态栏同源）
                 ...(aiEnabled
                   ? {
                       segmenting: {
                         status: 'completed' as const,
                         progress: 100,
-                        tokens: result.tokensUsed ?? 0,
+                        tokens: result.tokensUsed ?? t.phases.segmenting?.tokens ?? 0,
                         entryCount: result.entries.length,
                         totalEntries: result.entries.length,
                       },
@@ -169,7 +257,6 @@ export async function startTranscription(fileId: string): Promise<void> {
 
     toast.success(`转录完成！生成 ${result.entries.length} 条字幕`);
 
-    // 转录完成即入库：仅原文也可从历史导出；之后翻译完成会按 taskId 覆盖同一条
     if (result.entries.length > 0) {
       void saveTranslationHistory(
         file.taskId,
@@ -183,11 +270,10 @@ export async function startTranscription(fileId: string): Promise<void> {
     logger.error(appError.message, appError);
     toast.error(`转录失败: ${appError.message}`);
 
-    // pipeline 抛错时无条件标 transcribing 失败（不论之前是 upcoming 还是 active）
-    // converting 由 addFile 阶段负责，这里不动
-    useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed', progress: 0 });
-    if (segmentingActive) {
-      useFilesStore.getState().updatePhase(fileId, 'segmenting', { status: 'failed', progress: 0 });
+    if (segmentingActive || asrCompleted) {
+      useFilesStore.getState().updatePhase(fileId, 'segmenting', { status: 'failed' });
+    } else {
+      useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed' });
     }
   }
 }

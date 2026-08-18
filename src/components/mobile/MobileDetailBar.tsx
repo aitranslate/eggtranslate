@@ -18,6 +18,7 @@ import {
 import { exportFile } from '@/services/SubtitleExporter';
 import { ExportButton } from '@/components/common/ExportButton';
 import { canRetranscribe } from '@/utils/fileUtils';
+import { needsTranscriptionWork } from '@/utils/taskGuards';
 import { formatAiSegmentProgress } from '@/utils/uxHelpers';
 import type { ExportFormat } from '@/utils/fileExport';
 import toast from 'react-hot-toast';
@@ -95,11 +96,11 @@ export function MobileDetailBar({ file }: MobileDetailBarProps) {
 
   const idlePrimary = allPhasesDone
     ? '已完成'
-    : isAudioVideo && isTranscribeFailed && (file.entryCount ?? 0) === 0
-      ? '重试'
-      : isAudioVideo && !isTranscriptionDone && !isTranscribeFailed
-        ? '转译'
-        : '翻译';
+    : isAudioVideo && needsTranscriptionWork(file)
+      ? isTranscribeFailed || file.phases.segmenting?.status === 'failed'
+        ? '重试'
+        : '转译'
+      : '翻译';
   const primaryLabel = isQueued
     ? '取消排队'
     : isBusy

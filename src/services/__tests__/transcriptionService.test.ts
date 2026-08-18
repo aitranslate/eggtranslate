@@ -118,6 +118,27 @@ describe('transcriptionService.startTranscription', () => {
     expect(runTranscriptionPipeline).not.toHaveBeenCalled();
   });
 
+  it('does not skip when transcribing completed but asrReady and no entries', async () => {
+    const file = makeFile({
+      convertingStatus: 'completed',
+      transcribingStatus: 'completed',
+      aiSegmentationEnabled: true,
+      segmentingStatus: 'failed',
+    });
+    file.phases.transcribing.asrReady = true;
+    file.phases.transcribing.transcriptId = 'tid-keep';
+    useFilesStore.setState({ tasks: [makeTask(file)] });
+    useTranscriptionStore.setState({ apiKeys: 'test-key' });
+    vi.mocked(localforage.getItem).mockResolvedValue(new Blob(['mp3']));
+    vi.mocked(runTranscriptionPipeline).mockResolvedValue({
+      entries: [],
+      language: 'en',
+    });
+
+    await startTranscription('file_t1');
+    expect(runTranscriptionPipeline).toHaveBeenCalled();
+  });
+
   it('returns early when API key is not configured', async () => {
     useFilesStore.setState({
       tasks: [makeTask(makeFile({ fileRef: new File([''], 'test.mp3', { type: 'audio/mpeg' }) }))],
@@ -340,7 +361,7 @@ describe('transcriptionService.startTranscription', () => {
 
     vi.mocked(runTranscriptionPipeline).mockImplementation(
       async (_file, _keyterms, callbacks, options) => {
-        expect(options).toEqual({ useAiSegmentation: true });
+        expect(options?.useAiSegmentation).toBe(true);
         callbacks.onSegmenting?.();
         // segmenting 激活后：识别已完成
         let mid = useFilesStore.getState().tasks[0];
@@ -421,7 +442,7 @@ describe('transcriptionService.startTranscription', () => {
 
     vi.mocked(runTranscriptionPipeline).mockImplementation(
       async (_file, _keyterms, callbacks, options) => {
-        expect(options).toEqual({ useAiSegmentation: false });
+        expect(options?.useAiSegmentation).toBe(false);
         callbacks.onSegmenting?.();
         return { entries: [], language: 'en' };
       }
@@ -454,7 +475,8 @@ describe('transcriptionService.startTranscription', () => {
     await startTranscription('file_t1');
 
     const after = useFilesStore.getState().tasks[0];
-    expect(after.phases.transcribing.status).toBe('failed');
+    // ASR 已在 onSegmenting 时标完成；失败只落在断句，便于续跑断句
+    expect(after.phases.transcribing.status).toBe('completed');
     expect(after.phases.segmenting?.status).toBe('failed');
   });
 });

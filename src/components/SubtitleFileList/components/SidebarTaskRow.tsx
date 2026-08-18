@@ -32,6 +32,7 @@ import {
   useStreamingOverlayStore,
 } from '@/stores/streamingOverlayStore';
 import { canRetranscribe } from '@/utils/fileUtils';
+import { needsTranscriptionWork } from '@/utils/taskGuards';
 import type { ExportFormat } from '@/utils/fileExport';
 import { ExportButton } from '@/components/common/ExportButton';
 import { copyToClipboard } from '@/utils/appToast';
@@ -145,6 +146,7 @@ const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
     isQueued ||
     file.phases.converting.status === 'active' ||
     file.phases.transcribing.status === 'active' ||
+    file.phases.segmenting?.status === 'active' ||
     file.phases.translating.status === 'active';
 
   const canTranscribe = isAudioVideo && !isBusy && canRetranscribe(file) && !allPhasesDone;
@@ -210,7 +212,7 @@ const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
         onDequeue(file.id);
         return;
       }
-      if (isAudioVideo && !isTranscriptionDone) {
+      if (isAudioVideo && needsTranscriptionWork(file)) {
         void onTranscribeAndTranslate(file);
       } else {
         void onStartTranslation(file);
@@ -219,7 +221,6 @@ const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
     [
       isQueued,
       isAudioVideo,
-      isTranscriptionDone,
       onDequeue,
       onTranscribeAndTranslate,
       onStartTranslation,

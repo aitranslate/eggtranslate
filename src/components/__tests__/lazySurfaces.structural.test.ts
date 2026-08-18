@@ -69,10 +69,8 @@ describe('lazy surface wiring', () => {
     const hard = readSrc('services/sentenceSegmentation/hardSplit.ts');
     // sentence-splitter 仅由动态 import 的 sentenceSegmentation 图持有
     expect(hard).toMatch(/from\s+['"]sentence-splitter['"]/);
-    const aaiCaller = readSrc('services/assemblyaiService.ts');
-    expect(aaiCaller).toMatch(
-      /import\(['"]@\/services\/sentenceSegmentation['"]\)/
-    );
+    const pipeline = readSrc('services/transcriptionPipeline.ts');
+    expect(pipeline).toMatch(/@\/services\/sentenceSegmentation/);
 
     // project root is parent of src/
     const vite = readFileSync(resolve(root, '../vite.config.ts'), 'utf8');

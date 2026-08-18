@@ -251,6 +251,31 @@ describe('recoverInterruptedPhases still pure', () => {
     expect(recovered.phases.segmenting?.tokens).toBe(9);
     expect(recovered.phases.transcribing.status).toBe('failed');
   });
+
+  it('keeps transcribing completed when asrReady even if no entries', () => {
+    const recovered = recoverInterruptedPhases(
+      makeTask({
+        entryCount: 0,
+        subtitle_entries: [],
+        phases: {
+          workflow: 'full',
+          converting: { status: 'completed', progress: 100, tokens: 0 },
+          transcribing: {
+            status: 'completed',
+            progress: 100,
+            tokens: 0,
+            asrReady: true,
+            transcriptId: 'tid',
+          },
+          segmenting: { status: 'active', progress: 80, tokens: 9 },
+          translating: { status: 'upcoming', progress: 0, tokens: 0 },
+        },
+      })
+    );
+    expect(recovered.phases.segmenting?.status).toBe('failed');
+    expect(recovered.phases.transcribing.status).toBe('completed');
+    expect(recovered.phases.transcribing.transcriptId).toBe('tid');
+  });
 });
 
 describe('fileId helper sanity', () => {

@@ -11,6 +11,7 @@ import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { enqueueTask, enqueueAllUncompleted } from '@/services/queueService';
 import {
+  needsTranscriptionWork,
   resolveFullPathGuard,
   shouldGuardTranscriptionStart,
   shouldGuardTranslationStart,
@@ -70,12 +71,7 @@ export function startAllUncompleted(): boolean {
   const isTranslationConfigured = useTranslationConfigStore.getState().isConfigured;
   const apiKeys = useTranscriptionStore.getState().apiKeys;
 
-  const needsTranscription = files.some((f) => {
-    const isAv = f.fileType === 'audio' || f.fileType === 'video';
-    if (!isAv) return false;
-    if (f.phases.transcribing.status === 'completed') return false;
-    return true;
-  });
+  const needsTranscription = files.some((f) => needsTranscriptionWork(f));
 
   if (needsTranscription && shouldGuardTranscriptionStart(apiKeys, 'transcribe')) {
     return openTranscriptionSetup();
@@ -84,7 +80,7 @@ export function startAllUncompleted(): boolean {
   const needsTranslation = files.some((f) => {
     if (f.phases.translating.status === 'completed') return false;
     const isAv = f.fileType === 'audio' || f.fileType === 'video';
-    if (isAv && f.phases.transcribing.status !== 'completed') {
+    if (isAv && needsTranscriptionWork(f)) {
       return true;
     }
     return f.fileType === 'srt' || !f.fileType || f.phases.transcribing.status === 'completed';
@@ -100,8 +96,6 @@ export function startAllUncompleted(): boolean {
 
 /** 移动端主按钮：音视频未转录完走 full，否则 translate */
 export function startPrimaryForFile(file: SubtitleFileMetadata): boolean {
-  const isAv = file.fileType === 'audio' || file.fileType === 'video';
-  const transcribed = file.phases.transcribing.status === 'completed';
-  if (isAv && !transcribed) return startFullTask(file.id);
+  if (needsTranscriptionWork(file)) return startFullTask(file.id);
   return startTranslateTask(file.id);
 }

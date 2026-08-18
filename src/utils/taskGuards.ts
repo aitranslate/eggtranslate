@@ -2,8 +2,42 @@
  * 任务启动前的配置守卫（纯函数，不依赖 onboarding UI）
  */
 
+import type { FilePhases } from '@/types';
+
 type StartIntent = 'translate' | 'full' | 'transcribe' | 'batch';
 type SetupGuardKind = 'translation' | 'transcription';
+
+type TranscriptionWorkFile = {
+  fileType?: string;
+  aiSegmentationEnabled?: boolean;
+  entryCount?: number;
+  phases: FilePhases;
+};
+
+/**
+ * 音视频是否还要跑识别 / 断句（含续跑）。
+ * 识别已 completed 且没有字幕、但有 transcript.id 或本地词表时，仍要再进管线。
+ */
+export function needsTranscriptionWork(file: TranscriptionWorkFile): boolean {
+  const isAv = file.fileType === 'audio' || file.fileType === 'video';
+  if (!isAv) return false;
+  const tr = file.phases.transcribing;
+  if (!tr || tr.status !== 'completed') return true;
+  if ((file.entryCount ?? 0) > 0) return false;
+  // 识别已完成、没有字幕：
+  // - 词表已在本地但 AI 断句未完成 → 只续断句
+  // - 只有 transcript.id、词表还没落地 → 继续 poll
+  // - 空音频（asrReady 且无词）或旧数据 → 视为完成，避免死循环
+  const segmenting = file.phases.segmenting;
+  if (
+    file.aiSegmentationEnabled &&
+    segmenting &&
+    segmenting.status !== 'completed'
+  ) {
+    return Boolean(tr.asrReady || tr.transcriptId);
+  }
+  return Boolean(tr.transcriptId && !tr.asrReady);
+}
 
 /** AssemblyAI Key 是否已配置 */
 export function isTranscriptionApiConfigured(apiKeys: string | null | undefined): boolean {
