@@ -850,17 +850,6 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
 
   const searchToolbar = (
     <div className="se-toolbar flex-shrink-0">
-      <div className="se-toolbar-progress">
-        <div className="se-progress-track">
-          <div
-            className="se-progress-fill"
-            style={{ width: `${translationStats.percentage}%` }}
-          />
-        </div>
-        <span className="se-progress-label tabular-nums">
-          {translationStats.percentage}%
-        </span>
-      </div>
       <div className="se-toolbar-filters">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--wb-text-3)]" />

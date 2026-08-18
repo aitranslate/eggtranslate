@@ -227,10 +227,16 @@ export async function startTranslation(
           if (newTokens !== undefined && newTokens > 0) {
             deps.updatePhase(fileId, 'translating', {
               progress,
+              entryCount: current,
+              totalEntries: total,
               tokensDelta: newTokens,
             });
           } else {
-            deps.updatePhase(fileId, 'translating', { progress });
+            deps.updatePhase(fileId, 'translating', {
+              progress,
+              entryCount: current,
+              totalEntries: total,
+            });
           }
         },
         getRelevantTerms: (batchText: string, before: string, after: string): Term[] => {

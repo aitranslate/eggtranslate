@@ -14,6 +14,7 @@ import {
   unsupportedImportMessage,
   writeLastExportFormat,
   formatAiSegmentProgress,
+  formatPhaseCountProgress,
   LAST_EXPORT_FORMAT_KEY,
 } from '../uxHelpers';
 import type { FilePhases } from '@/types';
@@ -71,6 +72,17 @@ describe('uxHelpers', () => {
       expect(formatAiSegmentProgress(undefined)).toBeNull();
       expect(formatAiSegmentProgress({ entryCount: 1 })).toBeNull();
       expect(formatAiSegmentProgress({ totalEntries: 8 })).toBeNull();
+    });
+  });
+
+  describe('formatPhaseCountProgress', () => {
+    it('appends n/m when total is known', () => {
+      expect(formatPhaseCountProgress('翻译', 1, 120)).toBe('翻译 1/120');
+      expect(formatPhaseCountProgress('翻译', 100, 100)).toBe('翻译 100/100');
+    });
+
+    it('falls back to the name without a total', () => {
+      expect(formatPhaseCountProgress('翻译', 3, 0)).toBe('翻译');
     });
   });
 

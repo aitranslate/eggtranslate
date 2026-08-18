@@ -50,6 +50,17 @@ export function formatAiSegmentProgress(seg?: {
   return `AI断句 ${seg.entryCount}/${seg.totalEntries}`;
 }
 
+/** 阶段标签条数进度，如「翻译 13/120」。总数未知时只返回名称。 */
+export function formatPhaseCountProgress(
+  name: string,
+  current: number,
+  total: number
+): string {
+  if (!Number.isFinite(total) || total <= 0) return name;
+  const cur = Math.max(0, Math.min(Math.floor(current), total));
+  return `${name} ${cur}/${total}`;
+}
+
 /** 从 phases 判断是否有进行中阶段 */
 export function hasActivePhase(phases: FilePhases | null | undefined): boolean {
   if (!phases) return false;

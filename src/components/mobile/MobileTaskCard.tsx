@@ -76,9 +76,8 @@ export const MobileTaskCard = memo(function MobileTaskCard({
       }
       if ((file.entryCount ?? 0) > 0) parts.push(`${file.entryCount} 条`);
     }
-    if (pct > 0) parts.push(`${pct}%`);
     return parts.join(' · ');
-  }, [file, pct]);
+  }, [file]);
 
   const handleCopyError = useCallback(
     async (e: React.MouseEvent) => {

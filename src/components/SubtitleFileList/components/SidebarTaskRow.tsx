@@ -37,6 +37,7 @@ import { ExportButton } from '@/components/common/ExportButton';
 import { copyToClipboard } from '@/utils/appToast';
 import {
   formatAiSegmentProgress,
+  formatPhaseCountProgress,
   getFailedPhaseError,
   shouldShowTaskErrorDetail,
 } from '@/utils/uxHelpers';
@@ -103,14 +104,15 @@ const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
   const streamOverlay = useStreamingOverlayStore(
     (s) => s.overlays[file.id] ?? EMPTY_STREAMING_OVERLAY
   );
-  const pct = useMemo(() => {
-    const { percentage } = calcDisplayTranslationProgress(
+  const translateCounts = useMemo(() => {
+    const { translated, total, percentage } = calcDisplayTranslationProgress(
       file.translatedCount ?? 0,
       file.entryCount ?? 0,
       countStreamingLines(streamOverlay)
     );
-    return percentage;
+    return { translated, total, percentage };
   }, [file.translatedCount, file.entryCount, streamOverlay]);
+  const pct = translateCounts.percentage;
 
   const isFailed = badge.color === 'red';
   const failedInfo = useMemo(() => getFailedPhaseError(file.phases), [file.phases]);
@@ -170,9 +172,8 @@ const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
         parts.push(formatDuration(file.duration));
       }
     }
-    if (pct > 0 && pct < 100) parts.push(`${pct}%`);
     return parts.join(' · ');
-  }, [file, pct]);
+  }, [file]);
 
   const handlePrimary = useCallback(
     (e: React.MouseEvent) => {
@@ -296,7 +297,11 @@ const SidebarTaskRow: React.FC<SidebarTaskRowProps> = ({
                     ? st === 'active'
                       ? formatAiSegmentProgress(seg) ?? 'AI断句'
                       : 'AI断句'
-                    : phaseTranslateLabel;
+                    : formatPhaseCountProgress(
+                        phaseTranslateLabel,
+                        translateCounts.translated,
+                        translateCounts.total
+                      );
               return (
                 <span
                   key={phase}
