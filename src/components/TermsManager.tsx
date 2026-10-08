@@ -392,7 +392,7 @@ export const TermsManager: React.FC<TermsManagerProps> = ({
               onKeyDown={(e) => e.key === 'Enter' && onAddTerm()}
               aria-label="备注（可选）"
             />
-            <button type="button" className="wb-tool primary wb-glossary-add-btn" onClick={onAddTerm}>
+            <button type="button" className="wb-tool wb-glossary-add-btn" onClick={onAddTerm}>
               <Plus className="h-3.5 w-3.5" />
               添加
             </button>

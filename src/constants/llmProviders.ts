@@ -5,9 +5,9 @@
 
 export type LlmProviderId =
   | 'agnes'
+  | 'index-translate'
   | 'deepseek'
   | 'qwen'
-  | 'zhipu'
   | 'doubao'
   | 'chatgpt'
   | 'gemini'
@@ -42,7 +42,7 @@ export interface LlmProviderPreset {
 }
 
 /**
- * 预设原则：字幕翻译用 Flash / Mini 档即可，不必上 Pro / Max。
+ * 预设原则：字幕翻译用 Flash / Lite / Mini 档即可，不必上 Pro / Max。
  * 模型 ID 随厂商更新，优先「当前代 × 轻量档」。
  */
 export const LLM_PROVIDER_PRESETS: LlmProviderPreset[] = [
@@ -67,10 +67,25 @@ export const LLM_PROVIDER_PRESETS: LlmProviderPreset[] = [
     iconSrc: '/icons/providers/agnes.svg',
   },
   {
+    id: 'index-translate',
+    name: 'Index-Translate（bilibili）',
+    shortName: 'Index',
+    baseURL: 'https://index-translate.bilibili.com/v1',
+    model: 'Index-Translate-35B-A3B',
+    badge: '免费',
+    badgeTone: 'free',
+    requiresKey: false,
+    keyUrl: 'https://github.com/bilibili/Index-Translate',
+    // 免 Key 且 CORS 开放，浏览器可直接调；批量建议 ≤10（公共网关约 10s 超时）
+    hint: '免 Key · 公开 CORS · 批次建议 ≤10',
+    iconSrc: '/icons/providers/index-translate.svg',
+  },
+  {
     id: 'deepseek',
     name: 'DeepSeek',
     shortName: 'DeepSeek',
     baseURL: 'https://api.deepseek.com/v1',
+    // 旧的 deepseek-chat / deepseek-reasoner 已于 2026-07-24 弃用，别再回填
     model: 'deepseek-v4-flash',
     badge: '推荐',
     badgeTone: 'recommend',
@@ -83,30 +98,21 @@ export const LLM_PROVIDER_PRESETS: LlmProviderPreset[] = [
     name: '通义千问',
     shortName: '通义',
     baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    model: 'qwen3.6-flash',
+    // Qwen Flash 线最新在售：qwen3.8-flash（其后才是 3.7 / 3.6）
+    model: 'qwen3.8-flash',
     keyUrl: 'https://dashscope.console.aliyun.com/',
-    hint: '3.6 Flash · 低成本',
+    hint: '3.8 Flash · 低成本',
     iconSrc: '/icons/providers/qwen.svg',
-  },
-  {
-    id: 'zhipu',
-    name: '智谱 AI',
-    shortName: '智谱',
-    baseURL: 'https://open.bigmodel.cn/api/paas/v4',
-    model: 'glm-4.7-flash',
-    keyUrl: 'https://open.bigmodel.cn/',
-    hint: '4.7 Flash · 免费档',
-    iconSrc: '/icons/providers/zhipu.svg',
   },
   {
     id: 'doubao',
     name: '豆包',
     shortName: '豆包',
     baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
-    // Seed 2.1 Turbo：当前代高频/低成本档（非 Pro）；方舟也可填接入点 ID
-    model: 'doubao-seed-2-1-turbo-260628',
+    // 豆包没有 flash 命名，mini 档即对位档；原 2.1-turbo 已被官方列入「即将下线」
+    model: 'doubao-seed-2.0-mini',
     keyUrl: 'https://console.volcengine.com/ark',
-    hint: '2.1 Turbo · 可改成接入点 ID',
+    hint: 'Seed 2.0 Mini · 可改成接入点 ID',
     iconSrc: '/icons/providers/doubao.svg',
   },
   {
@@ -114,9 +120,11 @@ export const LLM_PROVIDER_PRESETS: LlmProviderPreset[] = [
     name: 'OpenAI',
     shortName: 'OpenAI',
     baseURL: 'https://api.openai.com/v1',
-    model: 'gpt-5-mini',
+    // GPT-6 世代分 Astra / Sol / Luna，Luna 即「高效高吞吐」那一档。
+    // 注意：6.1 目前只出了 Sol（贵一档），Luna 仍是 gpt-6-luna，没有 6.1-luna
+    model: 'gpt-6-luna',
     keyUrl: 'https://platform.openai.com/api-keys',
-    hint: 'GPT-5 mini · 高性价比',
+    hint: 'GPT-6 Luna · 轻量档',
     iconSrc: '/icons/providers/chatgpt.svg',
     iconMono: true,
   },
@@ -125,9 +133,9 @@ export const LLM_PROVIDER_PRESETS: LlmProviderPreset[] = [
     name: 'Google Gemini',
     shortName: 'Gemini',
     baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    model: 'gemini-3.5-flash',
+    model: 'gemini-3.8-flash',
     keyUrl: 'https://aistudio.google.com/apikey',
-    hint: '3.5 Flash · OpenAI 兼容',
+    hint: '3.8 Flash · OpenAI 兼容',
     iconSrc: '/icons/providers/gemini.svg',
   },
   {
@@ -135,7 +143,8 @@ export const LLM_PROVIDER_PRESETS: LlmProviderPreset[] = [
     name: 'OpenRouter',
     shortName: 'OpenRouter',
     baseURL: 'https://openrouter.ai/api/v1',
-    model: 'google/gemini-3.5-flash',
+    // 跟随上面 Gemini 的 flash 档
+    model: 'google/gemini-3.8-flash',
     keyUrl: 'https://openrouter.ai/keys',
     hint: '聚合 · 默认 Gemini Flash',
     iconSrc: '/icons/providers/openrouter.svg',

@@ -203,9 +203,10 @@ async function main() {
       if(idx>=0) profiles[idx]={...profiles[idx],...custom};
       else profiles.unshift(custom);
       // ensure other slots exist as empty stubs so ensureProfiles is happy
-      for (const id of ['agnes','deepseek','qwen','zhipu','doubao','chatgpt','gemini','openrouter','ollama']) {
+      for (const id of ['agnes','index-translate','deepseek','qwen','doubao','chatgpt','gemini','openrouter','ollama']) {
         if(!profiles.some(p=>p.id===id)) {
-          profiles.push({id,name:id,baseURL:'',apiKey:'',model:'',presetId:id,requiresKey:id!=='agnes'});
+          // agnes 与 index-translate 都是免 Key 档
+          profiles.push({id,name:id,baseURL:'',apiKey:'',model:'',presetId:id,requiresKey:!['agnes','index-translate'].includes(id)});
         }
       }
       config={

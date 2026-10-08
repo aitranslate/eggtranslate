@@ -17,7 +17,7 @@
 import type { LlmProfile, TranslationConfig } from '@/types';
 import { callLLM, callLLMStream } from '@/utils/llmApi';
 import { jsonrepair } from 'jsonrepair';
-import { generateSharedPrompt, generateDirectPrompt } from '@/utils/translationPrompts';
+import { generateSharedPrompt, generateDirectPrompt, type PromptVariant } from '@/utils/translationPrompts';
 import { extractStreamingDirects, extractStreamingEntries } from '@/utils/streamingJson';
 import {
   getActiveLlmConfig,
@@ -321,11 +321,15 @@ export async function translateBatch(
 
   const textToTranslate = texts.join('\n');
   const sharedPrompt = generateSharedPrompt(contextBefore, contextAfter, terms);
+  // 纯翻译模型需要字段语义版 prompt（generic 模板会让它把译文写进 origin、direct 留空）
+  const promptVariant: PromptVariant =
+    profile.presetId === 'index-translate' ? 'translation-specialist' : 'generic';
   const directPrompt = generateDirectPrompt(
     textToTranslate,
     sharedPrompt,
     config.sourceLanguage,
-    config.targetLanguage
+    config.targetLanguage,
+    promptVariant
   );
 
   const llmConfig = {

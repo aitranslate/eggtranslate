@@ -2512,8 +2512,10 @@ html.dark .wb-alert {
   box-shadow: 0 0 0 3px var(--wb-brand-soft, color-mix(in srgb, var(--wb-brand) 18%, transparent));
 }
 
-/* 工具条按钮在白面上保持描边，避免与背景糊在一起 */
-.wb-panel .wb-tool {
+/* 工具条按钮在白面上保持描边，避免与背景糊在一起。
+   必须排除变体：.wb-tool.primary 自带底色 + 白字，与本规则特异度同为 (0,2,0)，
+   而本规则写在后面会赢掉 background，导致白字落在浅色面板底上（按钮看起来是空的）。 */
+.wb-panel .wb-tool:not(.primary):not(.danger) {
   background: var(--wb-panel);
   border-color: var(--wb-border);
 }

@@ -18,3 +18,5 @@ claude.md
 /test-fixtures/
 /downloads/
 /test-media-list.json
+# 本地临时素材（如手动上传测试用的字幕），勿提交
+/tmp/
