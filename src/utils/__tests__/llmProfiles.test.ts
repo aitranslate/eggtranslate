@@ -6,7 +6,9 @@ import {
   isTranslationLlmConfigured,
   selectProvider,
   updateActiveProfile,
+  DEFAULT_PROVIDER_ID,
 } from '../llmProfiles';
+import { getProviderById } from '@/constants/llmProviders';
 import type { TranslationConfig } from '@/types';
 
 function baseConfig(overrides?: Partial<TranslationConfig>): TranslationConfig {
@@ -72,7 +74,7 @@ describe('llmProfiles', () => {
     expect(fixed.profiles.length).toBeGreaterThanOrEqual(10);
     expect(fixed.profiles.some((p) => p.id === 'agnes')).toBe(true);
     expect(fixed.profiles.find((p) => p.id === 'custom')?.apiKey).toBe('k');
-    expect(fixed.activeProfileId).toBe('agnes');
+    expect(fixed.activeProfileId).toBe(DEFAULT_PROVIDER_ID);
   });
 
   it('isTranslationLlmConfigured only checks active profile key', () => {
@@ -138,7 +140,16 @@ describe('llmProfiles', () => {
       const fixed = ensureProfiles(only);
       expect(fixed.profiles.length).toBeGreaterThan(0);
       expect(fixed.profiles.some((p) => p.id === 'zhipu')).toBe(false);
-      expect(fixed.activeProfileId).toBe('agnes');
+      expect(fixed.activeProfileId).toBe(DEFAULT_PROVIDER_ID);
+    });
+
+    it('默认服务商免 Key，新用户开箱即用', () => {
+      // 默认档要满足「打开就能翻」：requiresKey 为 false 时不需要任何配置就算已就绪
+      const preset = getProviderById(DEFAULT_PROVIDER_ID);
+      expect(preset.requiresKey).toBe(false);
+      const config = ensureProfiles({ ...baseConfig(), activeProfileId: '' });
+      expect(config.activeProfileId).toBe(DEFAULT_PROVIDER_ID);
+      expect(isTranslationLlmConfigured(config)).toBe(true);
     });
   });
 });

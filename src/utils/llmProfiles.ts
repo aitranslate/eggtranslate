@@ -28,10 +28,20 @@ export function createDefaultProfiles(): LlmProfile[] {
   return LLM_PROVIDER_PRESETS.map((p) => createProfileFromPreset(p));
 }
 
+/**
+ * 默认启用的服务商。
+ *
+ * 选 index-translate：免 Key、公开 CORS，浏览器可直接调，新用户打开就能
+ * 上传 SRT 直接翻，不用先去配 API Key。代价是它是公共网关、有约 10s
+ * 超时，所以默认 batchSize 压到 10（见 translationConfigStore）。
+ * 已存过配置的老用户不受影响——他们各自的 activeProfileId 照旧。
+ */
+export const DEFAULT_PROVIDER_ID: LlmProviderId = 'index-translate';
+
 export function getActiveProfile(config: TranslationConfig): LlmProfile {
   const { profiles, activeProfileId } = config;
   if (!profiles?.length) {
-    return createProfileFromPreset(getProviderById('agnes'));
+    return createProfileFromPreset(getProviderById(DEFAULT_PROVIDER_ID));
   }
   return profiles.find((p) => p.id === activeProfileId) ?? profiles[0];
 }
@@ -115,6 +125,6 @@ export function ensureProfiles(config: TranslationConfig): TranslationConfig {
   return {
     ...config,
     profiles,
-    activeProfileId: activeExists ? config.activeProfileId : 'agnes',
+    activeProfileId: activeExists ? config.activeProfileId : DEFAULT_PROVIDER_ID,
   };
 }

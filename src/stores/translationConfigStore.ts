@@ -17,6 +17,7 @@ import {
   createDefaultProfiles,
   ensureProfiles,
   isTranslationLlmConfigured,
+  DEFAULT_PROVIDER_ID,
 } from '@/utils/llmProfiles';
 
 interface TranslationConfigStore {
@@ -39,10 +40,12 @@ const defaultProfiles = createDefaultProfiles();
 
 const DEFAULT_CONFIG: TranslationConfig = {
   profiles: defaultProfiles,
-  activeProfileId: 'agnes',
+  activeProfileId: DEFAULT_PROVIDER_ID,
   sourceLanguage: 'English',
   targetLanguage: '简体中文',
-  batchSize: 20,
+  // 默认服务商是公共网关（约 10s 超时），批次 20 会 504；10 稳定在 3~4s。
+  // 换成本地 Ollama 或云端接口后可以在设置里调大。
+  batchSize: 10,
   threadCount: 4,
   contextBefore: 5,
   contextAfter: 3,
