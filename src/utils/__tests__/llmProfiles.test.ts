@@ -94,4 +94,51 @@ describe('llmProfiles', () => {
     const config = { ...baseConfig(), profiles, activeProfileId: 'agnes' };
     expect(isTranslationLlmConfigured(config)).toBe(true);
   });
+
+  describe('ensureProfiles 清理已下线的服务商', () => {
+    it('剔除老用户 localStorage 里的 zhipu 档案', () => {
+      const stale = baseConfig();
+      stale.profiles.push({
+        id: 'zhipu',
+        name: '智谱 AI',
+        baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+        apiKey: 'old-key',
+        model: 'glm-4.7-flash',
+        presetId: 'zhipu',
+      });
+
+      const fixed = ensureProfiles(stale);
+      expect(fixed.profiles.some((p) => p.id === 'zhipu')).toBe(false);
+      // 其余档案（含用户自己的 Key）不受影响
+      expect(fixed.profiles.find((p) => p.id === 'custom')?.baseURL).toBeDefined();
+    });
+
+    it('active 指向 zhipu 时回落到默认档案，不留悬空 id', () => {
+      const stale = baseConfig({ activeProfileId: 'zhipu' });
+      const fixed = ensureProfiles(stale);
+      expect(fixed.activeProfileId).not.toBe('zhipu');
+      expect(fixed.profiles.some((p) => p.id === fixed.activeProfileId)).toBe(true);
+    });
+
+    it('档案只剩被移除项时用默认档案兜底，不产出空列表', () => {
+      const only = baseConfig({
+        activeProfileId: 'zhipu',
+        profiles: [
+          {
+            id: 'zhipu',
+            name: '智谱 AI',
+            baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+            apiKey: 'old-key',
+            model: 'glm-4.7-flash',
+            presetId: 'zhipu',
+          },
+        ],
+      });
+
+      const fixed = ensureProfiles(only);
+      expect(fixed.profiles.length).toBeGreaterThan(0);
+      expect(fixed.profiles.some((p) => p.id === 'zhipu')).toBe(false);
+      expect(fixed.activeProfileId).toBe('agnes');
+    });
+  });
 });

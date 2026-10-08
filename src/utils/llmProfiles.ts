@@ -85,9 +85,20 @@ export function selectProvider(
   return { ...config, profiles, activeProfileId: providerId };
 }
 
+/**
+ * 已从预设中移除的服务商 id。
+ *
+ * 移除某个服务商时把 id 留在这里：老用户 localStorage 里那条档案会变成
+ * 孤儿（选择器再也列不出来，也没法再编辑），而 profile.id 又是持久化主键，
+ * 直接改 id 会让已存的用户配置认不出来。因此按 id 清理，比改主键安全。
+ */
+const REMOVED_PROVIDER_IDS = new Set(['zhipu']);
+
 /** 确保档案完整且 active 有效 */
 export function ensureProfiles(config: TranslationConfig): TranslationConfig {
-  const profiles = config.profiles?.length ? [...config.profiles] : createDefaultProfiles();
+  // 先剔除已下线的服务商，再判空——否则「只剩被移除项」的用户会被清空
+  const kept = (config.profiles ?? []).filter((p) => !REMOVED_PROVIDER_IDS.has(p.id));
+  const profiles = kept.length ? kept : createDefaultProfiles();
 
   // 补齐缺失的服务商槽位，并同步预设字段（如 requiresKey）
   for (const preset of LLM_PROVIDER_PRESETS) {
@@ -99,6 +110,7 @@ export function ensureProfiles(config: TranslationConfig): TranslationConfig {
     }
   }
 
+  // active 指向已移除的服务商时同样落到默认值
   const activeExists = profiles.some((p) => p.id === config.activeProfileId);
   return {
     ...config,
