@@ -59,6 +59,42 @@ async function readBlobSlice(blob: Blob, start: number, end: number): Promise<Ar
   return blob.slice(start, end).arrayBuffer();
 }
 
+interface TopLevelBox {
+  type: string;
+  start: number;
+  size: number;
+}
+
+/**
+ * 扫顶层 box（只读每个 box 的 8/16 字节头，数据靠 seek 跳过）。
+ *
+ * 需要它是因为 **moov 可能在文件末尾**（非 faststart 的 mp4，例如大多数
+ * 录屏 / 下载的视频）。mp4box 不开 keepMdatData 时，moov 之前的样本会被直接
+ * 丢掉，于是顺序读完整份文件一个样本都抽不到——先扫出 moov 的位置，把它先喂进去，
+ * 再按顺序喂 mdat，才能正常抽帧，而且不必把整段 mdat 留在堆上。
+ */
+export async function scanTopLevelBoxes(blob: Blob, limit = 64): Promise<TopLevelBox[]> {
+  const boxes: TopLevelBox[] = [];
+  let pos = 0;
+  for (let i = 0; i < limit && pos + 8 <= blob.size; i += 1) {
+    const head = new DataView(await readBlobSlice(blob, pos, Math.min(pos + 16, blob.size)));
+    if (head.byteLength < 8) break;
+    let size = head.getUint32(0);
+    const type = String.fromCharCode(head.getUint8(4), head.getUint8(5), head.getUint8(6), head.getUint8(7));
+    let header = 8;
+    if (size === 1 && head.byteLength >= 16) {
+      header = 16;
+      size = Number(head.getBigUint64(8));
+    } else if (size === 0) {
+      size = blob.size - pos;
+    }
+    if (!Number.isFinite(size) || size < header || pos + size > blob.size) break;
+    boxes.push({ type, start: pos, size });
+    pos += size;
+  }
+  return boxes;
+}
+
 /**
  * 从 File/Blob/ArrayBuffer 抽取 AAC → ADTS。
  * 大文件务必传 File/Blob，走流式路径。
@@ -233,7 +269,10 @@ export async function extractAacAdtsFromIsoBmff(
       // 文件读完了，但 mp4box 还扣着最后一批样本：别再涨数字，切成「整理音频」
       emit(0.99, 'finalize');
       const waitStart = Date.now();
+      // 有样本进来时给足缓冲；一个样本都没有说明这份容器抽不出来，立刻放弃，
+      // 交给 prepareAsrAudio 走"原文件直传"（原来这里会干等 180 s）。
       const maxWaitMs = Math.min(180_000, Math.max(8_000, totalBytes / 100));
+      const noSampleWaitMs = 1_500;
       const poll = () => {
         if (settled) return;
         if (expected > 0 && gotSamples >= expected) {
@@ -246,6 +285,10 @@ export async function extractAacAdtsFromIsoBmff(
         if (gotSamples > 0 && idle > 400) {
           emit(1, 'finalize');
           tryComplete(true);
+          return;
+        }
+        if (gotSamples === 0 && waited > noSampleWaitMs) {
+          settle(null);
           return;
         }
         if (waited > maxWaitMs) {
@@ -270,16 +313,33 @@ export async function extractAacAdtsFromIsoBmff(
 
         const blob = source as Blob;
         const size = blob.size;
+        const boxes = await scanTopLevelBoxes(blob);
+        const moov = boxes.find((b) => b.type === 'moov');
+        if (moov) {
+          // 索引先到，后面 mdat 里的样本才会被 mp4box 收下
+          const ftyp = boxes.find((b) => b.type === 'ftyp');
+          if (ftyp) {
+            const head = await readBlobSlice(blob, ftyp.start, ftyp.start + ftyp.size);
+            mp4.appendBuffer(MP4BoxBuffer.fromArrayBuffer(head, ftyp.start));
+          }
+          const index = await readBlobSlice(blob, moov.start, moov.start + moov.size);
+          mp4.appendBuffer(MP4BoxBuffer.fromArrayBuffer(index, moov.start));
+        }
+
         let offset = 0;
-        // mp4box 可能要求按 next offset 读；从 0 顺序喂即可覆盖常见 progressive/flat mp4
         while (offset < size) {
           if (settled) return;
-          const end = Math.min(offset + STREAM_CHUNK, size);
+          if (moov && offset >= moov.start && offset < moov.start + moov.size) {
+            offset = moov.start + moov.size;
+            continue;
+          }
+          let end = Math.min(offset + STREAM_CHUNK, size);
+          if (moov && offset < moov.start && end > moov.start) end = moov.start;
           const chunk = await readBlobSlice(blob, offset, end);
           const buf = MP4BoxBuffer.fromArrayBuffer(chunk, offset);
           const next = mp4.appendBuffer(buf);
           // appendBuffer 返回下一期望文件位置；若给出更合理的 next 则跟随
-          if (typeof next === 'number' && next > offset) {
+          if (typeof next === 'number' && next > offset && next <= size) {
             offset = next;
           } else {
             offset = end;
