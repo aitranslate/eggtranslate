@@ -63,10 +63,17 @@ async function readBlobSlice(blob: Blob, start: number, end: number): Promise<Ar
  * 从 File/Blob/ArrayBuffer 抽取 AAC → ADTS。
  * 大文件务必传 File/Blob，走流式路径。
  */
+/** 抽取的三个阶段：读盘 → 抽帧 → 收尾（flush 后等 mp4box 吐最后一批） */
+export type DemuxPhase = 'read' | 'extract' | 'finalize';
+
 export async function extractAacAdtsFromIsoBmff(
   source: File | Blob | ArrayBuffer,
   options?: {
-    onProgress?: (ratio: number) => void;
+    /**
+     * 进度回调。ratio 单调不减，phase 说明当前在干什么：
+     * 读盘占 0-0.45，抽帧占 0.45-0.95，收尾 0.99，完成 1。
+     */
+    onProgress?: (ratio: number, phase: DemuxPhase) => void;
     /** 仅 ArrayBuffer 时可选，用于超时估算 */
     byteLengthHint?: number;
   }
@@ -75,6 +82,14 @@ export async function extractAacAdtsFromIsoBmff(
     source instanceof ArrayBuffer
       ? source.byteLength
       : (source as Blob).size || options?.byteLengthHint || 0;
+
+  // 进度必须是单调的：读盘和抽帧两路回调交替触发，回退会让用户看到百分比倒退
+  let lastRatio = 0;
+  const emit = (ratio: number, phase: DemuxPhase) => {
+    const next = Math.min(1, Math.max(lastRatio, ratio));
+    lastRatio = next;
+    options?.onProgress?.(next, phase);
+  };
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -196,13 +211,13 @@ export async function extractAacAdtsFromIsoBmff(
         lastGotAt = Date.now();
       }
       if (expected > 0) {
-        options?.onProgress?.(Math.min(0.99, gotSamples / expected));
-      } else if (totalBytes > 0) {
-        // 无 nb_samples 时用读取进度（由外部 stream 更新更准；这里保守）
-        options?.onProgress?.(Math.min(0.95, gotSamples / 100000));
+        emit(0.45 + 0.5 * Math.min(1, gotSamples / expected), 'extract');
+      } else {
+        // 没有 nb_samples：按已抽帧数保守估，读盘阶段已经占住 0-0.45
+        emit(0.45 + 0.5 * Math.min(1, gotSamples / 100_000), 'extract');
       }
       if (expected > 0 && gotSamples >= expected && streamDone) {
-        options?.onProgress?.(1);
+        emit(1, 'finalize');
         tryComplete(true);
       }
     };
@@ -215,19 +230,21 @@ export async function extractAacAdtsFromIsoBmff(
         fail(e);
         return;
       }
+      // 文件读完了，但 mp4box 还扣着最后一批样本：别再涨数字，切成「整理音频」
+      emit(0.99, 'finalize');
       const waitStart = Date.now();
       const maxWaitMs = Math.min(180_000, Math.max(8_000, totalBytes / 100));
       const poll = () => {
         if (settled) return;
         if (expected > 0 && gotSamples >= expected) {
-          options?.onProgress?.(1);
+          emit(1, 'finalize');
           tryComplete(true);
           return;
         }
         const idle = Date.now() - lastGotAt;
         const waited = Date.now() - waitStart;
         if (gotSamples > 0 && idle > 400) {
-          options?.onProgress?.(1);
+          emit(1, 'finalize');
           tryComplete(true);
           return;
         }
@@ -246,7 +263,7 @@ export async function extractAacAdtsFromIsoBmff(
         if (source instanceof ArrayBuffer) {
           const buf = MP4BoxBuffer.fromArrayBuffer(source, 0);
           mp4.appendBuffer(buf);
-          options?.onProgress?.(0.5);
+          emit(0.45, 'extract');
           feedDone();
           return;
         }
@@ -268,8 +285,8 @@ export async function extractAacAdtsFromIsoBmff(
             offset = end;
           }
           if (size > 0) {
-            // 读盘进度最多到 0.85，余量留给抽帧
-            options?.onProgress?.(Math.min(0.85, (offset / size) * 0.85));
+            // 读盘只占前 45%，后面的进度留给真正耗时的抽帧
+            emit(0.45 * Math.min(1, offset / size), 'read');
           }
           // 让出主线程，避免长时间阻塞导致页假死
           await new Promise((r) => setTimeout(r, 0));

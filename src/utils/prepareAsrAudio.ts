@@ -13,6 +13,9 @@ import {
 
 export type AsrAudioVia = 'demux-aac' | 'original-audio';
 
+/** 进度回调的第二参数：当前在做哪一步（给 toast 用） */
+export type AsrPreparePhase = '读取文件' | '提取音轨' | '整理音频';
+
 export interface AsrAudioResult {
   blob: Blob;
   mime: string;
@@ -54,7 +57,7 @@ const UNSUPPORTED_CONTAINER = /\.(mkv|avi|wmv|mpeg|mpg)$/i;
  */
 export async function prepareAsrAudio(
   file: File,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number, phase?: AsrPreparePhase) => void
 ): Promise<AsrAudioResult> {
   onProgress?.(0.05);
   const headCap = Math.min(16, file.size);
@@ -67,7 +70,11 @@ export async function prepareAsrAudio(
   if (isLikelyVideo(file) || shouldTryIsoBmffDemux(file, headBuf)) {
     try {
       const extracted = await extractAacAdtsFromIsoBmff(file, {
-        onProgress: (r) => onProgress?.(0.05 + 0.9 * Math.min(1, Math.max(0, r))),
+        onProgress: (r, phase) =>
+          onProgress?.(
+            0.05 + 0.9 * Math.min(1, Math.max(0, r)),
+            phase === 'read' ? '读取文件' : phase === 'extract' ? '提取音轨' : '整理音频'
+          ),
       });
       if (extracted && extracted.blob.size > 0) {
         onProgress?.(1);

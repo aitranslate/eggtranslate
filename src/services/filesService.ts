@@ -89,13 +89,14 @@ async function addMediaFile(
     // 2) 准备上传音频：抽 AAC 音轨 / 原文件直传（绝不存视频轨）
     logger.info(`[addFile] 准备 ASR 音频: ${file.name}`);
     toast.loading(`正在处理音频 ${file.name}…`, { id: toastId, duration: Infinity });
-    const asrAudio = await prepareAsrAudio(file, (p) => {
+    const asrAudio = await prepareAsrAudio(file, (p, phase) => {
       const pct = Math.round(Math.min(1, Math.max(0, p)) * 100);
       if (pct >= 2) {
-        toast.loading(`正在处理音频 ${file.name}… ${pct}%`, {
-          id: toastId,
-          duration: Infinity,
-        });
+        // 带上阶段：文件读完到 mp4box 吐完最后一帧之间数字不动，写着「整理音频」才不像卡死
+        toast.loading(
+          `正在处理音频 ${file.name}… ${phase ? phase + ' ' : ''}${pct}%`,
+          { id: toastId, duration: Infinity }
+        );
       }
     });
     await saveAsrAudio(result.task.taskId, asrAudio);
