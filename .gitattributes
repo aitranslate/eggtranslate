@@ -1,2 +1,5 @@
 # 统一使用 LF 换行符（Windows/Mac/Linux 一致）
 * text=auto eol=lf
+
+# 浏览器 wasm 模块（public/wasm）：绝不能当文本做换行转换
+*.wasm binary

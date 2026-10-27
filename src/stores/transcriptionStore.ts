@@ -10,7 +10,13 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { KeytermGroup, SubtitleLengthPreset } from '@/types/transcription';
+import type {
+  AsrEngine,
+  KeytermGroup,
+  LocalAsrBackend,
+  LocalAsrModelId,
+  SubtitleLengthPreset,
+} from '@/types/transcription';
 
 interface TranscriptionStore {
   apiKeys: string;
@@ -21,6 +27,14 @@ interface TranscriptionStore {
   subtitleLengthPreset: SubtitleLengthPreset;
   /** AI 断句兜底：规则断句找不到好切点时交给 LLM（翻译配置的 activeProfile） */
   aiSegmentationEnabled: boolean;
+  /** 识别引擎：云端 AssemblyAI / 本地 Bark 3.0（wasm） */
+  asrEngine: AsrEngine;
+  /** 本地引擎：选中的发布与设备 */
+  localAsrModel: LocalAsrModelId;
+  localAsrBackend: LocalAsrBackend;
+  setAsrEngine: (engine: AsrEngine) => void;
+  setLocalAsrModel: (model: LocalAsrModelId) => void;
+  setLocalAsrBackend: (backend: LocalAsrBackend) => void;
   updateKeytermGroups: (groups: KeytermGroup[]) => Promise<void>;
   setApiKeys: (keys: string) => void;
   setSubtitleLengthPreset: (preset: SubtitleLengthPreset) => void;
@@ -39,6 +53,9 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
       defaultKeytermGroupId: null,
       subtitleLengthPreset: 'standard',
       aiSegmentationEnabled: false,
+      asrEngine: 'cloud',
+      localAsrModel: 'plus',
+      localAsrBackend: 'auto',
 
       updateKeytermGroups: async (groups) => {
         set({ keytermGroups: groups });
@@ -60,6 +77,18 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
       setAiSegmentationEnabled: (enabled) => {
         set({ aiSegmentationEnabled: enabled });
       },
+
+      setAsrEngine: (engine) => {
+        set({ asrEngine: engine });
+      },
+
+      setLocalAsrModel: (model) => {
+        set({ localAsrModel: model });
+      },
+
+      setLocalAsrBackend: (backend) => {
+        set({ localAsrBackend: backend });
+      },
     }),
     {
       name: 'transcription-storage',
@@ -70,6 +99,9 @@ export const useTranscriptionStore = create<TranscriptionStore>()(
         subtitleLengthPreset: state.subtitleLengthPreset,
         defaultKeytermGroupId: state.defaultKeytermGroupId,
         aiSegmentationEnabled: state.aiSegmentationEnabled,
+        asrEngine: state.asrEngine,
+        localAsrModel: state.localAsrModel,
+        localAsrBackend: state.localAsrBackend,
       }),
     }
   )
@@ -83,3 +115,6 @@ export const useSubtitleLengthPreset = () => useTranscriptionStore((state) => st
 export const useSetSubtitleLengthPreset = () => useTranscriptionStore((state) => state.setSubtitleLengthPreset);
 export const useAiSegmentationEnabled = () => useTranscriptionStore((state) => state.aiSegmentationEnabled);
 export const useSetAiSegmentationEnabled = () => useTranscriptionStore((state) => state.setAiSegmentationEnabled);
+export const useAsrEngine = () => useTranscriptionStore((state) => state.asrEngine);
+export const useLocalAsrModel = () => useTranscriptionStore((state) => state.localAsrModel);
+export const useLocalAsrBackend = () => useTranscriptionStore((state) => state.localAsrBackend);

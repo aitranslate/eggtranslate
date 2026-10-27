@@ -3,6 +3,7 @@ import { ApiEndpointsSettings } from './ApiEndpointsSettings';
 import { SrtCharsSettings } from './SrtCharsSettings';
 import { AiSegmentationSettings } from './AiSegmentationSettings';
 import { KeytermGroupsSettings } from './KeytermGroupsSettings';
+import { AsrEngineSettings } from './SettingsModal/AsrEngineSettings';
 import {
   useKeytermGroups,
   useUpdateKeytermGroups,
@@ -21,6 +22,7 @@ export const TranscriptionSettings: React.FC<TranscriptionSettingsProps> = ({
 }) => {
   const apiKeys = useApiKeys();
   const setApiKeys = useSetApiKeys();
+  const asrEngine = useTranscriptionStore((state) => state.asrEngine);
   const keytermGroups = useKeytermGroups();
   const updateKeytermGroups = useUpdateKeytermGroups();
   const defaultKeytermGroupId = useTranscriptionStore((state) => state.defaultKeytermGroupId);
@@ -28,20 +30,38 @@ export const TranscriptionSettings: React.FC<TranscriptionSettingsProps> = ({
 
   return (
     <div className={compact ? 'space-y-4' : 'space-y-6'}>
-      <ApiEndpointsSettings
-        keys={apiKeys}
-        onKeysChange={setApiKeys}
-        compact={compact}
-      />
+      <AsrEngineSettings compact={compact} />
+      {asrEngine === 'cloud' && (
+        <ApiEndpointsSettings
+          keys={apiKeys}
+          onKeysChange={setApiKeys}
+          compact={compact}
+        />
+      )}
       <SrtCharsSettings compact={compact} />
       <AiSegmentationSettings compact={compact} />
-      <KeytermGroupsSettings
-        groups={keytermGroups}
-        onGroupsChange={updateKeytermGroups}
-        defaultKeytermGroupId={defaultKeytermGroupId}
-        onDefaultGroupChange={setDefaultKeytermGroupId}
-        compact={compact}
-      />
+      {asrEngine === 'cloud' ? (
+        <KeytermGroupsSettings
+          groups={keytermGroups}
+          onGroupsChange={updateKeytermGroups}
+          defaultKeytermGroupId={defaultKeytermGroupId}
+          onDefaultGroupChange={setDefaultKeytermGroupId}
+          compact={compact}
+        />
+      ) : (
+        <div className={compact ? 'space-y-1' : 'space-y-2'}>
+          <h3
+            className={
+              compact ? 'text-xs font-semibold text-[var(--wb-text)]' : 'apple-heading-small'
+            }
+          >
+            热词
+          </h3>
+          <p className="text-[10.5px] text-[var(--wb-text-3)]">
+            本地引擎不支持热词（那是 AssemblyAI 的服务端特性），切回云端可用。
+          </p>
+        </div>
+      )}
     </div>
   );
 };

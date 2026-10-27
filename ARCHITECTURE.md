@@ -64,7 +64,9 @@ utils / constants      → 纯函数：解析、prompt、限流、错误映射
 | `llmTranslationService` | 纯 LLM：批译、流式 partial、连接测试；入参为 `TranslationConfig`，**不 import store** |
 | `TranslationOrchestrator` | 批切分、并发批次、`TranslationCallbacks` 注入 |
 | `translationService` | 单文件翻译：会话 + orchestrator + phase；支持 `deps` 注入 |
-| `transcriptionService` / `transcriptionPipeline` / `assemblyaiService` | 转录链路 |
+| `transcriptionService` / `transcriptionPipeline` | 转录链路（ASR → 断句 → 字幕） |
+| `assemblyaiService` | 云端 ASR（AssemblyAI） |
+| `localAsrService` | 本地 ASR：Silero VAD（60 s 分段）+ Bark 3.0 wasm；输出与云端同形 |
 | `queueService` | 全局串行队列；`setQueueServiceDeps` / `resetQueueServiceDeps` 供测试 |
 | `filesService` / `SubtitleFileManager` / `SubtitleExporter` | 导入导出与元数据 |
 
@@ -109,6 +111,16 @@ startTranslation
 
 1. 导入时转 MP3 → IDB（`mp3_data:*`）
 2. `startTranscription` 读 blob → pipeline → 写 `subtitle_entries` + phase
+
+**两个引擎，一个词表格式**（`{ text, start, end }`，秒，单调）：
+
+| 引擎 | 取得词表的方式 | 需要的配置 |
+|------|----------------|------------|
+| cloud（默认） | `assemblyaiService`：上传 / 提交 / 轮询，`transcriptId` 续跑 | AssemblyAI Key |
+| local | `localAsrService`：解码音频 → Silero VAD 每 60 s 一段 → Bark 3.0 wasm（WebGPU/CPU） | 下载过的模型（IndexedDB） |
+
+断句（DP / AI）、字幕条目、翻译与导出对两者完全共用；本地引擎不产生 `transcriptId`，
+用 `local:<model>:<n>:<ms>` 占位，词表照常写入 checkpoint，刷新后从 `resume.words` 续跑。
 
 ## 热路径注意点
 

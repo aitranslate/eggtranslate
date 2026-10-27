@@ -3,6 +3,7 @@
  */
 
 import type { FilePhases } from '@/types';
+import type { AsrEngine } from '@/types/transcription';
 
 type StartIntent = 'translate' | 'full' | 'transcribe' | 'batch';
 type SetupGuardKind = 'translation' | 'transcription';
@@ -39,8 +40,12 @@ export function needsTranscriptionWork(file: TranscriptionWorkFile): boolean {
   return Boolean(tr.transcriptId && !tr.asrReady);
 }
 
-/** AssemblyAI Key 是否已配置 */
-export function isTranscriptionApiConfigured(apiKeys: string | null | undefined): boolean {
+/** AssemblyAI Key 是否已配置；本地引擎（Bark 3.0 wasm）不需要 Key */
+export function isTranscriptionApiConfigured(
+  apiKeys: string | null | undefined,
+  engine: AsrEngine = 'cloud'
+): boolean {
+  if (engine === 'local') return true;
   return Boolean(String(apiKeys ?? '').trim());
 }
 
@@ -53,22 +58,24 @@ export function shouldGuardTranslationStart(
   return isConfigured !== true;
 }
 
-/** 未配置 AssemblyAI 时，转录 / 转译应拦截 */
+/** 未配置 AssemblyAI 时，转录 / 转译应拦截；本地引擎放行 */
 export function shouldGuardTranscriptionStart(
   apiKeys: string | null | undefined,
-  intent: StartIntent = 'transcribe'
+  intent: StartIntent = 'transcribe',
+  engine: AsrEngine = 'cloud'
 ): boolean {
   if (intent === 'translate') return false;
   if (intent === 'batch') return false;
-  return !isTranscriptionApiConfigured(apiKeys);
+  return !isTranscriptionApiConfigured(apiKeys, engine);
 }
 
 /** full 路径：先转录 Key，再翻译 API */
 export function resolveFullPathGuard(input: {
   isTranslationConfigured: boolean;
   transcriptionApiKeys: string | null | undefined;
+  asrEngine?: AsrEngine;
 }): SetupGuardKind | null {
-  if (shouldGuardTranscriptionStart(input.transcriptionApiKeys, 'full')) {
+  if (shouldGuardTranscriptionStart(input.transcriptionApiKeys, 'full', input.asrEngine)) {
     return 'transcription';
   }
   if (shouldGuardTranslationStart(input.isTranslationConfigured, 'full')) {

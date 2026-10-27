@@ -1,6 +1,9 @@
 /**
  * 转录流程：ASR（可续跑）→ DP / AI 断句 → 字幕条目
- * 转码在 addFile 完成，这里只上传/提交/轮询/断句。
+ *
+ * ASR 有两种引擎，输出同形的词表 { text, start, end }（秒），断句之后完全共用：
+ * - cloud：AssemblyAI（上传 / 提交 / 轮询，transcriptId 续跑）
+ * - local：Silero VAD（60 s 分段）+ Bark 3.0 wasm（音频不出本机）
  */
 
 import { SubtitleEntry } from '@/types';
@@ -75,28 +78,57 @@ export const runTranscriptionPipeline = async (
       language = options.resume.language;
     } else {
       callbacks.onTranscribing?.();
-      callbacks.onUploading?.();
-      const asr = await assemblyaiService.transcribeAudio(audioFile, {
-        keyterms,
-        resumeTranscriptId: options.resume?.transcriptId,
-        resumeKeyFingerprint: options.resume?.keyFingerprint,
-        onSubmitted: options.onAsrSubmitted,
-        onProgress: (status, percent) => {
-          if (status === 'transcribing') {
-            callbacks.onProgress?.(percent);
-            callbacks.onTranscribing?.();
-            callbacks.onUploading?.();
-          }
-        },
-      });
-      words = asr.words;
-      language = asr.language;
-      await options.onAsrCompleted?.({
-        words: asr.words,
-        language: asr.language,
-        transcriptId: asr.transcriptId,
-        keyFingerprint: asr.keyFingerprint,
-      });
+      const store = (await import('@/stores/transcriptionStore')).useTranscriptionStore.getState();
+
+      if (store.asrEngine === 'local') {
+        // 本地引擎：Silero VAD（60 s 分段）+ Bark 3.0，词表与云端同形（秒）。
+        // 0-78% 给本地链路，剩下的留给断句（80-100）。
+        if (!audioFile) {
+          throw new Error('本地识别需要音频缓存，请重新上传文件');
+        }
+        const { transcribeLocal } = await import('@/services/localAsrService');
+        const local = await transcribeLocal(audioFile, {
+          model: store.localAsrModel,
+          backend: store.localAsrBackend,
+          maxChunkSeconds: 60,
+          // 只推进总进度：onTranscribing 在进入 ASR 前已经调过一次，
+          // 每个进度事件再调会重复写 store。
+          onProgress: (p) => {
+            callbacks.onProgress?.(Math.min(79, Math.round(p.percent * 78)));
+          },
+        });
+        words = local.words;
+        language = local.language;
+        await options.onAsrCompleted?.({
+          words: local.words,
+          language: local.language,
+          transcriptId: local.transcriptId,
+          keyFingerprint: local.keyFingerprint,
+        });
+      } else {
+        callbacks.onUploading?.();
+        const asr = await assemblyaiService.transcribeAudio(audioFile, {
+          keyterms,
+          resumeTranscriptId: options.resume?.transcriptId,
+          resumeKeyFingerprint: options.resume?.keyFingerprint,
+          onSubmitted: options.onAsrSubmitted,
+          onProgress: (status, percent) => {
+            if (status === 'transcribing') {
+              callbacks.onProgress?.(percent);
+              callbacks.onTranscribing?.();
+              callbacks.onUploading?.();
+            }
+          },
+        });
+        words = asr.words;
+        language = asr.language;
+        await options.onAsrCompleted?.({
+          words: asr.words,
+          language: asr.language,
+          transcriptId: asr.transcriptId,
+          keyFingerprint: asr.keyFingerprint,
+        });
+      }
     }
 
     callbacks.onProgress?.(80);
