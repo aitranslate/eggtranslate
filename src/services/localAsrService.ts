@@ -622,8 +622,22 @@ export async function transcribeLocal(
   const bounds = [0, ...cuts.filter((c) => c > 0 && c < duration), duration];
   const spans: Array<[number, number]> = [];
   for (let i = 0; i < bounds.length - 1; i += 1) {
-    if (bounds[i + 1] > bounds[i] + 0.05) spans.push([bounds[i], bounds[i + 1]]);
+    const from = bounds[i];
+    const to = bounds[i + 1];
+    if (to <= from + 0.05) continue;
+    // VAD 的 chunk_cuts 已经保证 ≤ maxChunkSeconds，这里再兜一层：编码器的注意力
+    // 是 T² 的，一段 40 分钟能直接把显存撑爆，宁可多切一刀。
+    const pieces = Math.ceil((to - from) / maxChunkSeconds);
+    for (let k = 0; k < pieces; k += 1) {
+      const pieceFrom = from + ((to - from) * k) / pieces;
+      const pieceTo = k === pieces - 1 ? to : from + ((to - from) * (k + 1)) / pieces;
+      spans.push([pieceFrom, pieceTo]);
+    }
   }
+  logger.info(
+    '[local-asr] ' + spans.length + ' 段，最长 ' +
+      Math.max(0, ...spans.map(([a, b]) => Math.round(b - a))) + ' s'
+  );
 
   const collected: AsrCheckpointWord[] = [];
   const decodeSpan = async (from: number, to: number): Promise<AsrCheckpointWord[]> => {
