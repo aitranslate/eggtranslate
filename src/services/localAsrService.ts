@@ -331,6 +331,8 @@ interface BarkAsrInstance {
   modelInfo(): string;
   device(): string;
   backend(): string;
+  /** 一次解码一整段（我们自己按 VAD 切点分段） */
+  transcribe(samples: Float32Array): Promise<string>;
   transcribeChunked(samples: Float32Array, cuts: number[]): Promise<string>;
 }
 
@@ -396,18 +398,63 @@ function ensureVad(): Promise<VadModule> {
   return vadModule;
 }
 
-/** WebGPU 探测：返回是否可用与适配器名（Chrome 只给 vendor/architecture）。 */
+/**
+ * 探测页面拿到的 WebGPU 适配器。
+ *
+ * 必须和引擎用同一组选项（high-performance），否则面板显示的和实际算的那块卡可能
+ * 不是同一个。注意 Windows 上的 Chromium 会忽略这个提示，真正决定用哪块卡的是
+ * 系统的「图形设置 → 按应用选择 GPU」（https://crbug.com/369219127）。
+ */
+/**
+ * 把 WebGPU 的 vendor/architecture 换成能读的名字。
+ *
+ * 浏览器只肯给这几个字段（device / description 基本是空字符串，属于隐私保护），
+ * 所以能显示到「NVIDIA Pascal」这一级，拿不到具体的产品型号。
+ */
+export function formatAdapterName(info: {
+  vendor?: string;
+  architecture?: string;
+  device?: string;
+}): string {
+  const vendor = (info.vendor || '').trim();
+  const arch = (info.architecture || '').trim();
+  const lower = vendor.toLowerCase();
+  const brand = lower.includes('nvidia')
+    ? 'NVIDIA'
+    : lower.includes('intel')
+      ? 'Intel'
+      : lower.includes('amd') || lower.includes('advanced micro')
+        ? 'AMD'
+        : lower.includes('apple')
+          ? 'Apple'
+          : lower.includes('qualcomm')
+            ? 'Qualcomm'
+            : lower.includes('google')
+              ? 'Google'
+              : vendor;
+  const archLabel = arch
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b[a-z]/g, (c) => c.toUpperCase())
+    .trim();
+  const parts = [brand, archLabel !== brand ? archLabel : ''].filter(Boolean);
+  return parts.length ? parts.join(' ') : info.device || 'WebGPU 适配器';
+}
+
 export async function probeWebGpu(): Promise<{ available: boolean; name: string }> {
-  const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+  const gpu = (
+    navigator as Navigator & {
+      gpu?: {
+        requestAdapter(options?: { powerPreference?: 'high-performance' }): Promise<unknown>;
+      };
+    }
+  ).gpu;
   if (!gpu) return { available: false, name: '浏览器不支持 WebGPU' };
   try {
-    const adapter = (await gpu.requestAdapter()) as {
+    const adapter = (await gpu.requestAdapter({ powerPreference: 'high-performance' })) as {
       info?: { vendor?: string; architecture?: string; device?: string };
     } | null;
     if (!adapter) return { available: false, name: '没有可用适配器' };
-    const info = adapter.info ?? {};
-    const name = [info.vendor, info.architecture, info.device].filter(Boolean).join(' / ');
-    return { available: true, name: name || 'WebGPU 适配器' };
+    return { available: true, name: formatAdapterName(adapter.info ?? {}) };
   } catch (err) {
     return { available: false, name: err instanceof Error ? err.message : '探测失败' };
   }
@@ -436,6 +483,46 @@ async function decodeTo16k(blob: Blob): Promise<Float32Array> {
 /* ------------------------------------------------------------------ 主流程 */
 
 const hasSpeechContent = (text: string): boolean => /[\p{L}\p{N}]/u.test(text);
+
+/** 16 kHz 采样率；分段的样本下标都按它换算 */
+const SAMPLE_RATE = 16_000;
+
+/**
+ * 解码器是否在打转：同一个词连续出现达到阈值次数。
+ *
+ * 贪心 TDT 解码在边界音频上会一路吐同一个 token（"tamb tamb ..."），一屏几十个；
+ * 正常的句子不可能连续重复 6 次同一个词，拿它当重解的信号足够安全。
+ */
+export function isRepetitive(words: ReadonlyArray<{ text: string }>, threshold = 6): boolean {
+  let run = 1;
+  for (let i = 1; i < words.length; i += 1) {
+    const prev = words[i - 1].text.trim().toLowerCase();
+    const cur = words[i].text.trim().toLowerCase();
+    run = cur === prev ? run + 1 : 1;
+    if (run >= threshold) return true;
+  }
+  return false;
+}
+
+/** 兜底：连续重复超过 keep 次的压成 keep 次（保留最早那几个的时间）。 */
+export function collapseRepeats<T extends { text: string }>(words: T[], keep = 2): T[] {
+  const out: T[] = [];
+  let run = 1;
+  for (let i = 1; i <= words.length; i += 1) {
+    const cur = words[i]?.text.trim().toLowerCase();
+    const prev = words[i - 1]?.text.trim().toLowerCase();
+    if (i < words.length && cur === prev) {
+      run += 1;
+      if (run <= keep) out.push(words[i]);
+      continue;
+    }
+    out.push(words[i - 1]);
+    run = 1;
+  }
+  return out;
+}
+/** 每段两侧各留 0.2 s 上下文，跨切点的词才不会被切一半 */
+const CHUNK_CONTEXT = 0.2;
 
 /**
  * wasm 词表 → 管线词表（纯函数，便于测试）。
@@ -528,26 +615,99 @@ export async function transcribeLocal(
   );
   checkAbort();
 
-  onProgress?.({ phase: 'transcribe', percent: 0.6, detail: '转写中' });
-  const json = JSON.parse(await engine.transcribeChunked(samples, cuts)) as {
-    text: string;
-    duration: number;
-    words: { text: string; start: number; end: number }[];
+  // ④ 逐段解码。分段在 JS 里做，而不是交给 wasm 的 transcribeChunked：
+  // 它在连续跑 30+ 段之后会稳定地吐出重复 token（Edge/Intel 集显上实测 561 个
+  // "tamb"），而同样的音频逐段单独调用 transcribe() 是干净的。在 JS 里分段
+  // 还顺带拿到了每段的进度和失败重试的抓手。
+  const duration = samples.length / 16000;
+  const speech = Array.isArray(analysis.speech) ? analysis.speech : [];
+  /**
+   * 上下文的真正用途是给编码器一点前置音频，让跨切点的词不被切掉；
+   * 但它只能落在**静音**里——切点是静音中点，两侧各 0.2 s 只在静音足够宽时才
+   * 成立。静音短的时候 0.2 s 会把邻句的起音带进来，贪心 TDT 解码器在那种边界上
+   * 会一路重复同一个 token（实测 "tamb tamb ..."）。所以把上下文夹到静音范围内。
+   */
+  const silenceAround = (t: number, side: 'before' | 'after'): number | null => {
+    let best: number | null = null;
+    for (const [start, end] of speech) {
+      if (side === 'before' && end <= t + 1e-3) best = best === null ? end : Math.max(best, end);
+      if (side === 'after' && start >= t - 1e-3) best = best === null ? start : Math.min(best, start);
+    }
+    return best;
   };
 
-  const words = mapLocalWords(json.words);
+  const bounds = [0, ...cuts.filter((c) => c > 0 && c < duration), duration];
+  const spans: Array<[number, number]> = [];
+  for (let i = 0; i < bounds.length - 1; i += 1) {
+    if (bounds[i + 1] > bounds[i] + 0.05) spans.push([bounds[i], bounds[i + 1]]);
+  }
+
+  const collected: AsrCheckpointWord[] = [];
+  const decodeSpan = async (from: number, to: number): Promise<AsrCheckpointWord[]> => {
+    const a = Math.floor(from * SAMPLE_RATE);
+    const b = Math.min(samples.length, Math.floor(to * SAMPLE_RATE));
+    if (b <= a) return [];
+    const json = JSON.parse(await engine.transcribe(samples.subarray(a, b))) as {
+      words: { text: string; start: number; end: number }[];
+    };
+    return mapLocalWords(json.words);
+  };
+
+  for (let i = 0; i < spans.length; i += 1) {
+    checkAbort();
+    const [from, to] = spans[i];
+    const prevSpeechEnd = silenceAround(from, 'before');
+    const nextSpeechStart = silenceAround(to, 'after');
+    const lo = Math.max(0, prevSpeechEnd ?? 0, from - CHUNK_CONTEXT);
+    const hi = Math.min(duration, nextSpeechStart ?? duration, to + CHUNK_CONTEXT);
+
+    // 带上下文解码；若模型在边界上打转（同一 token 连续重复），退回不带上下文的
+    // 原始切片再试一次。0.2 s 上下文会把下一句的起音带进来，实测有的边界会让
+    // 贪心解码器一路重复同一个词（"tamb tamb ..."），裸切片则是干净的。
+    let offset = lo;
+    let words = await decodeSpan(lo, hi);
+    if (isRepetitive(words)) {
+      logger.warn(
+        '[local-asr] 边界重复，改用无上下文切片重解：' + from.toFixed(1) + '-' + to.toFixed(1)
+      );
+      offset = from;
+      words = await decodeSpan(from, to);
+    }
+    if (isRepetitive(words)) words = collapseRepeats(words);
+
+    for (const raw of words) {
+      const word = {
+        text: raw.text,
+        start: raw.start + offset,
+        end: Math.min(raw.end + offset, duration),
+      };
+      // 一个词只归它中点所在的那一段，跨切点的词不会重复
+      const middle = 0.5 * (word.start + word.end);
+      if (middle >= from && middle < to) collected.push(word);
+    }
+    onProgress?.({
+      phase: 'transcribe',
+      percent: 0.6 + (0.4 * (i + 1)) / spans.length,
+      detail: '转写 ' + (i + 1) + '/' + spans.length,
+    });
+  }
+
+  collected.sort((x, y) => x.start - y.start);
+  const words = collected;
 
   onProgress?.({ phase: 'transcribe', percent: 1, detail: words.length + ' 词' });
 
-  const lastEnd = words.length ? words[words.length - 1].end : json.duration || 0;
+  const lastEnd = words.length ? words[words.length - 1].end : duration;
   return {
     words,
     language: 'en',
     transcriptId: 'local:' + model + ':' + words.length + ':' + Math.round(lastEnd * 1000),
     keyFingerprint: 'local',
-    durationSeconds: json.duration || lastEnd,
+    durationSeconds: duration,
   };
 }
+
+
 
 /** 释放页面内的引擎实例（清理缓存时调用；换模型/设备会自动重建）。 */
 export function unloadLocalEngine(): void {

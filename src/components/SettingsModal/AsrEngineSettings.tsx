@@ -321,10 +321,13 @@ export const AsrEngineSettings: React.FC<AsrEngineSettingsProps> = ({ compact = 
             </select>
           </div>
 
-          <p className="text-[10.5px] text-[var(--wb-text-3)] leading-relaxed">
+          <p
+            className="text-[10.5px] text-[var(--wb-text-3)] leading-relaxed"
+            title="WebGPU 用哪块显卡由系统和浏览器决定：Windows 设置 → 系统 → 显示 → 图形 → 找到浏览器 → 选「高性能」"
+          >
             {gpu
               ? gpu.available
-                ? 'WebGPU 可用 · ' + gpu.name
+                ? '显卡：' + gpu.name + ' · WebGPU 就绪'
                 : 'WebGPU 不可用（' + gpu.name + '），会退回 CPU'
               : '正在探测 WebGPU…'}
             {' · '}VAD 每 60 s 一段；模型来自 ModelScope 官方镜像。

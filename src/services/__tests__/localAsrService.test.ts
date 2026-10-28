@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   LOCAL_ASR_MODELS,
+  collapseRepeats,
+  formatAdapterName,
+  isRepetitive,
   mapLocalWords,
   modelById,
   modelUrl,
@@ -41,6 +44,31 @@ describe('localAsrService', () => {
       { text: 'All', start: 1.67, end: 1.83 },
       { text: 'right,', start: 1.83, end: 2.23 },
     ]);
+  });
+
+  it('renders the WebGPU adapter the way the settings panel shows it', () => {
+    expect(formatAdapterName({ vendor: 'nvidia', architecture: 'pascal' })).toBe('NVIDIA Pascal');
+    expect(formatAdapterName({ vendor: 'intel', architecture: 'xe-lpg' })).toBe('Intel Xe Lpg');
+    expect(formatAdapterName({ vendor: 'amd', architecture: 'rdna-2' })).toBe('AMD Rdna 2');
+    expect(formatAdapterName({})).toBe('WebGPU 适配器');
+  });
+
+  it('flags a decoder that loops on the same word', () => {
+    const loop = Array.from({ length: 40 }, () => ({ text: 'tamb' }));
+    expect(isRepetitive(loop)).toBe(true);
+    expect(isRepetitive([{ text: 'no' }, { text: 'no' }, { text: 'thanks' }])).toBe(false);
+    // 断句里的正常重复（"no no"）不算打转
+    expect(isRepetitive(Array.from({ length: 5 }, () => ({ text: 'no' })))).toBe(false);
+  });
+
+  it('collapses a runaway repetition down to two words', () => {
+    const loop = [
+      { text: 'based', start: 0, end: 1 },
+      ...Array.from({ length: 8 }, (_, i) => ({ text: 'tamb', start: 1 + i, end: 2 + i })),
+      { text: 'next', start: 20, end: 21 },
+    ];
+    const fixed = collapseRepeats(loop);
+    expect(fixed.map((w) => w.text)).toEqual(['based', 'tamb', 'tamb', 'next']);
   });
 
   it('keeps punctuation attached to words, drops non-speech tokens', () => {
