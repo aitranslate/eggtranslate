@@ -318,4 +318,28 @@ describe('toSrcTrans', () => {
   it('returns empty string for empty array', () => {
     expect(toSrcTrans([])).toBe('');
   });
+
+  it('clamps overlapping cues so the exported timeline never goes backwards', () => {
+    const entries = [
+      makeEntry({ startTime: '00:00:01,000', endTime: '00:00:03,910', text: 'a' }),
+      // 词级时间戳抖动：下一条比上一条结束早 214 ms
+      makeEntry({ startTime: '00:00:03,696', endTime: '00:00:05,200', text: 'b' }),
+      makeEntry({ startTime: '00:00:05,100', endTime: '00:00:06,000', text: 'c' }),
+    ];
+    const out = toSRT(entries, false);
+    expect(out).toContain('00:00:01,000 --> 00:00:03,910');
+    expect(out).toContain('00:00:03,910 --> 00:00:05,200');
+    expect(out).toContain('00:00:05,200 --> 00:00:06,000');
+    expect(out.indexOf('00:00:03,696')).toBe(-1);
+  });
+
+  it('leaves a clean timeline untouched', () => {
+    const entries = [
+      makeEntry({ startTime: '00:00:01,000', endTime: '00:00:02,000', text: 'a' }),
+      makeEntry({ startTime: '00:00:02,000', endTime: '00:00:03,000', text: 'b' }),
+    ];
+    const out = toSRT(entries, false);
+    expect(out).toContain('00:00:01,000 --> 00:00:02,000');
+    expect(out).toContain('00:00:02,000 --> 00:00:03,000');
+  });
 });

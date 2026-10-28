@@ -44,4 +44,16 @@ export function normalizeSrtTime(input: string): string | null {
   return `${hours}:${minutes}:${secs},${ms}`;
 }
 
+/**
+ * SRT 时间字符串 → 秒；无法解析返回 null（点/逗号毫秒都接受）。
+ * 与 formatTime 严格互逆：parseTime(formatTime(x)) === 毫秒取整后的 x。
+ */
+export function parseTime(input: string): number | null {
+  const m = (input || '').trim().match(SRT_TIME_RE);
+  if (!m) return null;
+  const ms = Number(m[4].padEnd(3, '0').slice(0, 3));
+  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + ms / 1000;
+}
+
+
 

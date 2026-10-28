@@ -2,6 +2,7 @@ import SRTParser2 from 'srt-parser-2';
 import { SubtitleEntry } from '@/types';
 import { toAppError } from '@/utils/errors';
 import { logger } from '@/utils/logger';
+import { formatTime, parseTime } from '@/utils/timeUtils';
 
 // SRTParser2 返回的类型接口
 interface SRTParserResult {
@@ -98,8 +99,27 @@ export const parseSRT = (srtContent: string): SubtitleEntry[] => {
   }
 };
 
+/**
+ * 词级时间戳会留下几十毫秒的边界重叠：上一句的结束时间晚于下一句的开始。
+ * 导出前把每条的开始夹到上一条的结束，时间轴就单调不重叠了；只在真的越界时
+ * 才重写字符串，没越界的条目原样保留（避免多余的四舍五入）。
+ */
+export function clampOverlaps<T extends { startTime: string; endTime: string }>(entries: T[]): T[] {
+  let prevEnd = 0;
+  return entries.map((entry) => {
+    const start = parseTime(entry.startTime);
+    const end = parseTime(entry.endTime);
+    if (start === null || end === null) return entry;
+    const clampedStart = Math.max(start, prevEnd);
+    const clampedEnd = Math.max(end, clampedStart);
+    prevEnd = clampedEnd;
+    if (clampedStart === start && clampedEnd === end) return entry;
+    return { ...entry, startTime: formatTime(clampedStart), endTime: formatTime(clampedEnd) };
+  });
+}
+
 export const toSRT = (entries: SubtitleEntry[], useTranslation: boolean = true): string => {
-  const srtEntries: SRTParserInput[] = entries.map((entry, index) => ({
+  const srtEntries: SRTParserInput[] = clampOverlaps(entries).map((entry, index) => ({
     id: (index + 1).toString(),
     startTime: entry.startTime,
     endTime: entry.endTime,
@@ -120,7 +140,7 @@ export const toTXT = (entries: SubtitleEntry[], useTranslation: boolean = true):
 };
 
 export const toBilingual = (entries: SubtitleEntry[]): string => {
-  const bilingualEntries: SRTParserInput[] = entries.map((entry, index) => ({
+  const bilingualEntries: SRTParserInput[] = clampOverlaps(entries).map((entry, index) => ({
     id: (index + 1).toString(),
     startTime: entry.startTime,
     endTime: entry.endTime,
@@ -133,7 +153,7 @@ export const toBilingual = (entries: SubtitleEntry[]): string => {
 };
 
 export const toSrcTrans = (entries: SubtitleEntry[]): string => {
-  const bilingualEntries: SRTParserInput[] = entries.map((entry, index) => ({
+  const bilingualEntries: SRTParserInput[] = clampOverlaps(entries).map((entry, index) => ({
     id: (index + 1).toString(),
     startTime: entry.startTime,
     endTime: entry.endTime,
