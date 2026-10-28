@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   LOCAL_ASR_MODELS,
-  collapseRepeats,
   formatAdapterName,
   isRepetitive,
   mapLocalWords,
@@ -59,16 +58,6 @@ describe('localAsrService', () => {
     expect(isRepetitive([{ text: 'no' }, { text: 'no' }, { text: 'thanks' }])).toBe(false);
     // 断句里的正常重复（"no no"）不算打转
     expect(isRepetitive(Array.from({ length: 5 }, () => ({ text: 'no' })))).toBe(false);
-  });
-
-  it('collapses a runaway repetition down to two words', () => {
-    const loop = [
-      { text: 'based', start: 0, end: 1 },
-      ...Array.from({ length: 8 }, (_, i) => ({ text: 'tamb', start: 1 + i, end: 2 + i })),
-      { text: 'next', start: 20, end: 21 },
-    ];
-    const fixed = collapseRepeats(loop);
-    expect(fixed.map((w) => w.text)).toEqual(['based', 'tamb', 'tamb', 'next']);
   });
 
   it('keeps punctuation attached to words, drops non-speech tokens', () => {

@@ -504,24 +504,7 @@ export function isRepetitive(words: ReadonlyArray<{ text: string }>, threshold =
   return false;
 }
 
-/** 兜底：连续重复超过 keep 次的压成 keep 次（保留最早那几个的时间）。 */
-export function collapseRepeats<T extends { text: string }>(words: T[], keep = 2): T[] {
-  const out: T[] = [];
-  let run = 1;
-  for (let i = 1; i <= words.length; i += 1) {
-    const cur = words[i]?.text.trim().toLowerCase();
-    const prev = words[i - 1]?.text.trim().toLowerCase();
-    if (i < words.length && cur === prev) {
-      run += 1;
-      if (run <= keep) out.push(words[i]);
-      continue;
-    }
-    out.push(words[i - 1]);
-    run = 1;
-  }
-  return out;
-}
-/** 每段两侧各留 0.2 s 上下文，跨切点的词才不会被切一半 */
+/** 每段两侧最多补 0.2 s 上下文；实际会用 VAD 找到的静音边界夹住它 */
 const CHUNK_CONTEXT = 0.2;
 
 /**
@@ -661,19 +644,16 @@ export async function transcribeLocal(
     const lo = Math.max(0, prevSpeechEnd ?? 0, from - CHUNK_CONTEXT);
     const hi = Math.min(duration, nextSpeechStart ?? duration, to + CHUNK_CONTEXT);
 
-    // 带上下文解码；若模型在边界上打转（同一 token 连续重复），退回不带上下文的
-    // 原始切片再试一次。0.2 s 上下文会把下一句的起音带进来，实测有的边界会让
-    // 贪心解码器一路重复同一个词（"tamb tamb ..."），裸切片则是干净的。
-    let offset = lo;
-    let words = await decodeSpan(lo, hi);
+    // 上下文只落在静音里（见上面的 silenceAround），所以不会再出现"把邻句起音带进来"
+    // 那种边界。万一仍然整段重复，只记日志、不改输出：压掉重复会把模型自己的
+    // 问题藏起来，宁可让它出声，也好过悄悄改词。
+    const offset = lo;
+    const words = await decodeSpan(lo, hi);
     if (isRepetitive(words)) {
       logger.warn(
-        '[local-asr] 边界重复，改用无上下文切片重解：' + from.toFixed(1) + '-' + to.toFixed(1)
+        '[local-asr] 这一段输出整段重复，请记录上下文：' + from.toFixed(1) + '-' + to.toFixed(1)
       );
-      offset = from;
-      words = await decodeSpan(from, to);
     }
-    if (isRepetitive(words)) words = collapseRepeats(words);
 
     for (const raw of words) {
       const word = {
