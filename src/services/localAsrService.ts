@@ -334,6 +334,8 @@ interface BarkAsrInstance {
   /** 一次解码一整段（我们自己按 VAD 切点分段） */
   transcribe(samples: Float32Array): Promise<string>;
   transcribeChunked(samples: Float32Array, cuts: number[]): Promise<string>;
+  /** 销毁 device，显存立刻还给驱动（之后这个实例不能再转写） */
+  close(): void;
 }
 
 interface BarkModule {
@@ -531,6 +533,8 @@ export async function transcribeLocal(
 ): Promise<LocalAsrResult> {
   const { model, backend, maxChunkSeconds = 60, onProgress, signal } = options;
   const info = modelById(model);
+  // 又要用了：取消上一次闲置释放
+  cancelIdleRelease();
   const checkAbort = () => {
     if (signal?.aborted) throw new DOMException('已取消', 'AbortError');
   };
@@ -692,6 +696,8 @@ export async function transcribeLocal(
   onProgress?.({ phase: 'transcribe', percent: 1, detail: words.length + ' 词' });
 
   const lastEnd = words.length ? words[words.length - 1].end : duration;
+  // 转写结束后不再占着显存：闲置一段时间自动释放（见 scheduleIdleRelease）。
+  scheduleIdleRelease();
   return {
     words,
     language: 'en',
@@ -703,7 +709,51 @@ export async function transcribeLocal(
 
 
 
-/** 释放页面内的引擎实例（清理缓存时调用；换模型/设备会自动重建）。 */
+/** 释放页面内的引擎实例（清理缓存、转录结束闲置时调用）。 */
 export function unloadLocalEngine(): void {
+  cancelIdleRelease();
+  const current = loadedModel;
   loadedModel = null;
+  if (!current) return;
+  try {
+    // WebGPU 只把 dropped buffer 交给 GC 回收，GC 之前显存一直占着；
+    // device.destroy() 是唯一能立刻还回去的调用。
+    current.instance.close();
+    logger.info('[local-asr] 已释放显存');
+  } catch (err) {
+    logger.warn('[local-asr] 释放显存失败: ' + String(err));
+  }
+}
+
+/** 引擎是否还占着显存（设置面板据此显示「释放显存」）。 */
+export function isEngineLoaded(): boolean {
+  return loadedModel !== null;
+}
+
+/**
+ * 转录结束后闲置一段时间就释放显存。
+ *
+ * 释放后下一次转录要重新加载权重（OPFS 缓存 ~1 s）并重新编译管线（首次 ~10 s），
+ * 所以留一个缓冲期：连着转几个文件不会反复付这个代价。
+ */
+const IDLE_RELEASE_MS = 120_000;
+let releaseTimer: number | null = null;
+
+function cancelIdleRelease(): void {
+  if (releaseTimer !== null) {
+    clearTimeout(releaseTimer);
+    releaseTimer = null;
+  }
+}
+
+function scheduleIdleRelease(): void {
+  cancelIdleRelease();
+  if (typeof window === 'undefined') return;
+  releaseTimer = window.setTimeout(() => {
+    releaseTimer = null;
+    if (loadedModel) {
+      logger.info('[local-asr] 闲置 ' + IDLE_RELEASE_MS / 1000 + ' s，释放显存');
+      unloadLocalEngine();
+    }
+  }, IDLE_RELEASE_MS);
 }

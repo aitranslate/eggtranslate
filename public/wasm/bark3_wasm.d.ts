@@ -13,6 +13,15 @@ export class BarkAsr {
      */
     backend(): string;
     /**
+     * Releases the GPU device — every buffer it owns goes back to the driver now.
+     *
+     * Call it when the page stops transcribing: WebGPU only returns a dropped
+     * buffer once its JavaScript wrapper is collected, so without this the card
+     * stays occupied until the tab closes. The instance cannot transcribe
+     * afterwards; create a new one.
+     */
+    close(): void;
+    /**
      * Loads a checkpoint from its bytes.
      *
      * `model` is the whole official file — `model.bark` for a compressed release
@@ -55,6 +64,7 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_barkasr_free: (a: number, b: number) => void;
     readonly barkasr_backend: (a: number) => [number, number];
+    readonly barkasr_close: (a: number) => void;
     readonly barkasr_create: (a: number, b: number, c: number, d: number, e: number, f: number) => any;
     readonly barkasr_device: (a: number) => [number, number];
     readonly barkasr_maxSeconds: () => number;
@@ -64,8 +74,8 @@ export interface InitOutput {
     readonly wasm_bindgen_45aa438ad1d54d33___convert__closures_____invoke___js_sys_f84e99fd49de3b4a___Function_fn_wasm_bindgen_45aa438ad1d54d33___JsValue_____wasm_bindgen_45aa438ad1d54d33___sys__Undefined___js_sys_f84e99fd49de3b4a___Function_fn_wasm_bindgen_45aa438ad1d54d33___JsValue_____wasm_bindgen_45aa438ad1d54d33___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
     readonly wasm_bindgen_45aa438ad1d54d33___convert__closures_____invoke___wasm_bindgen_45aa438ad1d54d33___JsValue__core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_45aa438ad1d54d33___JsError___true_: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen_45aa438ad1d54d33___convert__closures_____invoke___wasm_bindgen_45aa438ad1d54d33___sys__JsNullable_wgpu_932e8b3987b4a414___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_45aa438ad1d54d33___JsError___true_: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_45aa438ad1d54d33___convert__closures_____invoke___wasm_bindgen_45aa438ad1d54d33___sys__JsNullable_wgpu_932e8b3987b4a414___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_45aa438ad1d54d33___JsError___true__11: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen_45aa438ad1d54d33___convert__closures_____invoke___wasm_bindgen_45aa438ad1d54d33___sys__JsNullable_wgpu_932e8b3987b4a414___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_45aa438ad1d54d33___JsError___true__12: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_45aa438ad1d54d33___convert__closures_____invoke___wasm_bindgen_45aa438ad1d54d33___sys__JsNullable_wgpu_932e8b3987b4a414___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_45aa438ad1d54d33___JsError___true__13: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen_45aa438ad1d54d33___convert__closures_____invoke___wgpu_932e8b3987b4a414___backend__webgpu__webgpu_sys__gen_GpuDeviceLostInfo__GpuDeviceLostInfo______true_: (a: number, b: number, c: any) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
