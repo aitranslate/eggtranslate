@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, Play, Trash2, X } from 'lucide-react';
+import { CircuitBoard, Cpu, Download, Play, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
 import { useTranslationConfigStore } from '@/stores/translationConfigStore';
@@ -22,11 +22,17 @@ const ENGINE_LABELS: Array<{ id: AsrEngine; label: string }> = [
   { id: 'local', label: '本地 Bark 3.0' },
 ];
 
-const BACKEND_LABELS: Array<{ id: 'auto' | 'gpu' | 'cpu'; label: string }> = [
-  { id: 'auto', label: '自动（有 WebGPU 就用）' },
-  { id: 'gpu', label: 'WebGPU' },
-  { id: 'cpu', label: 'CPU（慢，但兼容）' },
+/** 厂商色点：只做装饰，提醒"这块卡是谁的"，不代表可以切换厂商 */
+const VENDOR_COLORS: Array<{ match: RegExp; color: string }> = [
+  { match: /nvidia/i, color: '#76B900' },
+  { match: /amd|radeon/i, color: '#ED1C24' },
+  { match: /intel/i, color: '#0071C5' },
+  { match: /apple/i, color: '#8E8E93' },
 ];
+
+function vendorColor(name: string): string {
+  return VENDOR_COLORS.find((v) => v.match.test(name))?.color ?? 'var(--wb-text-3)';
+}
 
 interface DownloadState {
   pct: number;
@@ -58,6 +64,8 @@ export const AsrEngineSettings: React.FC<AsrEngineSettingsProps> = ({ compact = 
   const [partials, setPartials] = useState<Record<string, number>>({});
   const [downloads, setDownloads] = useState<Record<string, DownloadState>>({});
   const [gpu, setGpu] = useState<{ available: boolean; name: string } | null>(null);
+  /** UI 只有 GPU / CPU 两档；历史值 auto 视为 GPU（有 WebGPU 就用） */
+  const useGpu = backend !== 'cpu';
   const controllers = useRef<Record<string, AbortController>>({});
 
   const refreshCache = useCallback(async () => {
@@ -76,8 +84,12 @@ export const AsrEngineSettings: React.FC<AsrEngineSettingsProps> = ({ compact = 
   }, [refreshCache]);
 
   useEffect(() => {
-    void probeWebGpu().then(setGpu);
-  }, []);
+    void probeWebGpu().then((next) => {
+      setGpu(next);
+      // 没有 WebGPU 时把持久化的 gpu/auto 落到 cpu：否则引擎创建会直接报错
+      if (!next.available) setBackend('cpu');
+    });
+  }, [setBackend]);
 
   const patchDownload = useCallback((id: LocalAsrModelId, next: DownloadState | null) => {
     setDownloads((prev) => {
@@ -306,32 +318,57 @@ export const AsrEngineSettings: React.FC<AsrEngineSettingsProps> = ({ compact = 
             })}
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-[10.5px] text-[var(--wb-text-3)] w-14 shrink-0">计算设备</span>
-            <select
-              className="text-xs rounded-md border border-[var(--wb-border)] bg-[var(--wb-bg)] px-2 py-1"
-              value={backend}
-              onChange={(e) => setBackend(e.target.value as 'auto' | 'gpu' | 'cpu')}
-            >
-              {BACKEND_LABELS.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-[10.5px] text-[var(--wb-text-3)] w-14 shrink-0 pt-2">计算设备</span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={!gpu?.available}
+                title={
+                  gpu?.available
+                    ? 'WebGPU · 用哪块显卡由系统和浏览器决定：Windows 设置 → 系统 → 显示 → 图形 → 找到浏览器 → 选「高性能」'
+                    : '这台浏览器没有可用的 WebGPU 适配器'
+                }
+                onClick={() => setBackend('gpu')}
+                className={
+                  'flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors ' +
+                  (useGpu
+                    ? 'border-[var(--wb-brand)] bg-[var(--wb-brand-soft)]'
+                    : 'border-[var(--wb-border)] hover:bg-[var(--wb-panel-2)]') +
+                  (gpu && !gpu.available ? ' cursor-not-allowed opacity-45' : '')
+                }
+              >
+                <CircuitBoard className="h-3.5 w-3.5 shrink-0 text-[var(--wb-text-2)]" />
+                <span className="leading-tight">
+                  <span className="flex items-center gap-1 text-[11px] text-[var(--wb-text)]">
+                    <span
+                      className="inline-block h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: vendorColor(gpu?.name ?? '') }}
+                    />
+                    {gpu ? (gpu.available ? gpu.name : '不可用') : '探测中…'}
+                  </span>
+                  <span className="block text-[9.5px] text-[var(--wb-text-3)]">WebGPU · 快</span>
+                </span>
+              </button>
 
-          <p
-            className="text-[10.5px] text-[var(--wb-text-3)] leading-relaxed"
-            title="WebGPU 用哪块显卡由系统和浏览器决定：Windows 设置 → 系统 → 显示 → 图形 → 找到浏览器 → 选「高性能」"
-          >
-            {gpu
-              ? gpu.available
-                ? '显卡：' + gpu.name + ' · WebGPU 就绪'
-                : 'WebGPU 不可用（' + gpu.name + '），会退回 CPU'
-              : '正在探测 WebGPU…'}
-            {' · '}VAD 每 60 s 一段；模型来自 ModelScope 官方镜像。
-          </p>
+              <button
+                type="button"
+                onClick={() => setBackend('cpu')}
+                className={
+                  'flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors ' +
+                  (backend === 'cpu'
+                    ? 'border-[var(--wb-brand)] bg-[var(--wb-brand-soft)]'
+                    : 'border-[var(--wb-border)] hover:bg-[var(--wb-panel-2)]')
+                }
+              >
+                <Cpu className="h-3.5 w-3.5 shrink-0 text-[var(--wb-text-2)]" />
+                <span className="leading-tight">
+                  <span className="block text-[11px] text-[var(--wb-text)]">CPU</span>
+                  <span className="block text-[9.5px] text-[var(--wb-text-3)]">兼容优先</span>
+                </span>
+              </button>
+            </div>
+          </div>
 
           {sourceLanguage !== 'English' && (
             <p className="text-[10.5px] leading-relaxed text-[var(--wb-brand)]">
