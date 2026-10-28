@@ -10,7 +10,6 @@ import {
   deleteLocalModel,
   discardPartialModel,
   downloadLocalModel,
-  isEngineLoaded,
   pendingModelBytes,
   probeWebGpu,
   sizeLabel,
@@ -59,16 +58,7 @@ export const AsrEngineSettings: React.FC<AsrEngineSettingsProps> = ({ compact = 
   const [partials, setPartials] = useState<Record<string, number>>({});
   const [downloads, setDownloads] = useState<Record<string, DownloadState>>({});
   const [gpu, setGpu] = useState<{ available: boolean; name: string } | null>(null);
-  /** 引擎是否还占着显存（转录结束后会闲置释放，也可以在下面手动释放） */
-  const [engineLoaded, setEngineLoaded] = useState(false);
   const controllers = useRef<Record<string, AbortController>>({});
-
-  useEffect(() => {
-    const tick = () => setEngineLoaded(isEngineLoaded());
-    tick();
-    const id = window.setInterval(tick, 2000);
-    return () => window.clearInterval(id);
-  }, []);
 
   const refreshCache = useCallback(async () => {
     const cachedPairs = await Promise.all(
@@ -341,23 +331,6 @@ export const AsrEngineSettings: React.FC<AsrEngineSettingsProps> = ({ compact = 
                 : 'WebGPU 不可用（' + gpu.name + '），会退回 CPU'
               : '正在探测 WebGPU…'}
             {' · '}VAD 每 60 s 一段；模型来自 ModelScope 官方镜像。
-            {engineLoaded && (
-              <>
-                {' · '}
-                <button
-                  type="button"
-                  className="underline decoration-dotted underline-offset-2 hover:text-[var(--wb-text-2)]"
-                  title="马上把显存还给驱动；下次转录会重新加载模型（约 1 s）并重新编译管线"
-                  onClick={() => {
-                    unloadLocalEngine();
-                    setEngineLoaded(false);
-                    toast.success('已释放显存');
-                  }}
-                >
-                  释放显存
-                </button>
-              </>
-            )}
           </p>
 
           {sourceLanguage !== 'English' && (

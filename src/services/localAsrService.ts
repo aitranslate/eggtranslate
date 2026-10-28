@@ -725,18 +725,13 @@ export function unloadLocalEngine(): void {
   }
 }
 
-/** 引擎是否还占着显存（设置面板据此显示「释放显存」）。 */
-export function isEngineLoaded(): boolean {
-  return loadedModel !== null;
-}
-
 /**
  * 转录结束后闲置一段时间就释放显存。
  *
  * 释放后下一次转录要重新加载权重（OPFS 缓存 ~1 s）并重新编译管线（首次 ~10 s），
  * 所以留一个缓冲期：连着转几个文件不会反复付这个代价。
  */
-const IDLE_RELEASE_MS = 120_000;
+const IDLE_RELEASE_MS = 30_000;
 let releaseTimer: number | null = null;
 
 function cancelIdleRelease(): void {
