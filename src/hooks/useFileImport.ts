@@ -130,8 +130,8 @@ export function useFileImport() {
 
       // 导入音视频但未配置转录：简短提示（无引导 tip）
       if (okMedia > 0) {
-        const { apiKeys, asrEngine } = useTranscriptionStore.getState();
-        if (!isTranscriptionApiConfigured(apiKeys, asrEngine)) {
+        const apiKeys = useTranscriptionStore.getState().apiKeys;
+        if (!isTranscriptionApiConfigured(apiKeys)) {
           toast('已导入音视频。开始转录前请在设置中配置 AssemblyAI Key。', {
             duration: 3000,
             id: 'transcription-key-hint',

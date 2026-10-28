@@ -45,11 +45,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const clearSettingsFocus = useWorkspaceStore((s) => s.clearSettingsFocus);
   const isTranslationConfigured = useIsTranslationConfigured();
   const transcriptionApiKeys = useTranscriptionStore((s) => s.apiKeys);
-  const asrEngine = useTranscriptionStore((s) => s.asrEngine);
-  const isTranscriptionConfigured = isTranscriptionApiConfigured(
-    transcriptionApiKeys,
-    asrEngine
-  );
+  const isTranscriptionConfigured = isTranscriptionApiConfigured(transcriptionApiKeys);
   const isMobile = useIsMobile();
 
   const [isTesting, setIsTesting] = useState(false);
@@ -239,16 +235,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <section className="wb-drawer-section" id="settings-section-transcription">
                 <header className="wb-prefs-section-head">
                   <h3>转录</h3>
-                  <p>
-                    {asrEngine === 'local'
-                      ? '本地 Bark 3.0（wasm）、字幕长度与断句'
-                      : 'AssemblyAI、字幕长度与热词'}
-                  </p>
+                  <p>AssemblyAI、字幕长度与热词</p>
                 </header>
                 {!isTranscriptionConfigured && (
                   <div className="wb-prefs-block ob-settings-hint-block">
                     <SettingsHint>
-                      音视频路径：填入 AssemblyAI API Key → 导入常见音视频（自动处理音频）→ 点「转录 / 转译」。可配置多个 Key（用 | 分隔）轮询；也可以把识别引擎切到「本地」，免 Key 离线转写。
+                      音视频路径：填入 AssemblyAI API Key → 导入常见音视频（自动处理音频）→ 点「转录 / 转译」。可配置多个 Key（用 | 分隔）轮询。
                     </SettingsHint>
                   </div>
                 )}

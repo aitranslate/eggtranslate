@@ -1,14 +1,12 @@
 /**
  * 转录 Service
  * 取 IndexedDB 中 addFile 已就绪的 ASR 音频（MP3 / AAC 抽轨 / 原音频）
- * → 云端 AssemblyAI 或 本地 Bark 3.0（设置里选）→ 写字幕。
+ * → AssemblyAI（submit + id 续跑）→ 写字幕。
  */
 
 import { useFilesStore, flushFilesStorePersist } from '@/stores/filesStore';
 import { useHistoryStore } from '@/stores/historyStore';
 import { useTranscriptionStore } from '@/stores/transcriptionStore';
-import { useTranslationConfigStore } from '@/stores/translationConfigStore';
-import { resolveTaskLanguages } from '@/utils/taskLanguages';
 import { runTranscriptionPipeline } from './transcriptionPipeline';
 import { saveTranslationHistory } from './TranslationOrchestrator';
 import { toAppError } from '@/utils/errors';
@@ -59,25 +57,11 @@ export async function startTranscription(fileId: string): Promise<void> {
       return;
     }
 
-    const { apiKeys, asrEngine } = useTranscriptionStore.getState();
-    if (asrEngine !== 'local' && !apiKeys.trim() && !resumeWords) {
+    const { apiKeys } = useTranscriptionStore.getState();
+    if (!apiKeys.trim() && !resumeWords) {
       useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed' });
-      toast.error('请先在设置中配置 AssemblyAI API Key，或切换到本地引擎');
+      toast.error('请先在设置中配置 AssemblyAI API Key');
       return;
-    }
-
-    // 本地模型（Bark 3.0 的四个发布）都是英文权重：源语言不是英语就直接拦下，
-    // 免得用户等半天拿到一段"英文发音的中文"。
-    if (asrEngine === 'local') {
-      const { sourceLanguage } = resolveTaskLanguages(
-        file,
-        useTranslationConfigStore.getState().config
-      );
-      if (sourceLanguage !== 'English') {
-        useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed' });
-        toast.error('本地引擎只支持英文：请把源语言设为英语，或切回云端 AssemblyAI');
-        return;
-      }
     }
 
     const { keytermGroups, subtitleLengthPreset } = useTranscriptionStore.getState();

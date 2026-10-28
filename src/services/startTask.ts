@@ -45,7 +45,6 @@ export function startFullTask(fileId: string): boolean {
   const guard = resolveFullPathGuard({
     isTranslationConfigured: useTranslationConfigStore.getState().isConfigured,
     transcriptionApiKeys: useTranscriptionStore.getState().apiKeys,
-    asrEngine: useTranscriptionStore.getState().asrEngine,
   });
   if (guard === 'transcription') return openTranscriptionSetup();
   if (guard === 'translation') return openTranslationSetup();
@@ -56,8 +55,8 @@ export function startFullTask(fileId: string): boolean {
 }
 
 export function startTranscribeTask(fileId: string): boolean {
-  const { apiKeys, asrEngine } = useTranscriptionStore.getState();
-  if (shouldGuardTranscriptionStart(apiKeys, 'transcribe', asrEngine)) {
+  const apiKeys = useTranscriptionStore.getState().apiKeys;
+  if (shouldGuardTranscriptionStart(apiKeys, 'transcribe')) {
     return openTranscriptionSetup();
   }
   useFilesStore.getState().setWorkflow(fileId, 'transcribe');
@@ -71,11 +70,11 @@ export function startTranscribeTask(fileId: string): boolean {
 export function startAllUncompleted(): boolean {
   const files = useFilesStore.getState().getAllFiles();
   const isTranslationConfigured = useTranslationConfigStore.getState().isConfigured;
-  const { apiKeys, asrEngine } = useTranscriptionStore.getState();
+  const apiKeys = useTranscriptionStore.getState().apiKeys;
 
   const needsTranscription = files.some((f) => needsTranscriptionWork(f));
 
-  if (needsTranscription && shouldGuardTranscriptionStart(apiKeys, 'transcribe', asrEngine)) {
+  if (needsTranscription && shouldGuardTranscriptionStart(apiKeys, 'transcribe')) {
     return openTranscriptionSetup();
   }
 

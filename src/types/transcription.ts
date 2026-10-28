@@ -55,12 +55,3 @@ export interface SubtitleFileMetadata {
 
 // 字幕长度预设
 export type SubtitleLengthPreset = 'short' | 'standard' | 'loose';
-
-/** 识别引擎：云端 AssemblyAI / 本地 Bark 3.0（wasm + WebGPU/CPU） */
-export type AsrEngine = 'cloud' | 'local';
-
-/** 本地模型：三个低比特发布 + 全精度 Pro */
-export type LocalAsrModelId = 'plus' | 'bark3' | 'clean' | 'pro';
-
-/** 本地引擎的计算设备；auto = 有 WebGPU 就用 GPU */
-export type LocalAsrBackend = 'auto' | 'gpu' | 'cpu';
