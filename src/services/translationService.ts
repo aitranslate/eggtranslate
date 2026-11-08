@@ -30,6 +30,7 @@ import type {
   TranslationStatus,
 } from '@/types';
 import { withTaskLanguages } from '@/utils/taskLanguages';
+import { getEffectiveTranslationConfig } from '@/utils/llmProfiles';
 import { maybeSimplifyChinese } from '@/utils/chineseScript';
 import toast from 'react-hot-toast';
 
@@ -124,6 +125,8 @@ export async function startTranslation(
 
   // 任务级源/目标语言优先；旧任务无字段时回退全局设置
   const config = withTaskLanguages(deps.getConfig(), file);
+  // 锁定服务商（Index 免费网关）以实测最优参数执行
+  const effectiveConfig = getEffectiveTranslationConfig(config);
   if (!deps.isConfigured()) {
     deps.notifyError('请先配置翻译 API');
     return null;
@@ -163,10 +166,10 @@ export async function startTranslation(
         entries,
         filename: file.name,
         config: {
-          batchSize: config.batchSize,
-          contextBefore: config.contextBefore,
-          contextAfter: config.contextAfter,
-          threadCount: config.threadCount,
+          batchSize: effectiveConfig.batchSize,
+          contextBefore: effectiveConfig.contextBefore,
+          contextAfter: effectiveConfig.contextAfter,
+          threadCount: effectiveConfig.threadCount,
         },
         controller,
         taskId: file.taskId,
@@ -182,7 +185,7 @@ export async function startTranslation(
           onAttemptStart,
           onCommitted
         ) =>
-          deps.translateBatch(config, texts, {
+          deps.translateBatch(effectiveConfig, texts, {
             signal,
             contextBefore,
             contextAfter,

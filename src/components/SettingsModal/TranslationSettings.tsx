@@ -7,7 +7,7 @@ import type { LlmProviderId } from '@/constants/llmProviders';
 import { LanguageSelector } from './LanguageSelector';
 import { ApiTestForm } from './ApiTestForm';
 import { SettingsHint } from '../SettingsHint';
-import { getActiveProfile } from '@/utils/llmProfiles';
+import { getActiveProfile, getEffectiveTranslationConfig, isAdvancedParamsLocked } from '@/utils/llmProfiles';
 
 type TranslationSettingsSection = 'all' | 'provider' | 'language' | 'params';
 
@@ -27,7 +27,7 @@ interface TranslationSettingsProps {
 
 /** 方案 A：白底细边，focus 不换底 */
 const inputClass =
-  'w-full p-2.5 bg-[var(--wb-panel)] border border-[var(--wb-border)] rounded-[10px] text-[var(--wb-text)] text-sm hover:border-[var(--wb-border-strong)] focus:outline-none focus:border-[var(--wb-brand)] focus:ring-2 focus:ring-[var(--wb-brand-soft)] focus:bg-[var(--wb-panel)] transition-[border-color,box-shadow]';
+  'w-full p-2.5 bg-[var(--wb-panel)] border border-[var(--wb-border)] rounded-[10px] text-[var(--wb-text)] text-sm hover:border-[var(--wb-border-strong)] focus:outline-none focus:border-[var(--wb-brand)] focus:ring-2 focus:ring-[var(--wb-brand-soft)] focus:bg-[var(--wb-panel)] transition-[border-color,box-shadow] disabled:cursor-not-allowed disabled:bg-[var(--wb-panel-2)] disabled:text-[var(--wb-text-3)] disabled:hover:border-[var(--wb-border)]';
 
 export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
   config,
@@ -41,6 +41,8 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
   const reduceMotion = useReducedMotion();
   const collapse = collapseMotion(reduceMotion);
   const activeProfile = getActiveProfile(config);
+  const effectiveConfig = getEffectiveTranslationConfig(config);
+  const paramsLocked = isAdvancedParamsLocked(config);
   const showHeadings = sections === 'all';
   const showProvider = sections === 'all' || sections === 'provider';
   const showLanguage = sections === 'all' || sections === 'language';
@@ -108,9 +110,9 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
                   }`}
                 />
                 <span>
-                  上下文 {config.contextBefore}/{config.contextAfter} · 批次 {config.batchSize} · 并发{' '}
-                  {config.threadCount}
-                  {config.rpm ? ` · RPM ${config.rpm}` : ''}
+                  上下文 {effectiveConfig.contextBefore}/{effectiveConfig.contextAfter} · 批次{' '}
+                  {effectiveConfig.batchSize} · 并发 {effectiveConfig.threadCount}
+                  {effectiveConfig.rpm ? ` · RPM ${effectiveConfig.rpm}` : ''}
                 </span>
               </button>
               <AnimatePresence initial={false}>
@@ -119,14 +121,14 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
                     {...collapse}
                     className="overflow-hidden"
                   >
-                    <ParamsFields config={config} onConfigChange={onConfigChange} inputClass={inputClass} compact />
+                    <ParamsFields config={effectiveConfig} locked={paramsLocked} onConfigChange={onConfigChange} inputClass={inputClass} compact />
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
           ) : sections === 'params' ? (
             <div className="space-y-3">
-              <ParamsFields config={config} onConfigChange={onConfigChange} inputClass={inputClass} />
+              <ParamsFields config={effectiveConfig} locked={paramsLocked} onConfigChange={onConfigChange} inputClass={inputClass} />
             </div>
           ) : (
             <>
@@ -144,8 +146,8 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
                 <h3 className="apple-heading-small">翻译参数</h3>
                 {!paramsOpen && (
                   <span className="text-xs text-[var(--wb-text-3)] font-normal ml-1">
-                    上下文 {config.contextBefore}/{config.contextAfter} · 批次 {config.batchSize} · 并发{' '}
-                    {config.threadCount}
+                    上下文 {effectiveConfig.contextBefore}/{effectiveConfig.contextAfter} · 批次{' '}
+                    {effectiveConfig.batchSize} · 并发 {effectiveConfig.threadCount}
                   </span>
                 )}
               </button>
@@ -154,7 +156,7 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
                 {paramsOpen && (
                   <motion.div {...collapse} className="overflow-hidden">
                     <div className="space-y-3 pt-1">
-                      <ParamsFields config={config} onConfigChange={onConfigChange} inputClass={inputClass} />
+                      <ParamsFields config={effectiveConfig} locked={paramsLocked} onConfigChange={onConfigChange} inputClass={inputClass} />
                     </div>
                   </motion.div>
                 )}
@@ -169,11 +171,13 @@ export const TranslationSettings: React.FC<TranslationSettingsProps> = ({
 
 function ParamsFields({
   config,
+  locked = false,
   onConfigChange,
   inputClass,
   compact = false,
 }: {
   config: TranslationConfig;
+  locked?: boolean;
   onConfigChange: TranslationSettingsProps['onConfigChange'];
   inputClass: string;
   compact?: boolean;
@@ -181,8 +185,14 @@ function ParamsFields({
   const labelCls = compact
     ? 'block text-[10.5px] font-medium text-[var(--wb-text-3)] mb-1'
     : 'block text-xs font-medium text-[var(--wb-text-2)] mb-1.5';
+  const disabledTitle = locked ? 'Index 免费服务商已锁定该参数' : undefined;
   return (
     <>
+      {locked && (
+        <p className={compact ? 'text-[10.5px] text-[var(--wb-text-3)]' : 'text-[11.5px] text-[var(--wb-text-3)]'}>
+          Index 免费服务商已锁定实测最优参数，切换到其他服务商后可自行调整。
+        </p>
+      )}
       <div className={`grid grid-cols-2 md:grid-cols-4 ${compact ? 'gap-2' : 'gap-3'}`}>
         <div>
           <label className={labelCls}>前置上下文</label>
@@ -193,6 +203,8 @@ function ParamsFields({
             value={config.contextBefore}
             onChange={(e) => onConfigChange('contextBefore', parseInt(e.target.value))}
             className={inputClass}
+            disabled={locked}
+            title={disabledTitle}
           />
         </div>
         <div>
@@ -204,6 +216,8 @@ function ParamsFields({
             value={config.contextAfter}
             onChange={(e) => onConfigChange('contextAfter', parseInt(e.target.value))}
             className={inputClass}
+            disabled={locked}
+            title={disabledTitle}
           />
         </div>
         <div>
@@ -215,6 +229,8 @@ function ParamsFields({
             value={config.batchSize}
             onChange={(e) => onConfigChange('batchSize', parseInt(e.target.value))}
             className={inputClass}
+            disabled={locked}
+            title={disabledTitle}
           />
         </div>
         <div>
@@ -226,8 +242,9 @@ function ParamsFields({
             value={config.threadCount}
             onChange={(e) => onConfigChange('threadCount', parseInt(e.target.value))}
             className={inputClass}
-            title="批译与 AI 断句共用"
+            title={locked ? disabledTitle : '批译与 AI 断句共用'}
             aria-label="LLM 并发，批译与 AI 断句共用"
+            disabled={locked}
           />
         </div>
       </div>
@@ -245,6 +262,8 @@ function ParamsFields({
               onConfigChange('rpm', e.target.value === '' ? 0 : parseInt(e.target.value))
             }
             className={inputClass}
+            disabled={locked}
+            title={disabledTitle}
           />
         </div>
       </div>

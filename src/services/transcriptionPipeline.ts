@@ -118,8 +118,12 @@ export const runTranscriptionPipeline = async (
       const { useTranslationConfigStore } = await import(
         '@/stores/translationConfigStore'
       );
+      const { getEffectiveTranslationConfig } = await import(
+        '@/utils/llmProfiles'
+      );
       const threadCount =
-        useTranslationConfigStore.getState().config.threadCount || 4;
+        getEffectiveTranslationConfig(useTranslationConfigStore.getState().config)
+          .threadCount || 4;
       segments = await segmentWordsWithAiFallback(words, language, preset, {
         aiBreaker: createAiSentenceBreaker(),
         concurrency: threadCount,

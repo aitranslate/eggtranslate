@@ -38,6 +38,22 @@ export function createDefaultProfiles(): LlmProfile[] {
  */
 export const DEFAULT_PROVIDER_ID: LlmProviderId = 'index-translate';
 
+/**
+ * Index-Translate 免费公共网关的高级参数锁定值（2026-11 实测）：
+ * 并发 8 时实测约 41 RPM，单批延迟不随并发上升；RPM 45 给断句/纠错留余量；
+ * 批次 10 是该网关约 10s 超时下的安全上限；上下文 2/1 控制提示词体积。
+ */
+export const INDEX_TRANSLATE_LOCKED_PARAMS = {
+  contextBefore: 2,
+  contextAfter: 1,
+  batchSize: 10,
+  threadCount: 8,
+  rpm: 45,
+} as const satisfies Pick<
+  TranslationConfig,
+  'contextBefore' | 'contextAfter' | 'batchSize' | 'threadCount' | 'rpm'
+>;
+
 export function getActiveProfile(config: TranslationConfig): LlmProfile {
   const { profiles, activeProfileId } = config;
   if (!profiles?.length) {
@@ -46,13 +62,26 @@ export function getActiveProfile(config: TranslationConfig): LlmProfile {
   return profiles.find((p) => p.id === activeProfileId) ?? profiles[0];
 }
 
+export function isAdvancedParamsLocked(config: TranslationConfig): boolean {
+  return getActiveProfile(config).presetId === 'index-translate';
+}
+
+/**
+ * 执行与设置 UI 共用的有效配置：锁定的服务商覆盖高级参数。
+ * 原始值仍留在 config 里，切回其他服务商不受影响。
+ */
+export function getEffectiveTranslationConfig(config: TranslationConfig): TranslationConfig {
+  if (!isAdvancedParamsLocked(config)) return config;
+  return { ...config, ...INDEX_TRANSLATE_LOCKED_PARAMS };
+}
+
 export function getActiveLlmConfig(config: TranslationConfig): LLMConfig {
   const p = getActiveProfile(config);
   return {
     baseURL: p.baseURL,
     apiKey: p.apiKey,
     model: p.model,
-    rpm: config.rpm,
+    rpm: getEffectiveTranslationConfig(config).rpm,
     requiresKey: p.requiresKey,
   };
 }

@@ -336,7 +336,7 @@ export async function translateBatch(
     baseURL: llm.baseURL,
     apiKey: llm.apiKey,
     model: llm.model,
-    rpm: config.rpm,
+    rpm: llm.rpm,
   };
 
   /** 累积对话：仅在需要纠错时追加 assistant/user，成功首轮不增长 */

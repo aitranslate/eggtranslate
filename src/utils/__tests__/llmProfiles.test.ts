@@ -2,11 +2,15 @@ import { describe, it, expect } from 'vitest';
 import {
   createDefaultProfiles,
   ensureProfiles,
+  getActiveLlmConfig,
   getActiveProfile,
+  getEffectiveTranslationConfig,
+  isAdvancedParamsLocked,
   isTranslationLlmConfigured,
   selectProvider,
   updateActiveProfile,
   DEFAULT_PROVIDER_ID,
+  INDEX_TRANSLATE_LOCKED_PARAMS,
 } from '../llmProfiles';
 import { getProviderById } from '@/constants/llmProviders';
 import type { TranslationConfig } from '@/types';
@@ -150,6 +154,36 @@ describe('llmProfiles', () => {
       const config = ensureProfiles({ ...baseConfig(), activeProfileId: '' });
       expect(config.activeProfileId).toBe(DEFAULT_PROVIDER_ID);
       expect(isTranslationLlmConfigured(config)).toBe(true);
+    });
+  });
+
+  describe('Index 免费网关高级参数锁定', () => {
+    it('index 激活时按锁定值执行，且不覆盖已保存的原始配置', () => {
+      const config = baseConfig({ activeProfileId: 'index-translate' });
+      expect(isAdvancedParamsLocked(config)).toBe(true);
+      expect(getEffectiveTranslationConfig(config)).toMatchObject({
+        contextBefore: 2,
+        contextAfter: 1,
+        batchSize: 10,
+        threadCount: 8,
+        rpm: 45,
+      });
+      // 原始保存值保持不动，切回其他服务商后可恢复
+      expect(config.threadCount).toBe(4);
+      expect(config.batchSize).toBe(20);
+      expect(config.rpm).toBeUndefined();
+    });
+
+    it('其他服务商不受锁定影响', () => {
+      const config = baseConfig();
+      expect(isAdvancedParamsLocked(config)).toBe(false);
+      expect(getEffectiveTranslationConfig(config)).toBe(config);
+      expect(getActiveLlmConfig(config).rpm).toBeUndefined();
+    });
+
+    it('LLM 调用配置使用锁定后的 RPM', () => {
+      const config = baseConfig({ activeProfileId: 'index-translate', rpm: 20 });
+      expect(getActiveLlmConfig(config).rpm).toBe(INDEX_TRANSLATE_LOCKED_PARAMS.rpm);
     });
   });
 });
