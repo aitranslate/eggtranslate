@@ -26,7 +26,7 @@ const load = (id: string) =>
   };
 
 describe('单行宽度预算', () => {
-  for (const id of ['en_slice', 'zh_slice', 'ja_tiny']) {
+  for (const id of ['en_slice', 'zh_slice', 'ja_slice']) {
     it(`${id}：每条不超单行宽度、不超 7s`, () => {
       const fixture = load(id);
       const profile = getProfile(fixture.lang);
@@ -42,7 +42,6 @@ describe('单行宽度预算', () => {
         if (cue.words.length > 1) {
           expect(width, `超宽：${cue.text}`).toBeLessThanOrEqual(limit);
         }
-        if (id === 'ja_tiny') continue; // 该夹具时间戳退化（单个 token 跨 18.5s），时长无意义
         // 允许 1s 余量：只有「合法切点会切出碎句」时我们才宁可让这条略长
         expect((cue.endTime - cue.startTime) / 1000).toBeLessThanOrEqual(profile.maxDuration + 1);
       }
