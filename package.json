@@ -1,7 +1,7 @@
 {
   "name": "eggtranslate",
   "private": true,
-  "version": "2.6.2",
+  "version": "2.6.3",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.13.26",
-    "assemblyai": "^4.36.4",
+    "assemblyai": "^4.43.4",
     "framer-motion": "^12.23.12",
     "jsonrepair": "^3.13.0",
     "jszip": "^3.10.1",
