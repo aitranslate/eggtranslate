@@ -15,7 +15,11 @@ type TranscriptionWorkFile = {
 
 /**
  * 音视频是否还要跑识别 / 断句（含续跑）。
- * 识别已 completed 且没有字幕、但有 transcript.id 或本地词表时，仍要再进管线。
+ *
+ * 识别已完成但一条字幕都没有时，只要还有可续跑的凭据（云端 transcript.id 或
+ * 本地词表）就要放行：这是「重新断句」唯一的入口——重新跑不用重新上传音频，
+ * 直接吃检查点里的词表。两个凭据都没有（空音频 / 旧数据）才视为完成，
+ * 避免用户点了没反应。
  */
 export function needsTranscriptionWork(file: TranscriptionWorkFile): boolean {
   const isAv = file.fileType === 'audio' || file.fileType === 'video';
@@ -23,8 +27,7 @@ export function needsTranscriptionWork(file: TranscriptionWorkFile): boolean {
   const tr = file.phases.transcribing;
   if (!tr || tr.status !== 'completed') return true;
   if ((file.entryCount ?? 0) > 0) return false;
-  // 识别已完成、没有字幕：词表还没落地就继续 poll；空音频/旧数据视为完成
-  return Boolean(tr.transcriptId && !tr.asrReady);
+  return Boolean(tr.transcriptId || tr.asrReady);
 }
 
 /** AssemblyAI Key 是否已配置 */
