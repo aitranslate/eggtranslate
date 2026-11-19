@@ -153,6 +153,10 @@ const pairExceedsCaps = (
   charCap: number,
   unitGrace = 0,
 ): boolean => {
+  const mergedText = joinWords(words.slice(left[0], right[1] + 1).map((w) => w.text));
+  const pairDur = cueEnd(words, right) - cueStart(words, left);
+  if (profile.maxDuration > 0 && pairDur > profile.maxDuration) return true;
+  if (Number.isFinite(charCap) && profile.widthOf(mergedText) > charCap) return true;
   const pairUnits = cueUnits(words, left, profile) + cueUnits(words, right, profile);
   const tokenCount = left[1] - left[0] + 1 + (right[1] - right[0] + 1);
   if (tokenCount > 1 && pairUnits > unitCap + unitGrace) return true;
@@ -346,7 +350,7 @@ export function mergeWatchabilitySpans(
   if (cues.length < 2) return cues;
 
   const unitCap = profile.sourceLimit(preset);
-  const charCap = profile.sourceCharLimit(preset);
+  const charCap = profile.widthLimit(preset);
 
   const pass1: Cue[] = [];
   let i = 0;

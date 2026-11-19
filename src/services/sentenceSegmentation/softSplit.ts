@@ -56,10 +56,14 @@ export interface TimedWord {
 export type Preset = 'short' | 'standard' | 'loose';
 
 export interface SpanBudget {
+  /** 阅读量上限：拉丁词数 / CJK 字数 */
   limit: number;
-  charLimit: number;
+  /** 单行宽度上限：加权字符（全角 1 / 半角 0.5；拉丁直接数字符） */
+  widthLimit: number;
   grace: number;
   forceCeiling: number;
+  /** 单条最长时长（秒） */
+  maxDuration: number;
 }
 
 export function spanBudgetFor(profile: LanguageProfile, preset: Preset): SpanBudget | null {
@@ -67,24 +71,31 @@ export function spanBudgetFor(profile: LanguageProfile, preset: Preset): SpanBud
   if (limit <= 0) return null;
   return {
     limit,
-    charLimit: profile.sourceCharLimit(preset),
+    widthLimit: profile.widthLimit(preset),
     grace: profile.lengthGraceUnits(),
     forceCeiling: profile.forceUnitCeiling(limit),
+    maxDuration: profile.maxDuration,
   };
 }
 
 interface HardLimits {
   target: number;
   maxUnit: number;
-  char: number;
+  /** 单行宽度上限（加权字符） */
+  width: number;
+  /** 单条最长时长（秒） */
+  maxDur: number;
 }
 
-const charLimited = (h: HardLimits): boolean => Number.isFinite(h.char) && h.char < Number.POSITIVE_INFINITY;
+/** 超过上限的容差：只用于「没有合法切点就保留整段」的判定（15%）。 */
+export const WIDTH_GRACE_RATIO = 1.15;
 
-const hardValid = (h: HardLimits, tokenCount: number, units: number, chars: number): boolean => {
+const charLimited = (h: HardLimits): boolean => Number.isFinite(h.width) && h.width < Number.POSITIVE_INFINITY;
+
+const hardValid = (h: HardLimits, tokenCount: number, units: number, width: number): boolean => {
   if (tokenCount <= 1) return true;
   if (units > h.maxUnit) return false;
-  if (charLimited(h) && chars > h.char) return false;
+  if (charLimited(h) && width > h.width) return false;
   return true;
 };
 
@@ -386,7 +397,9 @@ function greedyCutsByHardLimit(
     const units = prefix[i + 1]! - prefix[segStart]!;
     const tokens = i + 1 - segStart;
     const chars = charOf(segStart, i);
-    if (tokens <= 1 || hardValid(hard, tokens, units, chars)) {
+    const segDur = (words[start + i]?.end ?? 0) - (words[start + segStart]?.start ?? 0);
+    const overDur = hard.maxDur > 0 && segDur > hard.maxDur;
+    if (tokens <= 1 || (hardValid(hard, tokens, units, chars) && !overDur)) {
       i += 1;
       continue;
     }
@@ -466,6 +479,7 @@ function dpSplitSpanUngatedForce(
   const dp = new Array<number>(n + 1).fill(Number.POSITIVE_INFINITY);
   const prev = new Array<number>(n + 1).fill(0);
   dp[0] = 0;
+  const minSide = Math.max(1, Math.min(charBased ? 6 : 4, Math.floor(n / 3)));
 
   for (let i = 1; i <= n; i++) {
     for (let j = i - 1; j >= 0; j--) {
@@ -475,12 +489,18 @@ function dpSplitSpanUngatedForce(
       const segChars = charOf(j, i - 1);
       if (!hardValid(hard, tokenCount, segUnits, segChars)) continue;
       if (!Number.isFinite(baseCost[j]!) || !Number.isFinite(dp[j]!)) continue;
+      // 最小段长：不留 1–3 个词的小尾巴（要么闪帧、要么翻译不出意思）。
+      // 短段按总长的 1/3 打折，避免「9 个单位凑不出 4+4 的合法切点」导致整段不切。
+      if (tokenCount > 1 && segUnits < minSide && (j > 0 || i < n)) continue;
       const lengthPenalty = (LENGTH_PENALTY_WEIGHT * Math.abs(segUnits - budget.limit)) / budget.limit;
       let cost = dp[j]! + baseCost[j]! + lengthPenalty;
-      if (charLimited(hard) && hard.char > 0) {
-        cost += (LENGTH_PENALTY_WEIGHT * 0.5 * Math.abs(segChars - hard.char)) / hard.char;
+      if (charLimited(hard) && hard.width > 0) {
+        cost += (LENGTH_PENALTY_WEIGHT * 0.5 * Math.abs(segChars - hard.width)) / hard.width;
       }
       if (segUnits > 0 && segUnits <= 2) cost += SHORT_SEGMENT_PENALTY;
+      // 超 7s 的重罚（软约束：无解时不会让 DP 变成不可行）
+      const segDur = (words[start + i - 1]?.end ?? 0) - (words[start + j]?.start ?? 0);
+      if (hard.maxDur > 0 && segDur > hard.maxDur) cost += 50 * (segDur - hard.maxDur);
       const better = charBased ? cost < dp[i]! : cost <= dp[i]!;
       if (better) {
         dp[i] = cost;
@@ -535,33 +555,24 @@ export function dpSplitSpan(
   const hard: HardLimits = {
     target: budget.limit,
     maxUnit: Math.max(budget.forceCeiling, budget.limit),
-    char: budget.charLimit,
+    width: budget.widthLimit,
+    maxDur: budget.maxDuration,
   };
   const charOf = (a: number, b: number): number =>
-    charLimited(hard)
-      ? [...joinWords(words.slice(start + a, start + b + 1).map((w) => w.text))].length
-      : 0;
+    profile.widthOf(joinWords(words.slice(start + a, start + b + 1).map((w) => w.text)));
 
   const totalUnits = prefix[n]!;
   const totalChars = charOf(0, n - 1);
-  const withinTarget = totalUnits <= hard.target && (!charLimited(hard) || totalChars <= hard.char);
+  const totalDur = (words[end]?.end ?? 0) - (words[start]?.start ?? 0);
+  const withinTarget = totalUnits <= hard.target && totalChars <= hard.width;
   const inGrace =
-    totalUnits <= hard.target + budget.grace &&
-    (!charLimited(hard) || totalChars <= hard.char + 11);
-  let mode: DpMode = withinTarget ? 'inside-budget' : inGrace ? 'quality' : 'force';
-
-  // 与 OneAsr 的有意偏离：只有「显示字符」超预算、词/字仍在预设内，且整段没有任何
-  // 标点可切时，整段保留。字符预算 = 词数 × 5.5 只是估算，数字/复合词多的句子
-  // 会假性超限；此时硬拆只能落在短语中间（"...entry models" | "and strategy."）。
-  if (
-    mode === 'force' &&
-    totalUnits <= hard.target &&
-    charLimited(hard) &&
-    totalChars <= hard.char * 1.25 &&
-    !hasPunctuationCut(words, start, end)
-  ) {
-    mode = 'inside-budget';
-  }
+    totalUnits <= hard.target + budget.grace && totalChars <= hard.width * WIDTH_GRACE_RATIO;
+  const mode: DpMode =
+    withinTarget && !(hard.maxDur > 0 && totalDur > hard.maxDur)
+      ? 'inside-budget'
+      : inGrace && !(hard.maxDur > 0 && totalDur > hard.maxDur)
+        ? 'quality'
+        : 'force';
   const charBased = profile.isCharBased;
 
   if (mode === 'force') {
@@ -583,7 +594,7 @@ export function dpSplitSpan(
         if (b <= a + 1) continue;
         const subUnits = prefix[b]! - prefix[a]!;
         const subChars = charOf(a, b - 1);
-        const stillOver = subUnits > hard.maxUnit || (charLimited(hard) && subChars > hard.char);
+        const stillOver = subUnits > hard.maxUnit || (charLimited(hard) && subChars > hard.width);
         if (!stillOver) continue;
         const subN = b - a;
         const subPrefix = new Array<number>(subN + 1).fill(0);
@@ -651,10 +662,13 @@ export function dpSplitSpan(
       if (j === 0 && i === n && qualityOk.some((ok) => ok)) continue;
       const lengthPenalty = (LENGTH_PENALTY_WEIGHT * Math.abs(segUnits - budget.limit)) / budget.limit;
       let cost = dp[j]! + baseCost[j]! + lengthPenalty;
-      if (charLimited(hard) && hard.char > 0) {
-        cost += (LENGTH_PENALTY_WEIGHT * 0.5 * Math.abs(segChars - hard.char)) / hard.char;
+      if (charLimited(hard) && hard.width > 0) {
+        cost += (LENGTH_PENALTY_WEIGHT * 0.5 * Math.abs(segChars - hard.width)) / hard.width;
       }
       if (segUnits > 0 && segUnits <= 2) cost += SHORT_SEGMENT_PENALTY;
+      // 超 7s 的重罚（软约束：无解时不会让 DP 变成不可行）
+      const segDur = (words[start + i - 1]?.end ?? 0) - (words[start + j]?.start ?? 0);
+      if (hard.maxDur > 0 && segDur > hard.maxDur) cost += 50 * (segDur - hard.maxDur);
       const better = charBased ? cost < dp[i]! : cost <= dp[i]!;
       if (better) {
         dp[i] = cost;

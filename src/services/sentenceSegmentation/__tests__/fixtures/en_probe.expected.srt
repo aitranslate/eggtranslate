@@ -1,8 +1,0 @@
-1
-00:00:02,000 --> 00:00:07,880
-Alright, Flips! Welcome everyone into this crash course about our new 15-minute timeframe
-
-2
-00:00:07,980 --> 00:00:08,300
-entry models and strategy.
-

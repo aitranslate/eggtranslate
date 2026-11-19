@@ -1,1 +1,93 @@
-{"id": "en_probe", "media": "90s_en.wav", "lang": "en", "preset": "standard", "words": [{"text": "Alright,", "start": 2.0, "end": 2.36}, {"text": "Flips!", "start": 2.46, "end": 2.82}, {"text": "Welcome", "start": 2.92, "end": 3.28}, {"text": "everyone", "start": 3.38, "end": 3.74}, {"text": "into", "start": 3.84, "end": 4.2}, {"text": "this", "start": 4.3, "end": 4.66}, {"text": "crash", "start": 4.76, "end": 5.12}, {"text": "course", "start": 5.22, "end": 5.58}, {"text": "about", "start": 5.68, "end": 6.04}, {"text": "our", "start": 6.14, "end": 6.5}, {"text": "new", "start": 6.6, "end": 6.96}, {"text": "15-minute", "start": 7.06, "end": 7.42}, {"text": "timeframe", "start": 7.52, "end": 7.88}, {"text": "entry", "start": 7.98, "end": 8.34}, {"text": "models", "start": 8.44, "end": 7.4}, {"text": "and", "start": 7.69, "end": 7.8}, {"text": "strategy.", "start": 7.85, "end": 8.3}]}
+{
+ "id": "en_probe",
+ "media": "90s_en.wav",
+ "lang": "en",
+ "preset": "standard",
+ "words": [
+  {
+   "text": "Alright,",
+   "start": 2.0,
+   "end": 2.331
+  },
+  {
+   "text": "Flips!",
+   "start": 2.371,
+   "end": 2.701
+  },
+  {
+   "text": "Welcome",
+   "start": 2.741,
+   "end": 3.072
+  },
+  {
+   "text": "everyone",
+   "start": 3.112,
+   "end": 3.442
+  },
+  {
+   "text": "into",
+   "start": 3.482,
+   "end": 3.813
+  },
+  {
+   "text": "this",
+   "start": 3.853,
+   "end": 4.184
+  },
+  {
+   "text": "crash",
+   "start": 4.224,
+   "end": 4.554
+  },
+  {
+   "text": "course",
+   "start": 4.594,
+   "end": 4.925
+  },
+  {
+   "text": "about",
+   "start": 4.965,
+   "end": 5.295
+  },
+  {
+   "text": "our",
+   "start": 5.335,
+   "end": 5.666
+  },
+  {
+   "text": "new",
+   "start": 5.706,
+   "end": 6.036
+  },
+  {
+   "text": "15-minute",
+   "start": 6.076,
+   "end": 6.407
+  },
+  {
+   "text": "timeframe",
+   "start": 6.447,
+   "end": 6.778
+  },
+  {
+   "text": "entry",
+   "start": 6.818,
+   "end": 7.148
+  },
+  {
+   "text": "models",
+   "start": 7.188,
+   "end": 7.519
+  },
+  {
+   "text": "and",
+   "start": 7.559,
+   "end": 7.889
+  },
+  {
+   "text": "strategy.",
+   "start": 7.929,
+   "end": 8.26
+  }
+ ]
+}

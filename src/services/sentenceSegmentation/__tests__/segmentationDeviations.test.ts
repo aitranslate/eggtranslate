@@ -1,13 +1,9 @@
-// 与 OneAsr 的有意偏离。
+// 与 OneAsr 的有意偏离（两处，都写在代码注释里）：
 //
-// 移植 OneAsr 后仍保留两条更严格的规则，原因写在 softSplit.ts / watchabilityMerge.ts
-// 对应位置：
-//
-// 1. 字符预算单独超限（词/字仍在预设内）且整段没有标点可切时，不硬拆。
-//    字符预算 = 词数 × 5.5 只是估算，数字/复合词多的句子会假性超限；硬拆只能落在
-//    短语中间，把一句话切成 "...entry models" | "and strategy."。
-// 2. 短句 + 句末标点不再自动算「语气词」跨句前粘，必须是真话语标记（Okay./Now.）。
-//    否则被切出来的残句会跨过句号粘到下一句，一行里出现两个句子。
+// 1. 单行预算取代「词数 × 5.5 估算字符」：一条字幕必须落在 Netflix 口径的单行宽度内，
+//    不再出现 88 字符的宽行。OneAsr 会保留宽行，我们按 42/56/64 切。
+// 2. 参数取自 Netflix TTSG（拉丁 42 字符、中韩 16、日 13 全角；时长 ≤7s），
+//    standard / loose 上浮，因为 ASR 原文不可压缩。
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -35,19 +31,16 @@ const toCues = (words: Word[], lang = 'en', preset: 'short' | 'standard' | 'loos
   }));
 
 describe('断句：与 OneAsr 的有意偏离', () => {
-  it('字符预算单独超限时不硬拆句子（90s_en 的前两句）', () => {
+  it('单行宽度是硬约束：超宽必切，不保留整句', () => {
     const dir = join(process.cwd(), 'src', 'services', 'sentenceSegmentation', '__tests__', 'fixtures');
     const fixture = JSON.parse(readFileSync(join(dir, 'en_probe.words.json'), 'utf8')) as {
       words: Word[];
     };
     const cues = toCues(fixture.words);
-    // OneAsr 会切成「...entry models」|「and strategy.」；这里整句保留。
-    expect(cues.map((c) => c.text)).toEqual([
-      'Alright, Flips!',
-      'Welcome everyone into this crash course about our new 15-minute timeframe entry models and strategy.',
-    ]);
-    expect(cues[1]!.start).toBe('00:00:02,920');
-    expect(cues[1]!.end).toBe('00:00:08,300');
+    // OneAsr 把这条 100 字符的句子切成 2 条宽行；我们切成 3 条单行。
+    expect(cues.length).toBe(3);
+    expect(cues[1]!.text).toBe('Welcome everyone into this crash course about our new');
+    expect(cues[2]!.text).toBe('15-minute timeframe entry models and strategy.');
   });
 
   it('段内有逗号时仍然按标点切，不触发整段保留', () => {
