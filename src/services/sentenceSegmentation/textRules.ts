@@ -555,3 +555,28 @@ export function isSingleCjkCharToken(token: string): boolean {
 }
 
 export { reTokenCore };
+
+/**
+ * 可以在其**前面**断行的介词 —— Netflix 通用规范的断行优先级第三条
+ * （"The line should be broken ... before prepositions"）。
+ *
+ * 刻意排除两类：
+ * - of / to / than / as —— 多在名词短语或比较结构内部（"top of the range"）；
+ * - on / off / up / out / in / over / under / down / back —— 常构成短语动词
+ *   （"built on" / "worked out" / "turned off"），在它们前面断就是拆短语动词。
+ */
+const LINE_START_PREPOSITIONS = new Set([
+  'about', 'with', 'from', 'for', 'between', 'during', 'without', 'across', 'along',
+  'around', 'against', 'through', 'toward', 'towards', 'until', 'since', 'via', 'per',
+  'within', 'beyond', 'among', 'near', 'behind', 'inside', 'outside', 'beside', 'upon',
+]);
+
+/** 在 right 前面断行是否合法（介词前）。 */
+export function isLineStartPreposition(token: string): boolean {
+  return LINE_START_PREPOSITIONS.has(lower(stripToken(token)));
+}
+
+/** 在 right 前面断行是否合法（连词前，已有的 connector 判定复用）。 */
+export function isLineStartConnector(token: string, connectors: readonly string[]): boolean {
+  return isConnectorLike(token, connectors);
+}

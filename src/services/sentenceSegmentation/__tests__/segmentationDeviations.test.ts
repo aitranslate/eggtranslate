@@ -37,10 +37,11 @@ describe('断句：与 OneAsr 的有意偏离', () => {
       words: Word[];
     };
     const cues = toCues(fixture.words);
-    // OneAsr 把这条 100 字符的句子切成 2 条宽行；我们切成 3 条单行。
-    expect(cues.length).toBe(3);
-    expect(cues[1]!.text).toBe('Welcome everyone into this crash course about our new');
-    expect(cues[2]!.text).toBe('15-minute timeframe entry models and strategy.');
+    // 单行预算下必须切，但切点落在介词前（Netflix 断行优先级第三条），
+    // 而不是把 "crash course" 这种名词短语拆开。
+    expect(cues.length).toBe(2);
+    expect(cues[0]!.text).toBe('Alright, Flips! Welcome everyone into this crash course');
+    expect(cues[1]!.text).toBe('about our new 15-minute timeframe entry models and strategy.');
   });
 
   it('段内有逗号时仍然按标点切，不触发整段保留', () => {

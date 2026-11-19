@@ -173,6 +173,7 @@ const isClosedSentencePair = (
   left: Cue,
   right: Cue,
   profile: LanguageProfile,
+  preset: Preset,
 ): boolean => {
   const leftText = cueText(words, left);
   const c = [...leftText];
@@ -185,6 +186,23 @@ const isClosedSentencePair = (
   const rightUnits = cueUnits(words, right, profile);
   const afterthought = rightUnits > 0 && rightUnits <= (profile.isCharBased ? 4 : 2);
   if (afterthought || isShortInterjection(words, right, profile)) return false;
+
+  // ASR 标点很密（常常 5–6 个词就一个句号），严格「一句一条」会把 90 秒素材切成
+  // 70 条。这里的例外：左句很短、停顿很小、合起来仍在一行内 —— 那更像是 ASR 多打
+  // 了一个句号，而不是真的两句。真停顿（≥0.35s）仍然照断。
+  const widthLimit = profile.widthLimit(preset);
+  const leftWidth = profile.widthOf(cueText(words, left));
+  const gap = cueStart(words, right) - cueEnd(words, left);
+  const mergedWidth = profile.widthOf(joinWords(words.slice(left[0], right[1] + 1).map((w) => w.text)));
+  const mergedDur = cueEnd(words, right) - cueStart(words, left);
+  if (
+    leftWidth <= widthLimit * 0.75 &&
+    gap <= 0.35 &&
+    mergedWidth <= widthLimit &&
+    (profile.maxDuration <= 0 || mergedDur <= profile.maxDuration)
+  ) {
+    return false;
+  }
   return true;
 };
 
@@ -195,6 +213,7 @@ function canMerge(
   unitCap: number,
   charCap: number,
   profile: LanguageProfile,
+  preset: Preset,
 ): boolean {
   if (left[1] + 1 !== right[0]) return false;
   const gap = cueStart(words, right) - cueEnd(words, left);
@@ -224,7 +243,7 @@ function canMerge(
   if (gap > WATCHABILITY_GAP_SEC) return false;
   const pairDur = cueEnd(words, right) - cueStart(words, left);
   if (pairDur > ORPHAN_MERGE_BUDGET_SEC) return false;
-  if (isClosedSentencePair(words, left, right, profile)) return false;
+  if (isClosedSentencePair(words, left, right, profile, preset)) return false;
 
   const rightOrphan = isOrphanTail(words, right, profile) && !isOrphanTail(words, left, profile);
   if (rightOrphan) {
@@ -261,12 +280,13 @@ function canFlashMerge(
   unitCap: number,
   charCap: number,
   profile: LanguageProfile,
+  preset: Preset,
 ): boolean {
   if (left[1] + 1 !== right[0]) return false;
   const gap = cueStart(words, right) - cueEnd(words, left);
   if (gap > WATCHABILITY_GAP_SEC) return false;
   if (cueEnd(words, right) - cueStart(words, left) > MERGE_BUDGET_SEC) return false;
-  if (isClosedSentencePair(words, left, right, profile)) return false;
+  if (isClosedSentencePair(words, left, right, profile, preset)) return false;
   const lastWord = words[left[1]]!.text;
   const firstRight = words[right[0]]!.text;
   const next2 = words[right[0] + 1]?.text ?? '';
@@ -293,6 +313,7 @@ function absorbFlash(
   unitCap: number,
   charCap: number,
   profile: LanguageProfile,
+  preset: Preset,
 ): Cue[] {
   if (cues.length < 2) return cues;
   const out: Cue[] = [];
@@ -302,7 +323,7 @@ function absorbFlash(
     const dur = cueDuration(words, cur);
     if (dur >= FLASH_SEC || i + 1 === cues.length) {
       const prev = out[out.length - 1];
-      if (dur < FLASH_SEC && prev && canFlashMerge(words, prev, cur, unitCap, charCap, profile)) {
+      if (dur < FLASH_SEC && prev && canFlashMerge(words, prev, cur, unitCap, charCap, profile, preset)) {
         out[out.length - 1] = [prev[0], cur[1]];
         i += 1;
         continue;
@@ -312,10 +333,10 @@ function absorbFlash(
       continue;
     }
     const next = cues[i + 1]!;
-    if (canFlashMerge(words, cur, next, unitCap, charCap, profile)) {
+    if (canFlashMerge(words, cur, next, unitCap, charCap, profile, preset)) {
       const merged: Cue = [cur[0], next[1]];
       const prev = out[out.length - 1];
-      if (cueDuration(words, merged) < FLASH_SEC && prev && canFlashMerge(words, prev, merged, unitCap, charCap, profile)) {
+      if (cueDuration(words, merged) < FLASH_SEC && prev && canFlashMerge(words, prev, merged, unitCap, charCap, profile, preset)) {
         out[out.length - 1] = [prev[0], merged[1]];
         i += 2;
         continue;
@@ -325,7 +346,7 @@ function absorbFlash(
       continue;
     }
     const prev = out[out.length - 1];
-    if (prev && canFlashMerge(words, prev, cur, unitCap, charCap, profile)) {
+    if (prev && canFlashMerge(words, prev, cur, unitCap, charCap, profile, preset)) {
       out[out.length - 1] = [prev[0], cur[1]];
       i += 1;
       continue;
@@ -361,7 +382,7 @@ export function mergeWatchabilitySpans(
     }
     const left = cues[i]!;
     const right = cues[i + 1]!;
-    if (canMerge(words, left, right, unitCap, charCap, profile)) {
+    if (canMerge(words, left, right, unitCap, charCap, profile, preset)) {
       pass1.push([left[0], right[1]]);
       i += 2;
     } else {
@@ -369,5 +390,5 @@ export function mergeWatchabilitySpans(
       i += 1;
     }
   }
-  return absorbFlash(words, pass1, unitCap, charCap, profile);
+  return absorbFlash(words, pass1, unitCap, charCap, profile, preset);
 }

@@ -107,9 +107,13 @@ interface Limits {
 }
 
 /**
- * 单行宽度上限（加权字符）。short = Netflix 原值（拉丁 42 / 中韩 16 / 日 13 全角）。
- * standard / loose 上浮：Netflix 假定译员能压缩原文，我们的源文是 ASR 原文、不可压缩，
- * 一律按 42 切会把语音切成一堆 0.6s 的碎条，所以标准档放到 +19%、宽松档 +38%。
+ * 单行宽度上限（加权字符）。口径来自 Netflix TTSG（拉丁 42 / 中韩 16 / 日 13 全角），
+ * 但那是给「译员可以压缩原文」的剧集字幕设的；我们的源文是 ASR 原文，不能压缩，
+ * 按 42 切会把 12–17 CPS 的正常语速切成 6 词一行的碎条（实测 90s 素材 36 条）。
+ *
+ * 因此三档都按「1080p 一行能放下」来定：拉丁 56 / 72 / 84（72 字符 ≈ 36em，
+ * 40px 字号下约 1440px，落在 1920 的可用宽度内），全角 20 / 26 / 30。
+ * 42 的那个口径保留在注释里，需要严格广播规范时把 short 改回 42 即可。
  */
 interface Widths {
   short: number;
@@ -177,7 +181,7 @@ const EN_PROFILE = makeProfile({
   connectors: EN_CONNECTORS,
   punkt: true,
   limits: { short: 12, standard: 16, loose: 20 },
-  widths: { short: 42, standard: 56, loose: 64 },
+  widths: { short: 56, standard: 72, loose: 84 },
   cpsMax: 20,
 });
 
@@ -186,7 +190,7 @@ const ZH_PROFILE = makeProfile({
   connectors: ZH_CONNECTORS,
   charBased: true,
   limits: { short: 16, standard: 22, loose: 28 },
-  widths: { short: 16, standard: 20, loose: 22 }, // Netflix 繁中 16 字/行
+  widths: { short: 20, standard: 26, loose: 30 }, // 一行可容纳的全角字数（1080p 实测约 30+）
   grace: 6,
   cpsMax: 9,
 });
@@ -196,7 +200,7 @@ const JA_PROFILE = makeProfile({
   connectors: JA_CONNECTORS,
   charBased: true,
   limits: { short: 16, standard: 22, loose: 28 },
-  widths: { short: 13, standard: 16, loose: 18 }, // Netflix 日文 13 全角/行
+  widths: { short: 16, standard: 21, loose: 24 }, // 全角字数；Netflix 原值 13 见注释
   grace: 6,
   cpsMax: 4,
 });
@@ -206,7 +210,7 @@ const KO_PROFILE = makeProfile({
   connectors: KO_CONNECTORS,
   charBased: true,
   limits: { short: 15, standard: 20, loose: 26 },
-  widths: { short: 16, standard: 20, loose: 22 }, // Netflix 韩 16（拉丁算 0.5）
+  widths: { short: 20, standard: 26, loose: 30 }, // 半角计数（拉丁/空格算 0.5）
   cpsMax: 12,
 });
 
@@ -223,7 +227,7 @@ const FR_PROFILE = makeProfile({
   key: 'fr',
   connectors: FR_CONNECTORS,
   limits: { short: 11, standard: 14, loose: 18 },
-  widths: { short: 42, standard: 56, loose: 64 },
+  widths: { short: 56, standard: 72, loose: 84 },
   cpsMax: 17,
   functionWordsLeft: U35_SPACED_FUNCTION_WORDS,
 });
@@ -231,7 +235,7 @@ const DE_PROFILE = makeProfile({
   key: 'de',
   connectors: DE_CONNECTORS,
   limits: { short: 11, standard: 14, loose: 18 },
-  widths: { short: 42, standard: 56, loose: 64 },
+  widths: { short: 56, standard: 72, loose: 84 },
   cpsMax: 17,
   functionWordsLeft: U35_SPACED_FUNCTION_WORDS,
 });
@@ -239,7 +243,7 @@ const ES_PROFILE = makeProfile({
   key: 'es',
   connectors: ES_CONNECTORS,
   limits: { short: 11, standard: 14, loose: 18 },
-  widths: { short: 42, standard: 56, loose: 64 },
+  widths: { short: 56, standard: 72, loose: 84 },
   cpsMax: 17,
   functionWordsLeft: U35_SPACED_FUNCTION_WORDS,
 });
@@ -247,7 +251,7 @@ const PT_PROFILE = makeProfile({
   key: 'pt',
   connectors: PT_CONNECTORS,
   limits: { short: 11, standard: 14, loose: 18 },
-  widths: { short: 42, standard: 56, loose: 64 },
+  widths: { short: 56, standard: 72, loose: 84 },
   cpsMax: 17,
   functionWordsLeft: U35_SPACED_FUNCTION_WORDS,
 });
@@ -255,7 +259,7 @@ const IT_PROFILE = makeProfile({
   key: 'it',
   connectors: IT_CONNECTORS,
   limits: { short: 11, standard: 14, loose: 18 },
-  widths: { short: 42, standard: 56, loose: 64 },
+  widths: { short: 56, standard: 72, loose: 84 },
   cpsMax: 17,
   functionWordsLeft: U35_SPACED_FUNCTION_WORDS,
 });
@@ -265,7 +269,7 @@ const AR_PROFILE = makeProfile({
     'ولكن', 'لأن', 'لذلك', 'ثم', 'أو', 'عندما', 'حيث', 'لكن', 'بسبب', 'إضافة',
   ],
   limits: { short: 12, standard: 16, loose: 20 },
-  widths: { short: 42, standard: 56, loose: 64 },
+  widths: { short: 56, standard: 72, loose: 84 },
   cpsMax: 20,
   functionWordsLeft: U35_SPACED_FUNCTION_WORDS,
 });
@@ -273,7 +277,7 @@ const DEFAULT_PROFILE = makeProfile({
   key: 'default',
   connectors: U35_SPACED_CONNECTORS,
   limits: { short: 12, standard: 16, loose: 20 },
-  widths: { short: 42, standard: 56, loose: 64 },
+  widths: { short: 56, standard: 72, loose: 84 },
   cpsMax: 20,
   functionWordsLeft: U35_SPACED_FUNCTION_WORDS,
 });

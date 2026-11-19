@@ -40,6 +40,7 @@ import {
   isPhraseCloseParticle,
   isSingleCjkCharToken,
   isSplitConnectorPair,
+  isLineStartPreposition,
   isTimeGluedContent,
   isWeakCueEnding,
   lexicalCutCost,
@@ -164,6 +165,10 @@ export function boundaryBaseCost(
   ) {
     return CONNECTOR_COST;
   }
+  // 介词前断行：Netflix 断行优先级第三条
+  if (isLineStartPreposition(right.text) && !isConnectorLike(left.text, profile.connectors)) {
+    return CONNECTOR_COST;
+  }
   if (isSplitConnectorPair(right.text, next2, profile.connectors) && !isConnectorLike(left.text, profile.connectors)) {
     return CONNECTOR_COST;
   }
@@ -211,6 +216,7 @@ export function isQualityCutBoundary(
   if (isSplitConnectorPair(right.text, next2, profile.connectors) && !isConnectorLike(left.text, profile.connectors)) {
     return true;
   }
+  if (isLineStartPreposition(right.text)) return true;
   if (isTimeGluedContent(left.text, right.text, gapAt(words, i))) return false;
   const gap = gapAt(words, i);
   if (gap != null && gap >= GOOD_SILENCE_SEC) return true;
@@ -278,6 +284,15 @@ function isForcePreferredCut(words: readonly TimedWord[], i: number, profile: La
   return false;
 }
 
+
+/** 这个边界之后是否有标点（标点切点豁免最小段长）。 */
+function isPunctBoundary(words: readonly TimedWord[], i: number): boolean {
+  const left = words[i];
+  if (!left) return false;
+  if (hasBreakTerminal(left.text)) return true;
+  if (endsWithSoftPunctuation(left.text)) return true;
+  return isCommaToken(left.text) && !isDiscourseMarkerComma(left.text);
+}
 
 /** 段内是否有可用的标点切点（逗号/软标点/句末，且不落在话语标记后）。 */
 function hasPunctuationCut(words: readonly TimedWord[], start: number, end: number): boolean {
@@ -491,7 +506,10 @@ function dpSplitSpanUngatedForce(
       if (!Number.isFinite(baseCost[j]!) || !Number.isFinite(dp[j]!)) continue;
       // 最小段长：不留 1–3 个词的小尾巴（要么闪帧、要么翻译不出意思）。
       // 短段按总长的 1/3 打折，避免「9 个单位凑不出 4+4 的合法切点」导致整段不切。
-      if (tokenCount > 1 && segUnits < minSide && (j > 0 || i < n)) continue;
+      // 标点切点豁免最小段长：段的两端只要有一端落在标点上，就不算「碎尾巴」
+      const punctAtStart = j > 0 && isPunctBoundary(words, start + j - 1);
+      const punctAtEnd = i < n && isPunctBoundary(words, start + i - 1);
+      if (tokenCount > 1 && segUnits < minSide && (j > 0 || i < n) && !punctAtStart && !punctAtEnd) continue;
       const lengthPenalty = (LENGTH_PENALTY_WEIGHT * Math.abs(segUnits - budget.limit)) / budget.limit;
       let cost = dp[j]! + baseCost[j]! + lengthPenalty;
       if (charLimited(hard) && hard.width > 0) {
@@ -581,6 +599,8 @@ export function dpSplitSpan(
     for (let k = 1; k < n; k++) {
       const leftU = prefix[k]!;
       const rightU = prefix[n]! - prefix[k]!;
+      // 首选刀仍要满足最小段长：否则「每一个逗号都成为强制切点」，会把
+      // 90 秒素材切回 47 条。标点的豁免只放在下面的 ungated DP 里（见 isPunctBoundary）。
       if (leftU >= minSide && rightU >= minSide && isForcePreferredCut(words, start + k - 1, profile)) {
         preferredRel.push(k);
       }

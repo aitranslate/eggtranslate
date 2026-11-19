@@ -48,15 +48,15 @@ describe('单行宽度预算', () => {
     });
   }
 
-  it('en_probe：100 字符的长句按单行预算切成 3 条，而不是整句保留', () => {
+  it('en_probe：115 字符的长句按单行预算切成 2 条，且切在介词前', () => {
     const fixture = load('en_probe');
     const cues = segmentWords(fixture.words, fixture.lang, 'standard', {
       watchabilityMerge: true,
     });
+    // Netflix 断行优先级第三条：在介词前断（"…crash course | about our new…"）
     expect(cues.map((c) => c.text)).toEqual([
-      'Alright, Flips!',
-      'Welcome everyone into this crash course about our new',
-      '15-minute timeframe entry models and strategy.',
+      'Alright, Flips! Welcome everyone into this crash course',
+      'about our new 15-minute timeframe entry models and strategy.',
     ]);
     const profile = getProfile('en');
     for (const cue of cues) {
@@ -64,13 +64,13 @@ describe('单行宽度预算', () => {
     }
   });
 
-  it('三档预设宽度递增，且都来自 Netflix 数值', () => {
+  it('三档预设宽度递增（按 1080p 一行能放下来定）', () => {
     const profile = getProfile('en');
-    expect(profile.widthLimit('short')).toBe(42);
-    expect(profile.widthLimit('standard')).toBeGreaterThan(profile.widthLimit('short'));
-    expect(profile.widthLimit('loose')).toBeGreaterThan(profile.widthLimit('standard'));
-    expect(getProfile('zh').widthLimit('short')).toBe(16);
-    expect(getProfile('ja').widthLimit('short')).toBe(13);
-    expect(getProfile('ko').widthLimit('short')).toBe(16);
+    expect(profile.widthLimit('short')).toBe(56);
+    expect(profile.widthLimit('standard')).toBe(72);
+    expect(profile.widthLimit('loose')).toBe(84);
+    expect(getProfile('zh').widthLimit('standard')).toBe(26);
+    expect(getProfile('ja').widthLimit('standard')).toBe(21);
+    expect(getProfile('ko').widthLimit('standard')).toBe(26);
   });
 });
