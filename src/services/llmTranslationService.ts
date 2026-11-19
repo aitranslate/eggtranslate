@@ -35,6 +35,8 @@ type TranslateBatchResult = {
 
 type TranslateBatchOptions = {
   signal?: AbortSignal;
+  /** 每行译文的字数上限（按该条时长 × 目标语言 CPS 算出），null = 不限制 */
+  lineBudgets?: readonly (number | null)[];
   contextBefore?: string;
   contextAfter?: string;
   terms?: string;
@@ -311,6 +313,7 @@ export async function translateBatch(
     onPartial,
     onCommitted,
     onAttemptStart,
+    lineBudgets,
   } = options;
 
   const llm = getActiveLlmConfig(config);
@@ -329,7 +332,8 @@ export async function translateBatch(
     sharedPrompt,
     config.sourceLanguage,
     config.targetLanguage,
-    promptVariant
+    promptVariant,
+    lineBudgets
   );
 
   const llmConfig = {

@@ -51,6 +51,7 @@ const makeCallbacks = (overrides: Partial<{
   getRelevantTerms: (b: string, before: string, after: string) => Term[];
   formatTermsForPrompt: (terms: Term[]) => string;
 }> = {}) => ({
+  targetLanguage: '简体中文',
   translateBatch: vi.fn(),
   batchUpdateEntries: vi.fn(),
   updateProgress: vi.fn(),
@@ -427,6 +428,7 @@ describe('processBatch batch apply', () => {
     const updateEntrySpy = vi.fn();
 
     const callbacks: TranslationCallbacks = {
+      targetLanguage: '简体中文',
       translateBatch: vi.fn().mockResolvedValue({
         translations: {
           '1': { direct: 'A' },
@@ -483,6 +485,7 @@ describe('processBatch batch apply', () => {
     const clearStreamingIds = vi.fn();
 
     const callbacks: TranslationCallbacks = {
+      targetLanguage: '简体中文',
       translateBatch: vi.fn(
         async (
           _texts,
@@ -555,6 +558,7 @@ describe('processBatch batch apply', () => {
     const persistCheckpoint = vi.fn();
 
     const callbacks: TranslationCallbacks = {
+      targetLanguage: '简体中文',
       translateBatch: vi.fn(
         async (
           _texts,
@@ -626,6 +630,7 @@ describe('processBatch batch apply', () => {
 
     const callbacks: TranslationCallbacks = {
       // only returns key "1" — lines 2 and 3 have no independent target
+      targetLanguage: '简体中文',
       translateBatch: vi.fn().mockResolvedValue({
         translations: {
           '1': { direct: '仅第一行' },

@@ -63,7 +63,8 @@ export const generateDirectPrompt = (
   sharedPrompt: string,
   sourceLanguage: string,
   targetLanguage: string,
-  variant: PromptVariant = DEFAULT_VARIANT
+  variant: PromptVariant = DEFAULT_VARIANT,
+  lineBudgets?: readonly (number | null)[]
 ): string => {
   // 优化：使用 map + Object.fromEntries 更简洁
   const lineArray = lines.split('\n').filter(line => line.trim());
@@ -79,6 +80,27 @@ export const generateDirectPrompt = (
   );
 
   const jsonFormat = JSON.stringify(jsonDict, null, 2);
+  // 字数预算：按「这条字幕的时长 × 目标语言 CPS」算出来的可读上限。
+  // 只在不均匀时逐条列出；全部相同就写一句，避免 prompt 膨胀。
+  const budgets = (lineBudgets ?? []).slice(0, lineArray.length);
+  const rated = budgets.filter((b): b is number => typeof b === 'number' && b > 0);
+  const budgetSection = (() => {
+    if (rated.length === 0) return '';
+    const unique = [...new Set(rated)];
+    if (unique.length === 1 && rated.length === lineArray.length) {
+      return `
+【字数上限】每条译文不超过 ${unique[0]} 个字符（超出就压缩措辞，不得删除信息）。
+`;
+    }
+    const rows = budgets
+      .map((b, i) => (typeof b === 'number' && b > 0 ? `${i + 1}:${b}` : null))
+      .filter(Boolean)
+      .join('  ');
+    return `
+【字数上限】行号:最多字符数（按该条在屏幕上停留的时长算出的可读上限，超出就压缩措辞，不得删除信息）
+${rows}
+`;
+  })();
 
   if (variant === 'translation-specialist') {
     // 纯翻译模型分支：短指令 + 显式字段约束，不使用角色扮演式长模板。
@@ -88,7 +110,7 @@ export const generateDirectPrompt = (
       ? `\n【参考（仅用于消歧，禁止翻译、禁止写入任何字段）】\n${sharedPrompt.trim()}\n`
       : '';
 
-    return `请将以下<source>中的每行字幕从${sourceLanguage}翻译成${targetLanguage}，保持严格 1:1 对应，不要合并或拆分，不要添加解释。${referenceSection}
+    return `请将以下<source>中的每行字幕从${sourceLanguage}翻译成${targetLanguage}，保持严格 1:1 对应，不要合并或拆分，不要添加解释。${budgetSection}${referenceSection}
 【source】
 ${lines}
 
@@ -125,7 +147,7 @@ Match the source register. Spoken dialogue stays colloquial; narration and news 
 </translation_guidelines>
 
 <subtitle_constraints>
-- Keep each subtitle short enough to read at normal playback speed.
+- Keep each subtitle short enough to read at normal playback speed.${budgetSection}
 - Maintain strict 1:1 mapping with source entries — do not merge or split.
 - Preserve natural speech rhythm in line breaks.
 - Do not add explanations, parenthetical glosses, or extra sentences absent from the source line.

@@ -175,6 +175,7 @@ export async function startTranslation(
         taskId: file.taskId,
       },
       {
+        targetLanguage: effectiveConfig.targetLanguage,
         translateBatch: (
           texts,
           signal,
@@ -183,7 +184,8 @@ export async function startTranslation(
           terms,
           onPartial,
           onAttemptStart,
-          onCommitted
+          onCommitted,
+          lineBudgets
         ) =>
           deps.translateBatch(effectiveConfig, texts, {
             signal,
@@ -193,6 +195,7 @@ export async function startTranslation(
             onPartial,
             onAttemptStart,
             onCommitted,
+            lineBudgets,
           }),
         batchUpdateEntries: (updates) => {
           deps.batchUpdateEntries(fileId, updates);

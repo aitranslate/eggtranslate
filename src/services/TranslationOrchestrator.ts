@@ -4,6 +4,8 @@
  */
 
 import type { SubtitleEntry, Term, TranslationStatus, TranslationHistoryEntry } from '@/types';
+import { maxCharsForCue } from '@/services/sentenceSegmentation/subtitleBudget';
+import { parseTime } from '@/utils/timeUtils';
 import { useFilesStore } from '@/stores/filesStore';
 import toast from 'react-hot-toast';
 import { API_CONSTANTS } from '@/constants/api';
@@ -33,6 +35,8 @@ interface TranslationConfig {
 }
 
 export interface TranslationCallbacks {
+  /** 目标语言：用于算每行译文的字数上限（CPS × 时长） */
+  targetLanguage: string;
   translateBatch: (
     texts: string[],
     signal?: AbortSignal,
@@ -46,7 +50,9 @@ export interface TranslationCallbacks {
     /** 流式中已闭合的行，可立刻按条落库 */
     onCommitted?: (
       translations: Record<string, { direct: string }>
-    ) => void | Promise<void>
+    ) => void | Promise<void>,
+    /** 每行译文字数上限（按该条时长 × 目标语言 CPS），null = 不限制 */
+    lineBudgets?: readonly (number | null)[]
   ) => Promise<{ translations: Record<string, { direct: string }>; tokensUsed: number; partial?: boolean }>;
   /**
    * Apply an entire batch of entry patches in one store mutation.
@@ -329,6 +335,14 @@ export async function processBatch(
       }
     };
 
+    // 译文字数预算：这条在屏幕上停留多久 × 目标语言 CPS，就是模型该写的上限
+    const lineBudgets = batch.untranslatedEntries.map((entry) => {
+      const start = parseTime(entry.startTime);
+      const end = parseTime(entry.endTime);
+      if (start == null || end == null || end <= start) return null;
+      return maxCharsForCue(callbacks.targetLanguage, end - start);
+    });
+
     const translationResult = await callbacks.translateBatch(
       batch.textsToTranslate,
       controller.signal,
@@ -344,7 +358,8 @@ export async function processBatch(
           );
         }
       },
-      commitClosedLines
+      commitClosedLines,
+      lineBudgets
     );
 
     const remainingUpdates = finalizeBatchTranslations(
