@@ -267,6 +267,20 @@ function isForcePreferredCut(words: readonly TimedWord[], i: number, profile: La
   return false;
 }
 
+
+/** 段内是否有可用的标点切点（逗号/软标点/句末，且不落在话语标记后）。 */
+function hasPunctuationCut(words: readonly TimedWord[], start: number, end: number): boolean {
+  for (let i = start; i < end; i++) {
+    const left = words[i];
+    const right = words[i + 1];
+    if (!left || !right) continue;
+    if (endsWithSoftPunctuation(left.text)) return true;
+    if (isCommaToken(left.text) && !isDiscourseMarkerComma(left.text)) return true;
+    if (hasBreakTerminal(left.text)) return true;
+  }
+  return false;
+}
+
 function shouldKeepShortCut(words: readonly TimedWord[], start: number, cutK: number, profile: LanguageProfile): boolean {
   const leftIdx = start + cutK - 1;
   const rightIdx = start + cutK;
@@ -534,7 +548,20 @@ export function dpSplitSpan(
   const inGrace =
     totalUnits <= hard.target + budget.grace &&
     (!charLimited(hard) || totalChars <= hard.char + 11);
-  const mode: DpMode = withinTarget ? 'inside-budget' : inGrace ? 'quality' : 'force';
+  let mode: DpMode = withinTarget ? 'inside-budget' : inGrace ? 'quality' : 'force';
+
+  // 与 OneAsr 的有意偏离：只有「显示字符」超预算、词/字仍在预设内，且整段没有任何
+  // 标点可切时，整段保留。字符预算 = 词数 × 5.5 只是估算，数字/复合词多的句子
+  // 会假性超限；此时硬拆只能落在短语中间（"...entry models" | "and strategy."）。
+  if (
+    mode === 'force' &&
+    totalUnits <= hard.target &&
+    charLimited(hard) &&
+    totalChars <= hard.char * 1.25 &&
+    !hasPunctuationCut(words, start, end)
+  ) {
+    mode = 'inside-budget';
+  }
   const charBased = profile.isCharBased;
 
   if (mode === 'force') {

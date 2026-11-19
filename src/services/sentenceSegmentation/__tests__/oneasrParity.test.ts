@@ -32,7 +32,8 @@ const fmt = (ms: number): string => {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`;
 };
 
-const CASES = ['en_probe', 'en_slice', 'zh_slice', 'ja_tiny'];
+// en_probe 不在里面：那条刻意偏离 OneAsr（见 segmentationDeviations.test.ts）
+const CASES = ['en_slice', 'zh_slice', 'ja_tiny'];
 
 describe('OneAsr 断句一致性', () => {
   for (const id of CASES) {
