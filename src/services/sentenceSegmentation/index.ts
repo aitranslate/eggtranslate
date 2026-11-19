@@ -9,6 +9,7 @@ import { getProfile, type LanguageProfile, type Preset } from './profiles';
 import { dpSplitSpan, spanBudgetFor } from './softSplit';
 import { joinWords } from './spacing';
 import { mergeWatchabilitySpans } from './watchabilityMerge';
+import { padCueTimings } from './timing';
 import type { DpSegment, Segment, WordWithTime } from './types';
 
 export type { Preset } from './profiles';
@@ -71,7 +72,8 @@ export function segmentWords(
       words: orig,
     });
   }
-  return out;
+  // 时间轴单独铺：把每条的显示时间填进前后停顿，降低单条 CPS、消掉闪帧短条
+  return padCueTimings(out, { maxDuration: profile.maxDuration });
 }
 
 /** 纯文本断句（离线测试 / 复刻用，不带时间信息）。 */
