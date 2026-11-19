@@ -1,0 +1,88 @@
+1
+00:00:00,600 --> 00:00:02,020
+Alright, so in this video,
+
+2
+00:00:02,220 --> 00:00:04,320
+I want to show how
+
+3
+00:00:05,040 --> 00:00:09,340
+I determine which direction I want to trade before New York opens.
+
+4
+00:00:09,620 --> 00:00:12,640
+And this is the bias method I use that
+
+5
+00:00:13,200 --> 00:00:15,440
+filters out majority of the bad trades.
+
+6
+00:00:15,480 --> 00:00:18,660
+It's not perfect, but it helps me increase my win rate.
+
+7
+00:00:19,080 --> 00:00:20,940
+Enough to get some juicy payouts.
+
+8
+00:00:21,880 --> 00:00:26,960
+Um, so what we trade is CRT buys, candle range theory.
+
+9
+00:00:27,580 --> 00:00:32,700
+I'm going to go over how it all works in this video, so.
+
+10
+00:00:34,660 --> 00:00:36,940
+Um, yeah, I love this from another one and another one,
+
+11
+00:00:37,220 --> 00:00:44,040
+and I guess AM Trades also teaches it through the name of daily profiles, I believe.
+
+12
+00:00:44,680 --> 00:00:47,300
+Uh, but anyways, so this is for New York session.
+
+13
+00:00:47,400 --> 00:00:51,040
+All we do is look at the previous seven hour candles.
+
+14
+00:00:52,640 --> 00:00:59,940
+So this C1 would be your uh 1800 candle.
+
+15
+00:01:00,680 --> 00:01:05,420
+And your C2 would be your 1 AM candle.
+
+16
+00:01:06,120 --> 00:01:11,260
+And then your C3 would be your 8 AM candle.
+
+17
+00:01:12,100 --> 00:01:17,380
+So each day before the New York open at 8 AM or 9 AM,
+
+18
+00:01:18,740 --> 00:01:21,620
+we can go ahead and look at the last two seven hour candles,
+
+19
+00:01:21,720 --> 00:01:24,180
+so the 6 PM candle and the 1 AM candle.
+
+20
+00:01:24,640 --> 00:01:30,400
+And look at how C2 reacted in relation to C1.
+
+21
+00:01:31,780 --> 00:01:34,640
+So, okay, in this first scenario,
+
+22
+00:01:35,400 --> 00:01:42,860
+the C2 candle swept C1 candles low, but then we still closed
+

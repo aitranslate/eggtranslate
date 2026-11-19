@@ -34,12 +34,11 @@ utils / constants      → 纯函数：解析、prompt、限流、错误映射
 
 ## 断点续跑
 
-远程 / LLM 工作按检查点跳过已完成部分；纯 CPU（转码、DP 断句）不续跑。
+远程 / LLM 工作按检查点跳过已完成部分；纯 CPU（转码、规则断句）不续跑。
 
 | 阶段 | 检查点 | 续跑方式 |
 |------|--------|----------|
 | ASR | `phases.transcribing.transcriptId` + `egg_checkpoint:{taskId}` 词表 | `submit` 后立刻落盘 id，刷新后只 `GET /v2/transcript/{id}` |
-| AI 断句 | checkpoint.`aiBreaks[spanIdx]` | 跳过已落盘且 spanText 未变的 LLM 调用 |
 | 翻译 | `subtitle_entries.translationStatus` | 流式某行 JSON 闭合即标 `completed` 落库；未闭合行只在 overlay |
 
 `recoverInterruptedPhases` 把 `active` 标成 `failed` 但保留 id / `asrReady`。队列不自动开跑，用户点重试后从检查点继续。

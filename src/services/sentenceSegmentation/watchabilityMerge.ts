@@ -1,372 +1,369 @@
-// Watchability 合并后处理 —— 移植 D:\voxtrans 的 subtitle_step5/watchability_merge.rs。
-// 解决"一闪而过"：DP 断句后把过短相邻段按静音间隔 / 残段-连词模式重新粘合。
-// EggTranslate 断句阶段只有源文本，故文本判定均基于 source `text`，逻辑等价。
-// 入口为纯函数（输入输出 DpSegment[]），便于单测。
+// Watchability 合并 —— OneAsr crates/oneasr-core/src/sentence_boundary/watchability_merge.rs 的移植。
+// 在 DP 之后、翻译之前跑：把闪帧段 / 孤儿尾巴 / 被切开的定语回粘，避免「一行一闪」和残句。
 
-import { CHARS_PER_WORD_BUDGET, getProfile } from './profiles';
-import { isDiscourseMarkerText, isFunctionWordLeft } from './textRules';
-import type { DpSegment, Preset } from './types';
 import {
-  FLASH_MS,
+  CHARS_PER_WORD_BUDGET,
+  FLASH_SEC,
+  MERGE_BUDGET_SEC,
+  ORPHAN_MERGE_BUDGET_SEC,
   ORPHAN_MERGE_GRACE_UNITS,
   ORPHAN_TAIL_CJK_UNITS,
   ORPHAN_TAIL_LATIN_UNITS,
-  ORPHAN_TAIL_MAX_MS,
-  WATCHABILITY_GAP_MS,
+  ORPHAN_TAIL_MAX_SEC,
+  WATCHABILITY_GAP_SEC,
 } from './constants';
+import type { LanguageProfile, Preset } from './profiles';
+import { joinWords } from './spacing';
+import {
+  isCaseParticleBeforePredicate,
+  isConnectorLike,
+  isDiscourseMarkerText,
+  isFunctionWordLeft,
+  isJaAddressGreetingBind,
+  isJapaneseLexicalBind,
+  isJapaneseSpokenEnd,
+  isJaTurnStartAfter,
+  isLineStartBoundParticle,
+  isOpenGenitiveLink,
+  isSplitHai,
+  stripToken,
+} from './textRules';
 
-const MERGE_BUDGET_MS = 6000;
+export interface CueWord {
+  text: string;
+  start: number | null;
+  end: number | null;
+}
 
-const norm = (s: string) => s.replace(/[\r\n]/g, ' ').split(/\s+/).filter(Boolean).join(' ').trim();
+export type Cue = [number, number];
 
-const isCjk = (ch: string) => {
-  const c = ch.codePointAt(0)!;
+/** 句末收尾符（. ! ? 及全角、分号逗号）。 */
+const isSentenceCloseChar = (ch: string): boolean =>
+  ['.', '!', '?', ';', '。', '！', '？', '；', '，', '、', ','].includes(ch);
+
+const cueText = (words: readonly CueWord[], cue: Cue): string =>
+  joinWords(words.slice(cue[0], cue[1] + 1).map((w) => w.text));
+
+const cueUnits = (words: readonly CueWord[], cue: Cue, profile: LanguageProfile): number => {
+  let sum = 0;
+  for (let i = cue[0]; i <= cue[1]; i++) sum += profile.tokenUnits(words[i]!.text);
+  return sum;
+};
+
+const cueStart = (words: readonly CueWord[], cue: Cue): number => words[cue[0]]?.start ?? 0;
+const cueEnd = (words: readonly CueWord[], cue: Cue): number => words[cue[1]]?.end ?? 0;
+const cueDuration = (words: readonly CueWord[], cue: Cue): number => cueEnd(words, cue) - cueStart(words, cue);
+
+const LATIN_LINE_END_CONNECTORS = [
+  'and', 'or', 'to', 'for', 'with', 'that', 'which', 'when', 'if', 'but', 'so',
+];
+const CJK_LINE_END_CONNECTORS = [
+  '然后', '而且', '并且', '因为', '所以', '但是', '如果', '为了', '以及', '还有', '并', '和', '与',
+  '及', '或', '来', '去', '在', '对', '把', '将', '大约', '这', '那', '这个', '那个', '一个',
+];
+const LATIN_CONTINUATIONS = [
+  'a', 'an', 'the', 'to', 'of', 'and', 'or', 'with', 'for', 'this', 'that', 'if', 'so', 'then',
+  'while', 'it', 'you', 'we', 'they',
+];
+const CJK_CONTINUATIONS = [
+  '个', '这个', '那个', '这', '那', '然后', '并且', '而且', '而', '并', '因为', '所以', '如果', '还',
+  '继续', '将', '与', '和',
+];
+
+const isLineEndConnectorToken = (token: string, profile: LanguageProfile): boolean => {
+  const t = stripToken(token).toLowerCase();
+  if (!t) return false;
   return (
-    (c >= 0x3040 && c <= 0x30ff) || (c >= 0x3400 && c <= 0x4dbf) ||
-    (c >= 0x4e00 && c <= 0x9fff) || (c >= 0xf900 && c <= 0xfaff) || (c >= 0xac00 && c <= 0xd7af)
+    LATIN_LINE_END_CONNECTORS.includes(t) ||
+    CJK_LINE_END_CONNECTORS.includes(t) ||
+    isConnectorLike(token, profile.connectors)
   );
 };
 
-const shouldUseCharUnits = (lang: string, text: string) => {
-  const lo = lang.trim().toLowerCase();
-  if (/^(zh|yue|ja|ko|th)/.test(lo)) return true;
-  if (!lo || lo === 'auto') return [...text].some(isCjk);
-  return false;
+const isContinuationToken = (token: string, profile: LanguageProfile): boolean => {
+  const t = stripToken(token).toLowerCase();
+  if (!t) return false;
+  return (
+    LATIN_CONTINUATIONS.includes(t) ||
+    CJK_CONTINUATIONS.includes(t) ||
+    isConnectorLike(token, profile.connectors)
+  );
 };
 
-const countCharUnits = (t: string) => {
-  let n = 0, asc = false;
-  for (const ch of t) {
-    if (ch === ' ' || ch === '\t') { if (asc) { n++; asc = false; } continue; }
-    if (/[A-Za-z0-9]/.test(ch)) { asc = true; continue; }
-    if (asc) { n++; asc = false; }
-    // \p{L}\p{M}* 把基础字母和后续组合标记（重音等）算一个单位，避免 café 被算成 5。
-    // 韩文 syllable block（가-힣）是 NFC 单码点，\p{L} 已覆盖；Jamo 组合极少见，忽略。
-    if (isCjk(ch) || /\p{L}\p{M}*|\p{N}/u.test(ch)) n++;
-  }
-  return asc ? n + 1 : n;
+const textUnits = (text: string, profile: LanguageProfile): number => {
+  const t = text.trim();
+  if (!t) return 0;
+  if (profile.isCharBased) return [...t].filter((c) => !/\s/.test(c)).length;
+  return t.split(/\s+/).filter(Boolean).length;
 };
 
-const countWordUnits = (t: string) => {
-  let n = 0, w = false;
-  for (const ch of t) {
-    if (/[A-Za-z0-9]/.test(ch)) { if (!w) { n++; w = true; } continue; }
-    if (isCjk(ch)) n++;
-    w = false;
-  }
-  return n;
+const textLooksLikeDanglingLeadin = (text: string, profile: LanguageProfile): boolean => {
+  const t = text.trim();
+  if (!t) return false;
+  const endsComma = t.endsWith(',') || t.endsWith('，');
+  if (!endsComma) return false;
+  // 按字计的语言数非空白字符，按词计的语言数词。
+  const units = profile.isCharBased
+    ? [...t].filter((c) => !/\s/.test(c)).length
+    : t.split(/\s+/).filter(Boolean).length;
+  const cap = profile.isCharBased ? 12 : 6;
+  if (units <= 0 || units > cap) return false;
+  const first = t
+    .split(/[\s,，]/)
+    .find((p) => p.length > 0)
+    ?.toLowerCase();
+  if (!first) return false;
+  const LEADINS = [
+    'well', 'so', 'now', 'but', 'and', 'or', 'yet', 'still', 'okay', 'ok', 'right', 'look',
+    'listen', 'basically', 'fundamentally', 'actually', 'literally', 'essentially', 'however',
+    'therefore', 'meanwhile', 'anyway', 'also',
+  ];
+  return LEADINS.includes(first);
 };
 
-const textLen = (t: string, lang: string) => {
-  const s = t.trim();
-  if (!s) return 0;
-  return shouldUseCharUnits(lang, s) ? countCharUnits(s) : countWordUnits(s);
+const isShortInterjection = (words: readonly CueWord[], cue: Cue, profile: LanguageProfile): boolean => {
+  const units = cueUnits(words, cue, profile);
+  const max = profile.isCharBased ? 6 : 2;
+  if (units <= 0 || units > max) return false;
+  const text = cueText(words, cue);
+  if (isDiscourseMarkerText(text)) return true;
+  const c = [...text];
+  return isSentenceCloseChar(c[c.length - 1] ?? '');
 };
 
-// 与 voxtrans quality.rs is_terminal_punctuation 一致。注意不含 ] / ) ——
-// 它们是配对右括号，不是句末标点。
-const isTerm = (ch: string) => ['.','!','?',';','。','！','？','；','，','、',','].includes(ch);
-
-const CJK_CONNECTORS = [
-  '然后', '而且', '并且', '因为', '所以', '但是', '如果', '为了', '以及', '还有',
-  '并', '和', '与', '及', '或', '来', '去', '在', '对', '把', '将', '大约',
-  'そして', 'だから', 'でも', 'けど', 'それで', 'しかし',
-  '그리고', '그래서', '그런데', '하지만',
-];
-const ASCII_CONNECTORS = ['and', 'or', 'to', 'for', 'with', 'that', 'which', 'when', 'if', 'but', 'so'];
-const CJK_STARTERS = [
-  '个', '这个', '那个', '这', '那', '然后', '并且', '而且', '而', '并',
-  '因为', '所以', '如果', '还', '继续', '将', '与', '和',
-  'そして', 'それで', 'でも', 'だから',
-  '그리고', '그래서', '그런데',
-];
-const ASCII_STARTERS = ['a', 'an', 'the', 'to', 'of', 'and', 'or', 'with', 'for', 'this', 'that', 'if', 'so', 'then', 'while', 'it', 'you', 'we', 'they'];
-const CJK_DANGLING = ['一个','做一个','这个','那个','这笔','那笔','这','那'];
-
-// 以下四个函数入参均为**已归一化**（norm 过）的文本；
-// 归一化在 canMerge 只做一次，避免同一段文本反复 replace/split/join。
-const endsDangling = (n: string) => CJK_DANGLING.some((s) => n.endsWith(s));
-
-const endsConnector = (n: string) => {
-  if (!n) return false;
-  if (CJK_CONNECTORS.some((s) => n.endsWith(s))) return true;
-  const lo = n.toLowerCase();
-  return ASCII_CONNECTORS.some((s) => lo.endsWith(s));
+const isOrphanTail = (words: readonly CueWord[], cue: Cue, profile: LanguageProfile): boolean => {
+  const dur = cueDuration(words, cue);
+  if (dur <= 0) return false;
+  const text = cueText(words, cue);
+  const discourse = isDiscourseMarkerText(text) || textLooksLikeDanglingLeadin(text, profile);
+  const maxDur = discourse ? 2.5 : ORPHAN_TAIL_MAX_SEC;
+  if (dur > maxDur) return false;
+  if (discourse) return true;
+  const units = cueUnits(words, cue, profile);
+  const cap = profile.isCharBased ? ORPHAN_TAIL_CJK_UNITS : ORPHAN_TAIL_LATIN_UNITS;
+  return units > 0 && units <= cap;
 };
 
-const fragPenalty = (n: string) => {
-  if (!n) return 0;
-  const cc = [...n].length;
-  const endTerm = isTerm(n[n.length - 1]);
-  const startPunct = /^[,，、。:：;；]/.test(n);
-  let p = 0;
-  if (startPunct) p += 8;
-  if (cc <= 4 && !endTerm) p += 6;
-  if (endsConnector(n)) p += 8;
-  if (cc <= 8 && endsDangling(n)) p += 10;
-  return p;
-};
-
-const isFragIssue = (n: string, lang: string) => {
-  if (!n || countWordUnits(n) < 6) return false;
-  if (isTerm(n[n.length - 1])) return false;
-  if (endsConnector(n) || endsDangling(n)) return true;
-  return fragPenalty(n) >= 8 && textLen(n, lang) <= 14;
-};
-
-const startsContinuation = (t: string, lang: string) => {
-  const n = norm(t);
-  if (!n) return false;
-  if (shouldUseCharUnits(lang, n)) return CJK_STARTERS.some((p) => n.startsWith(p));
-  const first = n.split(/\s+/)[0]?.toLowerCase() ?? '';
-  return !!first && (ASCII_STARTERS.includes(first) || ASCII_STARTERS.some((s) => n.startsWith(s + ' ')));
-};
-
-const mergeText = (a: string, b: string) => {
-  const la = norm(a), lb = norm(b);
-  if (!la || !lb) return la || lb;
-  // 左右任一侧以/起 CJK 时不插空格，避免"我们决定出门去 然后"这种字面瑕疵；
-  // 两侧皆拉丁时保留空格（"and the weather was bad"）。
-  const rxCjk = /[\u3000-\u9fff\uff00-\uffef]/;
-  const useSpace = !rxCjk.test(la[la.length - 1] ?? '') || !rxCjk.test(lb[0] ?? '');
-  return norm(useSpace ? `${la} ${lb}` : `${la}${lb}`);
-};
-
-const canMerge = (
-  l: DpSegment,
-  r: DpSegment,
-  maxUnits: number,
-  lang: string,
-  profile: ReturnType<typeof getProfile>,
-  charLimit: number,
-) => {
-  if (!l.text.trim() || !r.text.trim()) return false;
-  if (l.endTime > r.startTime) return false;
-  if (r.startTime - l.endTime > WATCHABILITY_GAP_MS) return false;
-  if (r.endTime - l.startTime > MERGE_BUDGET_MS) return false;
-  const nl = norm(l.text);
-  if (isClosedSentencePair(l, r, profile, nl)) return false;
-
-  const orphan = isOrphanTail(r, profile) && !isOrphanTail(l, profile);
-  if (orphan) {
-    return !pairExceedsCaps(l, r, profile, maxUnits, charLimit, ORPHAN_MERGE_GRACE_UNITS);
-  }
-  // 左段才是顶格挤出来的孤儿：向后粘（韩语 사실관계를 + 下一句）。
-  // 右侧也是闪帧时不加 grace，避免两截短段靠缓冲撑破 hard。
-  const leftOrphan = isOrphanTail(l, profile) && !isOrphanTail(r, profile);
-  if (leftOrphan) {
-    const grace = r.endTime - r.startTime >= FLASH_MS ? ORPHAN_MERGE_GRACE_UNITS : 0;
-    return !pairExceedsCaps(l, r, profile, maxUnits, charLimit, grace);
-  }
-
-  const lastWord = nl.split(/\s+/).pop() ?? '';
-  if (isFunctionWordLeft(lastWord, profile.functionWordsLeft)) {
-    const ru = segmentUnits(r, profile.tokenUnits);
-    const rightCap = profile.isCharBased ? 12 : 8;
-    if (ru > 0 && ru <= rightCap) {
-      return !pairExceedsCaps(l, r, profile, maxUnits, charLimit, ORPHAN_MERGE_GRACE_UNITS);
-    }
-  }
-
-  if (!endsDangling(nl) && !isFragIssue(nl, lang)) return false;
-  if (!startsContinuation(r.text, lang)) return false;
-  const merged = mergeText(l.text, r.text);
-  if (textLen(merged, lang) > maxUnits + ORPHAN_MERGE_GRACE_UNITS) return false;
-  return true;
-};
-
-const mergePair = (l: DpSegment, r: DpSegment): DpSegment => ({
-  text: mergeText(l.text, r.text),
-  startTime: l.startTime,
-  endTime: r.endTime,
-  wordStart: l.wordStart,
-  wordEnd: r.wordEnd,
-  words: [...l.words, ...r.words],
-  aiSplit: Boolean(l.aiSplit || r.aiSplit),
-});
-
-/**
- * 用 profile.tokenUnits 计量段长（与 DP 一致；优先 words[]）。
- */
-function segmentUnits(seg: DpSegment, tokenUnits: (t: string) => number): number {
-  if (seg.words?.length) {
-    return seg.words.reduce((s, w) => s + tokenUnits(w.text), 0);
-  }
-  // 无 words 时：按空白拆（拉丁）；整段无空白则整段当一 token
-  const parts = seg.text.split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) return tokenUnits(seg.text.trim());
-  return parts.reduce((s, t) => s + tokenUnits(t), 0);
-}
-
-function pairExceedsCaps(
-  l: DpSegment,
-  r: DpSegment,
-  profile: ReturnType<typeof getProfile>,
+const pairExceedsCaps = (
+  words: readonly CueWord[],
+  left: Cue,
+  right: Cue,
+  profile: LanguageProfile,
   unitCap: number,
   charCap: number,
   unitGrace = 0,
-): boolean {
-  const pairUnits =
-    segmentUnits(l, profile.tokenUnits) + segmentUnits(r, profile.tokenUnits);
-  const tokenCount = (l.words?.length ?? 1) + (r.words?.length ?? 1);
+): boolean => {
+  const pairUnits = cueUnits(words, left, profile) + cueUnits(words, right, profile);
+  const tokenCount = left[1] - left[0] + 1 + (right[1] - right[0] + 1);
   if (tokenCount > 1 && pairUnits > unitCap + unitGrace) return true;
   if (Number.isFinite(charCap)) {
-    const merged = mergeText(l.text, r.text);
+    const merged = joinWords(words.slice(left[0], right[1] + 1).map((w) => w.text));
     const charGrace = unitGrace > 0 ? Math.round(unitGrace * CHARS_PER_WORD_BUDGET) : 0;
-    if (merged.length > charCap + charGrace) return true;
+    if ([...merged].length > charCap + charGrace) return true;
+  }
+  return false;
+};
+
+const isClosedSentencePair = (
+  words: readonly CueWord[],
+  left: Cue,
+  right: Cue,
+  profile: LanguageProfile,
+): boolean => {
+  const leftText = cueText(words, left);
+  const c = [...leftText];
+  const last = c[c.length - 1] ?? '';
+  if (!isSentenceCloseChar(last)) return false;
+  if ((last === ',' || last === '，' || last === '、') && (isDiscourseMarkerText(leftText) || textLooksLikeDanglingLeadin(leftText, profile))) {
+    return false;
+  }
+  if (isShortInterjection(words, left, profile)) return false;
+  const rightUnits = cueUnits(words, right, profile);
+  const afterthought = rightUnits > 0 && rightUnits <= (profile.isCharBased ? 4 : 2);
+  if (afterthought || isShortInterjection(words, right, profile)) return false;
+  return true;
+};
+
+function canMerge(
+  words: readonly CueWord[],
+  left: Cue,
+  right: Cue,
+  unitCap: number,
+  charCap: number,
+  profile: LanguageProfile,
+): boolean {
+  if (left[1] + 1 !== right[0]) return false;
+  const gap = cueStart(words, right) - cueEnd(words, left);
+  const lastWord = words[left[1]]!.text;
+  const firstRight = words[right[0]]!.text;
+  const next2 = words[right[0] + 1]?.text ?? '';
+  if (isLineStartBoundParticle(firstRight) && !isSplitHai(firstRight, next2)) {
+    if (gap > ORPHAN_TAIL_MAX_SEC) return false;
+    if (cueEnd(words, right) - cueStart(words, left) > MERGE_BUDGET_SEC) return false;
+    return !pairExceedsCaps(words, left, right, profile, unitCap, charCap, profile.lengthGraceUnits());
+  }
+  if (isJapaneseLexicalBind(lastWord, firstRight)) {
+    if (gap > ORPHAN_TAIL_MAX_SEC) return false;
+    if (cueEnd(words, right) - cueStart(words, left) > MERGE_BUDGET_SEC) return false;
+    return !pairExceedsCaps(words, left, right, profile, unitCap, charCap, profile.lengthGraceUnits());
+  }
+  const prev = left[1] === 0 ? '' : words[left[1] - 1]!.text;
+  if (isJapaneseSpokenEnd(prev, lastWord, firstRight, next2)) return false;
+  if (
+    profile.key === 'ja' &&
+    (isJaTurnStartAfter(lastWord, firstRight, next2) ||
+      (isConnectorLike(firstRight, profile.connectors) && !isConnectorLike(lastWord, profile.connectors))) &&
+    !isJaAddressGreetingBind(lastWord, firstRight)
+  ) {
+    return false;
+  }
+  if (gap > WATCHABILITY_GAP_SEC) return false;
+  const pairDur = cueEnd(words, right) - cueStart(words, left);
+  if (pairDur > ORPHAN_MERGE_BUDGET_SEC) return false;
+  if (isClosedSentencePair(words, left, right, profile)) return false;
+
+  const rightOrphan = isOrphanTail(words, right, profile) && !isOrphanTail(words, left, profile);
+  if (rightOrphan) {
+    return !pairExceedsCaps(words, left, right, profile, unitCap, charCap, ORPHAN_MERGE_GRACE_UNITS);
+  }
+  const leftOrphan = isOrphanTail(words, left, profile) && !isOrphanTail(words, right, profile);
+  if (leftOrphan) {
+    const grace = cueDuration(words, right) >= FLASH_SEC ? ORPHAN_MERGE_GRACE_UNITS : 0;
+    return !pairExceedsCaps(words, left, right, profile, unitCap, charCap, grace);
+  }
+  if (pairDur > MERGE_BUDGET_SEC) return false;
+
+  if (
+    isOpenGenitiveLink(lastWord, firstRight) ||
+    isCaseParticleBeforePredicate(lastWord, firstRight) ||
+    isFunctionWordLeft(lastWord, profile.functionWordsLeft)
+  ) {
+    const rightUnits = cueUnits(words, right, profile);
+    const rightCap = profile.isCharBased ? (gap < 0.12 ? 22 : 14) : gap < 0.12 ? 12 : 8;
+    if (rightUnits > 0 && rightUnits <= rightCap) {
+      return !pairExceedsCaps(words, left, right, profile, unitCap, charCap, ORPHAN_MERGE_GRACE_UNITS);
+    }
+  }
+  if (isLineEndConnectorToken(lastWord, profile) && isContinuationToken(firstRight, profile)) {
+    return !pairExceedsCaps(words, left, right, profile, unitCap, charCap, ORPHAN_MERGE_GRACE_UNITS);
   }
   return false;
 }
 
-/** 两边都是实质句子时不跨句号粘；口头禅/一句短补语仍可粘。 */
-function isClosedSentencePair(
-  l: DpSegment,
-  r: DpSegment,
-  profile: ReturnType<typeof getProfile>,
-  leftNorm: string,
-): boolean {
-  if (!isTerm(leftNorm.slice(-1))) return false;
-  if (isShortInterjection(l, profile)) return false;
-  const ru = segmentUnits(r, profile.tokenUnits);
-  const afterthought = ru > 0 && ru <= (profile.isCharBased ? 4 : 2);
-  if (afterthought || isShortInterjection(r, profile)) return false;
-  return true;
-}
-
-function isShortInterjection(
-  seg: DpSegment,
-  profile: ReturnType<typeof getProfile>,
-): boolean {
-  const units = segmentUnits(seg, profile.tokenUnits);
-  const max = profile.isCharBased ? 6 : 2;
-  if (units <= 0 || units > max) return false;
-  const n = norm(seg.text);
-  if (isDiscourseMarkerText(n)) return true;
-  return isTerm(n.slice(-1));
-}
-
-function isOrphanTail(seg: DpSegment, profile: ReturnType<typeof getProfile>): boolean {
-  const dur = seg.endTime - seg.startTime;
-  if (dur <= 0 || dur > ORPHAN_TAIL_MAX_MS) return false;
-  const units = segmentUnits(seg, profile.tokenUnits);
-  const cap = profile.isCharBased ? ORPHAN_TAIL_CJK_UNITS : ORPHAN_TAIL_LATIN_UNITS;
-  return units > 0 && units <= cap;
-}
-
-/** 仅「较长左段 + 短右尾」才给超额缓冲，两截都短仍走硬上限。 */
-function tailMergeGrace(
-  l: DpSegment,
-  r: DpSegment,
-  profile: ReturnType<typeof getProfile>,
-): number {
-  if (isOrphanTail(r, profile) && !isOrphanTail(l, profile)) {
-    return ORPHAN_MERGE_GRACE_UNITS;
-  }
-  return 0;
-}
-
-/**
- * 对 DP 断句产物做 watchability 合并。纯函数，返回新数组。
- * 合并后不得超过词/字与字符上限（拉丁双约束）。
- */
-export function mergeWatchabilitySegments(
-  segments: DpSegment[],
-  lang: string,
-  preset: Preset = 'standard',
-): DpSegment[] {
-  if (segments.length < 2) return segments;
-  const profile = getProfile(lang);
-  const hardLimit = profile.sourceLimit(preset);
-  const charLimit = profile.sourceCharLimit(preset);
-  const maxUnits = hardLimit;
-
-  const pass1: DpSegment[] = [];
-  let i = 0;
-  while (i < segments.length) {
-    if (i + 1 >= segments.length) {
-      pass1.push(segments[i]);
-      break;
-    }
-    const l = segments[i];
-    const r = segments[i + 1];
-    if (canMerge(l, r, maxUnits, lang, profile, charLimit)) {
-      pass1.push(mergePair(l, r));
-      i += 2;
-    } else {
-      pass1.push(l);
-      i += 1;
-    }
-  }
-
-  return absorbFlashSegments(pass1, profile, hardLimit, charLimit);
-}
-
 function canFlashMerge(
-  l: DpSegment,
-  r: DpSegment,
-  profile: ReturnType<typeof getProfile>,
-  hardLimit: number,
-  charLimit: number,
+  words: readonly CueWord[],
+  left: Cue,
+  right: Cue,
+  unitCap: number,
+  charCap: number,
+  profile: LanguageProfile,
 ): boolean {
-  const gap = r.startTime - l.endTime;
-  if (gap > WATCHABILITY_GAP_MS) return false;
-  if (r.endTime - l.startTime > MERGE_BUDGET_MS) return false;
-  const nl = norm(l.text);
-  if (isClosedSentencePair(l, r, profile, nl)) return false;
-  const grace = tailMergeGrace(l, r, profile);
-  return !pairExceedsCaps(l, r, profile, hardLimit, charLimit, grace);
+  if (left[1] + 1 !== right[0]) return false;
+  const gap = cueStart(words, right) - cueEnd(words, left);
+  if (gap > WATCHABILITY_GAP_SEC) return false;
+  if (cueEnd(words, right) - cueStart(words, left) > MERGE_BUDGET_SEC) return false;
+  if (isClosedSentencePair(words, left, right, profile)) return false;
+  const lastWord = words[left[1]]!.text;
+  const firstRight = words[right[0]]!.text;
+  const next2 = words[right[0] + 1]?.text ?? '';
+  const prev = left[1] === 0 ? '' : words[left[1] - 1]!.text;
+  if (isJapaneseSpokenEnd(prev, lastWord, firstRight, next2)) return false;
+  if (isJapaneseLexicalBind(lastWord, firstRight)) {
+    return !pairExceedsCaps(words, left, right, profile, unitCap, charCap, profile.lengthGraceUnits());
+  }
+  if (
+    profile.key === 'ja' &&
+    (isJaTurnStartAfter(lastWord, firstRight, next2) ||
+      (isConnectorLike(firstRight, profile.connectors) && !isConnectorLike(lastWord, profile.connectors))) &&
+    !isJaAddressGreetingBind(lastWord, firstRight)
+  ) {
+    return false;
+  }
+  const grace = isOrphanTail(words, right, profile) && !isOrphanTail(words, left, profile) ? ORPHAN_MERGE_GRACE_UNITS : 0;
+  return !pairExceedsCaps(words, left, right, profile, unitCap, charCap, grace);
 }
 
-function absorbFlashSegments(
-  segments: DpSegment[],
-  profile: ReturnType<typeof getProfile>,
-  hardLimit: number,
-  charLimit: number,
-): DpSegment[] {
-  if (segments.length < 2) return segments;
-  const out: DpSegment[] = [];
+function absorbFlash(
+  words: readonly CueWord[],
+  cues: Cue[],
+  unitCap: number,
+  charCap: number,
+  profile: LanguageProfile,
+): Cue[] {
+  if (cues.length < 2) return cues;
+  const out: Cue[] = [];
   let i = 0;
-  while (i < segments.length) {
-    const cur = segments[i];
-    const dur = cur.endTime - cur.startTime;
-    if (dur >= FLASH_MS || i === segments.length - 1) {
-      if (dur < FLASH_MS && out.length > 0) {
-        const prev = out[out.length - 1];
-        if (canFlashMerge(prev, cur, profile, hardLimit, charLimit)) {
-          out[out.length - 1] = mergePair(prev, cur);
-          i += 1;
-          continue;
-        }
+  while (i < cues.length) {
+    const cur = cues[i]!;
+    const dur = cueDuration(words, cur);
+    if (dur >= FLASH_SEC || i + 1 === cues.length) {
+      const prev = out[out.length - 1];
+      if (dur < FLASH_SEC && prev && canFlashMerge(words, prev, cur, unitCap, charCap, profile)) {
+        out[out.length - 1] = [prev[0], cur[1]];
+        i += 1;
+        continue;
       }
       out.push(cur);
       i += 1;
       continue;
     }
-    const next = segments[i + 1];
-    if (canFlashMerge(cur, next, profile, hardLimit, charLimit)) {
-      const m = mergePair(cur, next);
-      if (m.endTime - m.startTime < FLASH_MS && out.length > 0) {
-        const prev = out[out.length - 1];
-        if (canFlashMerge(prev, m, profile, hardLimit, charLimit)) {
-          out[out.length - 1] = mergePair(prev, m);
-          i += 2;
-          continue;
-        }
+    const next = cues[i + 1]!;
+    if (canFlashMerge(words, cur, next, unitCap, charCap, profile)) {
+      const merged: Cue = [cur[0], next[1]];
+      const prev = out[out.length - 1];
+      if (cueDuration(words, merged) < FLASH_SEC && prev && canFlashMerge(words, prev, merged, unitCap, charCap, profile)) {
+        out[out.length - 1] = [prev[0], merged[1]];
+        i += 2;
+        continue;
       }
-      out.push(m);
+      out.push(merged);
       i += 2;
       continue;
     }
-    if (out.length > 0) {
-      const prev = out[out.length - 1];
-      if (canFlashMerge(prev, cur, profile, hardLimit, charLimit)) {
-        out[out.length - 1] = mergePair(prev, cur);
-        i += 1;
-        continue;
-      }
+    const prev = out[out.length - 1];
+    if (prev && canFlashMerge(words, prev, cur, unitCap, charCap, profile)) {
+      out[out.length - 1] = [prev[0], cur[1]];
+      i += 1;
+      continue;
     }
     out.push(cur);
     i += 1;
   }
   return out;
+}
+
+/** 对 DP 产物做 watchability 合并。输入输出都是词区间（闭区间）。 */
+export function mergeWatchabilitySpans(
+  words: readonly CueWord[],
+  spans: readonly Cue[],
+  profile: LanguageProfile,
+  preset: Preset,
+): Cue[] {
+  if (spans.length < 2 || words.length === 0) return spans.map((s) => [s[0], s[1]] as Cue);
+  const cues = spans
+    .filter(([s, e]) => s < words.length && e < words.length && s <= e)
+    .map(([s, e]) => [s, e] as Cue);
+  if (cues.length < 2) return cues;
+
+  const unitCap = profile.sourceLimit(preset);
+  const charCap = profile.sourceCharLimit(preset);
+
+  const pass1: Cue[] = [];
+  let i = 0;
+  while (i < cues.length) {
+    if (i + 1 >= cues.length) {
+      pass1.push(cues[i]!);
+      break;
+    }
+    const left = cues[i]!;
+    const right = cues[i + 1]!;
+    if (canMerge(words, left, right, unitCap, charCap, profile)) {
+      pass1.push([left[0], right[1]]);
+      i += 2;
+    } else {
+      pass1.push(left);
+      i += 1;
+    }
+  }
+  return absorbFlash(words, pass1, unitCap, charCap, profile);
 }

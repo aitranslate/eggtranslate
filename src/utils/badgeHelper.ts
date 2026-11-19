@@ -1,6 +1,6 @@
 import type { FilePhases, PhaseProgress, ProgressPhase } from '@/types';
 import { ALL_PHASES } from '@/types';
-import { formatAiSegmentProgress, formatPhaseCountProgress } from '@/utils/uxHelpers';
+import { formatPhaseCountProgress } from '@/utils/uxHelpers';
 
 interface BadgeInfo {
   text: string;
@@ -66,7 +66,6 @@ export function getCardBadge(
     const phaseNames: Record<ProgressPhase, string> = {
       converting: '转码',
       transcribing: '转录',
-      segmenting: 'AI断句',
       translating: '翻译'
     };
     return { text: `${phaseNames[lastCompletedPhase]}完成`, color: 'blue' };
@@ -89,38 +88,27 @@ export function resolveTranslatePhaseLabel(): string {
 }
 
 /**
- * 列表/详情要展示的阶段。转码不单独露；SRT 无识别/断句；
- * AI 断句仅在任务创建时带了该阶段才出现。
+ * 列表/详情要展示的阶段。转码不单独露；SRT 无识别。
  */
 export function getDisplayPhases(file: {
   fileType?: string | null;
   phases: FilePhases;
 }): ProgressPhase[] {
-  const base =
-    file.fileType === 'srt'
-      ? ALL_PHASES.filter(
-          (p) => p !== 'converting' && p !== 'transcribing' && p !== 'segmenting'
-        )
-      : ALL_PHASES.filter((p) => p !== 'converting');
-  return base.filter((p) => p !== 'segmenting' || Boolean(file.phases.segmenting));
+  return file.fileType === 'srt'
+    ? ALL_PHASES.filter((p) => p !== 'converting' && p !== 'transcribing')
+    : ALL_PHASES.filter((p) => p !== 'converting');
 }
 
 export function formatTaskPhaseChipLabel(
   phase: ProgressPhase,
   opts: {
     status?: PhaseProgress['status'];
-    segmenting?: Pick<PhaseProgress, 'entryCount' | 'totalEntries'> | null;
     translated: number;
     total: number;
   }
 ): string {
   if (phase === 'converting') return '转码';
   if (phase === 'transcribing') return '识别';
-  if (phase === 'segmenting') {
-    return opts.status === 'active'
-      ? formatAiSegmentProgress(opts.segmenting) ?? 'AI断句'
-      : 'AI断句';
-  }
   return formatPhaseCountProgress(
     resolveTranslatePhaseLabel(),
     opts.translated,

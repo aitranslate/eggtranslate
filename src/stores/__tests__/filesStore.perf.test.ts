@@ -486,69 +486,8 @@ describe('phase recovery on every rehydrate (merge, not migrate-only)', () => {
     expect(recovered.taskId).toBe('old');
   });
 
-  it('recoverInterruptedPhases marks active segmenting → failed', () => {
-    const active = makeTask({
-      taskId: 'seg',
-      entryCount: 0,
-      subtitle_entries: [],
-      phases: {
-        workflow: 'transcribe',
-        converting: { status: 'completed', progress: 100, tokens: 0 },
-        transcribing: { status: 'completed', progress: 100, tokens: 0 },
-        segmenting: { status: 'active', progress: 80, tokens: 12 },
-        translating: { status: 'upcoming', progress: 0, tokens: 0 },
-      },
-    });
-    const recovered = recoverInterruptedPhases(active);
-    expect(recovered.phases.segmenting?.status).toBe('failed');
-    expect(recovered.phases.segmenting?.tokens).toBe(12);
-    // 无检查点、字幕未入库：识别一并失败，才能重转录
-    expect(recovered.phases.transcribing.status).toBe('failed');
-  });
 
-  it('recoverInterruptedPhases keeps transcribing completed when asrReady', () => {
-    const active = makeTask({
-      taskId: 'seg-asr',
-      entryCount: 0,
-      subtitle_entries: [],
-      phases: {
-        workflow: 'transcribe',
-        converting: { status: 'completed', progress: 100, tokens: 0 },
-        transcribing: {
-          status: 'completed',
-          progress: 100,
-          tokens: 0,
-          asrReady: true,
-          transcriptId: 'tid-1',
-        },
-        segmenting: { status: 'active', progress: 80, tokens: 12 },
-        translating: { status: 'upcoming', progress: 0, tokens: 0 },
-      },
-    });
-    const recovered = recoverInterruptedPhases(active);
-    expect(recovered.phases.segmenting?.status).toBe('failed');
-    expect(recovered.phases.transcribing.status).toBe('completed');
-    expect(recovered.phases.transcribing.asrReady).toBe(true);
-    expect(recovered.phases.transcribing.transcriptId).toBe('tid-1');
-  });
 
-  it('recoverInterruptedPhases keeps transcribing completed when entries already exist', () => {
-    const active = makeTask({
-      taskId: 'seg-ok',
-      entryCount: 8,
-      subtitle_entries: [makeEntry(1)],
-      phases: {
-        workflow: 'transcribe',
-        converting: { status: 'completed', progress: 100, tokens: 0 },
-        transcribing: { status: 'completed', progress: 100, tokens: 0 },
-        segmenting: { status: 'active', progress: 80, tokens: 12 },
-        translating: { status: 'upcoming', progress: 0, tokens: 0 },
-      },
-    });
-    const recovered = recoverInterruptedPhases(active);
-    expect(recovered.phases.segmenting?.status).toBe('failed');
-    expect(recovered.phases.transcribing.status).toBe('completed');
-  });
 
   it('persist merge recovers active tasks (simulates refresh mid-transcription)', () => {
     const merge = useFilesStore.persist.getOptions().merge!;

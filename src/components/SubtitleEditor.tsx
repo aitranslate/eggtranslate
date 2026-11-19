@@ -113,25 +113,18 @@ export const SubtitleDisplayRow = memo(
         width: '100%',
         transform: `translateY(${start}px)`,
       }}
-      className={`se-row${readOnly ? ' is-readonly' : ''}${isMissing ? ' is-missing' : ''}${entry.aiSplit ? ' is-ai-split' : ''}`}
+      className={`se-row${readOnly ? ' is-readonly' : ''}${isMissing ? ' is-missing' : ''}`}
       title={
         readOnly
           ? '任务处理中，完成后可编辑'
           : isMissing
             ? '本条无独立译文（模型漏条或合并），可点击补译'
-            : entry.aiSplit
-              ? '由 AI 辅助断句'
-              : undefined
+            : undefined
       }
       onClick={() => tryEdit('translation')}
     >
-      <div className={`se-row-idx${entry.aiSplit ? ' is-ai' : ''}`}>
+      <div className="se-row-idx">
         <span>#{index + 1}</span>
-        {entry.aiSplit ? (
-          <span className="se-ai-mark" title="由 AI 辅助断句">
-            AI
-          </span>
-        ) : null}
       </div>
       <button
         type="button"
@@ -328,16 +321,11 @@ export const SubtitleEditingRow = memo(
         width: '100%',
         transform: `translateY(${start}px)`,
       }}
-      className={`se-row se-row-editing${entry.aiSplit ? ' is-ai-split' : ''}`}
+      className="se-row se-row-editing"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className={`se-row-idx${entry.aiSplit ? ' is-ai' : ''}`}>
+      <div className="se-row-idx">
         <span>#{index + 1}</span>
-        {entry.aiSplit ? (
-          <span className="se-ai-mark" title="由 AI 辅助断句">
-            AI
-          </span>
-        ) : null}
       </div>
       <input
         ref={startRef}
@@ -451,7 +439,6 @@ export const SubtitleEditor: React.FC<SubtitleEditorProps> = ({
     return (
       p.converting?.status === 'active' ||
       p.transcribing?.status === 'active' ||
-      p.segmenting?.status === 'active' ||
       p.translating?.status === 'active'
     );
   }, [file?.phases]);

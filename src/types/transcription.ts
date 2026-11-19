@@ -46,9 +46,6 @@ export interface SubtitleFileMetadata {
   sourceLanguage?: string;
   targetLanguage?: string;
 
-  /** 任务级 AI 断句开关（创建时从全局设置拷贝；音视频任务）。 */
-  aiSegmentationEnabled?: boolean;
-
   // 音视频原始文件引用（不持久化，仅内存）
   fileRef?: File;
 }

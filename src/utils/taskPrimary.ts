@@ -1,7 +1,7 @@
 /**
  * 任务主按钮：由「接下来该跑哪条产品路径」决定，不因某阶段失败改入口。
  *
- * - 音视频还要识别 / 断句 → 转译（中断后仍是转译，文案为重转译）
+ * - 音视频还要识别 → 转译（中断后仍是转译，文案为重转译）
  * - 否则还要翻译 → 翻译
  * - 「仅转录」是旁路，不是识别失败后的唯一恢复口
  */
@@ -19,7 +19,7 @@ export interface TaskPrimary {
 
 export type TaskPrimaryFile = Pick<
   SubtitleFileMetadata,
-  'fileType' | 'entryCount' | 'translatedCount' | 'phases' | 'aiSegmentationEnabled'
+  'fileType' | 'entryCount' | 'translatedCount' | 'phases'
 >;
 
 export function resolveTaskPrimary(
@@ -31,9 +31,7 @@ export function resolveTaskPrimary(
   }
 
   if (needsTranscriptionWork(file)) {
-    const interrupted =
-      file.phases.transcribing.status === 'failed' ||
-      file.phases.segmenting?.status === 'failed';
+    const interrupted = file.phases.transcribing.status === 'failed';
     const label = interrupted ? '重转译' : '转译';
     return {
       action: 'full',

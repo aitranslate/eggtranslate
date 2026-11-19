@@ -9,7 +9,6 @@ type SetupGuardKind = 'translation' | 'transcription';
 
 type TranscriptionWorkFile = {
   fileType?: string;
-  aiSegmentationEnabled?: boolean;
   entryCount?: number;
   phases: FilePhases;
 };
@@ -24,18 +23,7 @@ export function needsTranscriptionWork(file: TranscriptionWorkFile): boolean {
   const tr = file.phases.transcribing;
   if (!tr || tr.status !== 'completed') return true;
   if ((file.entryCount ?? 0) > 0) return false;
-  // 识别已完成、没有字幕：
-  // - 词表已在本地但 AI 断句未完成 → 只续断句
-  // - 只有 transcript.id、词表还没落地 → 继续 poll
-  // - 空音频（asrReady 且无词）或旧数据 → 视为完成，避免死循环
-  const segmenting = file.phases.segmenting;
-  if (
-    file.aiSegmentationEnabled &&
-    segmenting &&
-    segmenting.status !== 'completed'
-  ) {
-    return Boolean(tr.asrReady || tr.transcriptId);
-  }
+  // 识别已完成、没有字幕：词表还没落地就继续 poll；空音频/旧数据视为完成
   return Boolean(tr.transcriptId && !tr.asrReady);
 }
 

@@ -8,7 +8,6 @@ function avFile(overrides: Partial<TaskPrimaryFile> & { phases?: Partial<FilePha
     fileType: 'video',
     entryCount: 0,
     translatedCount: 0,
-    aiSegmentationEnabled: false,
     phases: {
       workflow: 'full',
       converting: { status: 'completed', progress: 100, tokens: 0 },

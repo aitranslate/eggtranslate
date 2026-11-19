@@ -9,7 +9,6 @@ import {
   parseApiKeys,
   removeTaskCheckpoint,
   resetCheckpointWriteQueuesForTests,
-  saveAiBreakSpan,
   saveAsrJobCheckpoint,
   saveTaskCheckpoint,
 } from '@/services/checkpoint';
@@ -68,17 +67,6 @@ describe('checkpoint storage', () => {
     expect(loaded?.asr?.transcriptId).toBe('tid-1');
     expect(loaded?.asr?.status).toBe('completed');
     expect(loaded?.words).toHaveLength(1);
-  });
-
-  it('serializes concurrent ai span writes', async () => {
-    await Promise.all([
-      saveAiBreakSpan('t1', { spanIdx: 0, spanText: 'a', content: 'a [BR] b', tokensUsed: 3 }),
-      saveAiBreakSpan('t1', { spanIdx: 1, spanText: 'c', content: null, tokensUsed: 2 }),
-    ]);
-    const loaded = await loadTaskCheckpoint('t1');
-    expect(Object.keys(loaded?.aiBreaks ?? {})).toHaveLength(2);
-    expect(loaded?.aiBreaks?.['0']?.content).toContain('[BR]');
-    expect(loaded?.aiBreaks?.['1']?.content).toBeNull();
   });
 
   it('removeTaskCheckpoint deletes the key', async () => {

@@ -498,8 +498,7 @@ export async function saveTranslationHistory(
 
     const finalTokens =
       (currentTask.phases?.translating?.tokens || 0) +
-      (currentTask.phases?.transcribing?.tokens || 0) +
-      (currentTask.phases?.segmenting?.tokens || 0) ||
+      (currentTask.phases?.transcribing?.tokens || 0) ||
       tokensUsed ||
       0;
     const translatedCount = entries.filter(

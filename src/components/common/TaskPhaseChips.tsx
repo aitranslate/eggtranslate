@@ -30,7 +30,6 @@ export function TaskPhaseChips({
         const err = filePhases[phase]?.errorMessage;
         const label = formatTaskPhaseChipLabel(phase, {
           status: st,
-          segmenting: filePhases.segmenting,
           translated,
           total,
         });

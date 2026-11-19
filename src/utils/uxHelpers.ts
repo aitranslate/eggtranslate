@@ -41,15 +41,6 @@ export function shouldPromptBeforeUnload(activeJob: boolean): boolean {
   return activeJob === true;
 }
 
-/** AI 断句进行中文案：已有总数则显示 n/m（含 0/m），否则不返回（由调用方写「AI断句中」）。 */
-export function formatAiSegmentProgress(seg?: {
-  entryCount?: number;
-  totalEntries?: number;
-} | null): string | null {
-  if (!seg || seg.totalEntries == null || seg.entryCount == null) return null;
-  return `AI断句 ${seg.entryCount}/${seg.totalEntries}`;
-}
-
 /** 阶段标签条数进度，如「翻译 13/120」。总数未知时只返回名称。 */
 export function formatPhaseCountProgress(
   name: string,
@@ -67,14 +58,13 @@ export function hasActivePhase(phases: FilePhases | null | undefined): boolean {
   return (
     phases.converting?.status === 'active' ||
     phases.transcribing?.status === 'active' ||
-    phases.segmenting?.status === 'active' ||
     phases.translating?.status === 'active'
   );
 }
 
 // ---------- 失败信息 ----------
 
-const PHASE_ORDER: ProgressPhase[] = ['translating', 'segmenting', 'transcribing', 'converting'];
+const PHASE_ORDER: ProgressPhase[] = ['translating', 'transcribing', 'converting'];
 
 /** 取第一个失败阶段的 errorMessage（优先翻译 → 转录 → 转码） */
 export function getFailedPhaseError(

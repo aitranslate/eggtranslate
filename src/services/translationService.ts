@@ -6,7 +6,7 @@
  * - 可通过 deps 注入依赖（单测 / 将来非 React 宿主）
  *
  * 注：断句（DP 断句）统一在转录阶段完成：音视频走 segmentWords，
- * 直接上传 SRT 不再二次断句。本服务只负责翻译，不含 AI 断句对齐。
+ * 直接上传 SRT 不再二次断句。本服务只负责翻译。
  */
 
 import { useFilesStore, flushFilesStorePersist } from '@/stores/filesStore';

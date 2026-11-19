@@ -1,139 +1,247 @@
-// Layer1 硬切分 + 单词区间映射 —— 复刻 D:\voxtrans 的 semantic.rs（英文走
-// sentence-splitter，其它语言走默认标点），并提供把句子边界映射回单词下标的能力。
+// Layer1 硬切分 —— OneAsr crates/oneasr-core/src/sentence_boundary/semantic.rs 的移植。
+//
+// 英文：sentence-splitter（Punkt 移植，项目已有依赖）统计断句 + 句号规则兜底；
+// 其它语言：句末标点规则 + profile 缩写表；另外补两条例外：
+//   - 单字母带点（B. / J.）只在缩写链（J. K.）里抑制切分；
+//   - 引号内的 ?/! （a "What Do You See?" post）不是句末。
 
 import { split } from 'sentence-splitter';
-import type { WordWithTime } from './types';
-import { isAbbreviationToken, isSingleLetterDotted } from './textRules';
+import type { LanguageProfile } from './profiles';
+import { spacingPieces } from './spacing';
+import {
+  isClosingPunctuation,
+  isJapaneseSpokenEnd,
+  isJaTurnStartAfter,
+  isOpeningPunctuation,
+  isTerminalChar,
+  stripToken,
+  stripTrailingClosers,
+} from './textRules';
 
-/**
- * 在 sentence-splitter 之上补切单字母枚举句末（"step one B." 中的 B.），
- * 除非 B. 与下一 token 构成单字母缩写链（"J. K."）。复刻 voxtrans 的
- * is_single_letter_dotted 链特判。仅当 sentence-splitter 未在其后切分时生效。
- */
-function applySingleLetterRule(sentence: string): string[] {
-  const tokens = sentence.split(/\s+/).filter(Boolean);
-  if (tokens.length < 2) return [sentence];
-  const parts: string[] = [];
-  let cur: string[] = [tokens[0]];
-  for (let i = 1; i < tokens.length; i++) {
-    const prev = tokens[i - 1];
-    if (isSingleLetterDotted(prev) && !isSingleLetterDotted(tokens[i])) {
-      // 在 prev 之后切分（prev 已在 cur 中，勿重复追加）。
-      parts.push(cur.join(' '));
-      cur = [tokens[i]];
-    } else {
-      cur.push(tokens[i]);
-    }
-  }
-  if (cur.length) parts.push(cur.join(' '));
-  return parts.filter(Boolean);
+export type SplitReason = 'terminal-punctuation' | 'subtitle-layout';
+
+export interface SplitPoint {
+  index: number;
+  reason: SplitReason;
 }
 
-/** 从 sentence-splitter 的 AST 中提取句子字符串（拼接 Sentence 节点的子节点 value）。 */
-function extractSentencesFromAst(nodes: ReturnType<typeof split>): string[] {
-  const sentences: string[] = [];
+const COMMON_ABBREVIATIONS = new Set([
+  'mr.', 'mrs.', 'ms.', 'dr.', 'prof.', 'rev.', 'hon.', 'sr.', 'jr.', 'st.', 'mt.', 'no.', 'vs.',
+  'etc.', 'al.', 'cf.', 'fig.', 'ed.', 'vol.', 'pp.', 'dept.', 'inc.', 'ltd.', 'co.', 'corp.',
+  'bros.', 'llc.', 'jan.', 'feb.', 'mar.', 'apr.', 'jun.', 'jul.', 'aug.', 'sep.', 'sept.',
+  'oct.', 'nov.', 'dec.', 'ave.', 'blvd.', 'rd.', 'ln.', 'ct.', 'pl.', 'pres.', 'gov.', 'sen.',
+  'rep.', 'capt.', 'cmdr.', 'col.', 'gen.', 'lt.', 'maj.', 'sgt.', 'adm.', 'univ.', 'assn.',
+  'assoc.', 'esq.', 'mx.', 'fr.', 'amb.',
+]);
+
+const isCommonAbbreviation = (lower: string): boolean => COMMON_ABBREVIATIONS.has(lower);
+
+const isDottedAbbreviation = (lower: string): boolean => {
+  const s = lower.replace(/\.+$/, '').trim();
+  if (!s) return false;
+  const parts = s.split('.');
+  if (parts.length < 2) return false;
+  return parts.every((p) => p.length > 0 && p.length <= 3 && /^[A-Za-z]+$/.test(p));
+};
+
+const isTerminalEnd = (token: string, abbrs: readonly string[]): boolean => {
+  const normalized = stripTrailingClosers(token.trim());
+  if (!normalized) return false;
+  const c = [...normalized];
+  if (!isTerminalChar(c[c.length - 1]!)) return false;
+  return !abbrs.includes(normalized.toLowerCase());
+};
+
+const isTerminalEndRuleFallback = (token: string): boolean => {
+  const normalized = stripTrailingClosers(token.trim());
+  if (!normalized) return false;
+  const c = [...normalized];
+  if (!isTerminalChar(c[c.length - 1]!)) return false;
+  const lower = normalized.toLowerCase();
+  if (isCommonAbbreviation(lower)) return false;
+  if (isDottedAbbreviation(lower)) return false;
+  return true;
+};
+
+const isSingleLetterDotted = (token: string): boolean => {
+  const c = [...stripTrailingClosers(token.trim())];
+  return c.length === 2 && /[A-Za-z]/.test(c[0]!) && c[1] === '.';
+};
+
+const isQuestionBangTerminal = (token: string): boolean => {
+  const c = [...stripTrailingClosers(token.trim())];
+  if (!c.length) return false;
+  return ['!', '?', '！', '？', '‼', '⁇', '⁈', '⁉'].includes(c[c.length - 1]!);
+};
+
+const isCloserOnlyToken = (token: string): boolean => {
+  const trimmed = token.trim();
+  return trimmed.length > 0 && stripTrailingClosers(trimmed) === '';
+};
+
+const nextContentWord = (units: readonly string[], index: number): string | null => {
+  for (let i = index + 1; i < units.length; i++) {
+    const u = units[i]!;
+    if (!isCloserOnlyToken(u)) return u;
+  }
+  return null;
+};
+
+const looksLikeEnglishSentenceStart = (token: string): boolean => {
+  let trimmed = token.trim();
+  while (trimmed) {
+    const c = [...trimmed][0]!;
+    if (isOpeningPunctuation(c) || ['"', "'", '«', '‹'].includes(c)) {
+      trimmed = trimmed.slice(c.length);
+      continue;
+    }
+    break;
+  }
+  for (const ch of trimmed) {
+    if (/[\p{L}]/u.test(ch)) return ch === ch.toUpperCase() && ch !== ch.toLowerCase();
+  }
+  return false;
+};
+
+/** 引号/标题里的 ?! 不是句末：下一个内容词不是句首就并回去。 */
+export function shouldSuppressQuestionBangSplit(units: readonly string[], index: number): boolean {
+  const token = units[index];
+  if (token == null || !isQuestionBangTerminal(token)) return false;
+  const next = nextContentWord(units, index);
+  if (next == null) return false;
+  return !looksLikeEnglishSentenceStart(next);
+}
+
+function pushSplitPoint(out: SplitPoint[], index: number, reason: SplitReason): void {
+  if (out.length && out[out.length - 1]!.index === index) return;
+  out.push({ index, reason });
+}
+
+/** 把拼好的全文切成句子，返回每句的 [start,end] 字符区间。 */
+function sentenceRanges(text: string): Array<[number, number]> {
+  const nodes = split(text);
+  const ranges: Array<[number, number]> = [];
   for (const node of nodes) {
-    if (node.type === 'Sentence') {
-      const text = node.children
-        .map((c) => ('value' in c ? String((c as { value?: unknown }).value ?? '') : ''))
-        .join('')
-        .trim();
-      if (text) sentences.push(text);
-    }
+    if (node.type !== 'Sentence') continue;
+    const range = (node as unknown as { range?: readonly [number, number] }).range;
+    if (!range) continue;
+    ranges.push([range[0], range[1]]);
   }
-  return sentences;
+  return ranges;
 }
 
-/** 英文硬切分：sentence-splitter（内置缩写/引号/括号处理）+ 单字母枚举补切。 */
-function splitEnglishText(text: string): string[] {
-  if (!text.trim()) return [];
-  const base = extractSentencesFromAst(split(text));
-  const out: string[] = [];
-  for (const sentence of base) {
-    out.push(...applySingleLetterRule(sentence));
+/** 词的字符区间（与 spacingPieces 同一套空格规则）。 */
+function wordOffsets(units: readonly string[]): Array<{ start: number; end: number }> {
+  const pieces = spacingPieces(units);
+  const out: Array<{ start: number; end: number }> = [];
+  let cursor = 0;
+  for (const piece of pieces) {
+    if (piece.spaceBefore) cursor += 1;
+    out.push({ start: cursor, end: cursor + piece.text.length });
+    cursor += piece.text.length;
   }
   return out;
 }
 
-const TERMINAL_JOIN = new Set(['.', '!', '?', '。', '！', '？', '．', '…', '⁉', '‼', '⁈', '⁇']);
+function buildSplitPointsWithPunkt(units: readonly string[]): SplitPoint[] {
+  const n = units.length;
+  if (n === 0) return [];
+  const text = (() => {
+    let out = '';
+    for (const piece of spacingPieces(units)) {
+      if (piece.spaceBefore) out += ' ';
+      out += piece.text;
+    }
+    return out;
+  })();
+  if (!text.trim()) return [];
 
-/** token 是否以句末标点结尾且非缩写/非小数（可在此切句）。 */
-function endsSentence(token: string): boolean {
-  const trimmed = token.trimEnd();
-  const last = trimmed[trimmed.length - 1];
-  if (!last || !TERMINAL_JOIN.has(last)) return false;
-  if (isAbbreviationToken(token)) return false;
-  // 小数（如 "3.14"）保护
-  if (/^\d/.test(token.replace(/[.。]+$/, ''))) return false;
-  return true;
-}
-
-/** 其它语言默认标点切分（带基础缩写/小数保护）。 */
-function splitByPunctuation(text: string): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length === 0) return [];
-  const result: string[] = [];
-  let current = words[0];
-  for (let i = 1; i < words.length; i++) {
-    if (endsSentence(words[i - 1])) {
-      result.push(current.trim());
-      current = words[i];
-    } else {
-      current += ' ' + words[i];
+  const offsets = wordOffsets(units);
+  const punktSplits = new Set<number>();
+  for (const [, end] of sentenceRanges(text)) {
+    // 落在哪个词的末尾（end 为开区间）
+    for (let i = n - 1; i >= 0; i--) {
+      const o = offsets[i]!;
+      if (o.end <= end) {
+        punktSplits.add(i);
+        break;
+      }
     }
   }
-  result.push(current.trim());
-  return result.filter(Boolean);
+
+  const out: SplitPoint[] = [];
+  for (let index = 0; index < n; index++) {
+    const unit = units[index]!;
+    if (punktSplits.has(index)) {
+      if (isSingleLetterDotted(unit)) {
+        const next = units[index + 1];
+        if (next != null && isSingleLetterDotted(next)) continue;
+      }
+      if (shouldSuppressQuestionBangSplit(units, index)) continue;
+      pushSplitPoint(out, index, 'terminal-punctuation');
+      continue;
+    }
+    if (index === n - 1) continue;
+    if (isTerminalEndRuleFallback(unit)) {
+      if (isSingleLetterDotted(unit)) {
+        const next = units[index + 1];
+        if (next != null && isSingleLetterDotted(next)) continue;
+      }
+      if (shouldSuppressQuestionBangSplit(units, index)) continue;
+      pushSplitPoint(out, index, 'terminal-punctuation');
+    }
+  }
+  return out;
 }
 
-/** 按语言选择硬切分策略。 */
-export function splitTextToSentences(text: string, lang: string): string[] {
-  const key = lang.trim().split(/[-_]/)[0].toLowerCase();
-  if (key === 'en') return splitEnglishText(text);
-  return splitByPunctuation(text);
+function buildSplitPointsWithRules(units: readonly string[], profile: LanguageProfile): SplitPoint[] {
+  const out: SplitPoint[] = [];
+  const abbrs = (() => {
+    switch (profile.key) {
+      case 'fr':
+        return ['m.', 'mme.', 'mlle.', 'dr.', 'prof.', 'etc.', 'p.m.', 'a.m.'];
+      default:
+        return [];
+    }
+  })();
+  for (let index = 0; index < units.length; index++) {
+    const here = units[index]!;
+    const punctEnd = isTerminalEnd(here, abbrs);
+    const next = units[index + 1];
+    const next2 = units[index + 2] ?? '';
+    const prev = index === 0 ? '' : units[index - 1]!;
+    const spokenEnd = next != null && isJapaneseSpokenEnd(prev, here, next, next2);
+    const turnBefore = next != null && isJaTurnStartAfter(here, next, next2);
+    if (!punctEnd && !spokenEnd && !turnBefore) continue;
+    if (punctEnd && isSingleLetterDotted(here)) {
+      if (next != null && isSingleLetterDotted(next)) continue;
+    }
+    pushSplitPoint(out, index, 'terminal-punctuation');
+  }
+  return out;
 }
 
-/** 归一化：折叠空白为单空格并去首尾空格。 */
-function normalize(s: string): string {
-  return s.replace(/\s+/g, ' ').trim();
+export function buildSplitPoints(units: readonly string[], profile: LanguageProfile): SplitPoint[] {
+  return profile.usesPunktSentenceBoundary
+    ? buildSplitPointsWithPunkt(units)
+    : buildSplitPointsWithRules(units, profile);
 }
 
-/**
- * 把硬切分得到的句子字符串映射回原始单词下标区间 [start,end]（含端点）。
- * 通过按单词累积文本并与归一化后的句子比对实现，鲁棒且不依赖字符偏移。
- */
-export function mapSentencesToWordRanges(
-  sentences: string[],
-  words: WordWithTime[],
+/** 切分点 → 词区间（闭区间）。 */
+export function splitPointsToSpans(
+  wordTotal: number,
+  splitPoints: readonly SplitPoint[],
 ): Array<[number, number]> {
-  const ranges: Array<[number, number]> = [];
-  if (words.length === 0 || sentences.length === 0) return ranges;
-  let wi = 0;
-  for (const s of sentences) {
-    const target = normalize(s);
-    const start = wi;
-    let acc = '';
-    while (wi < words.length) {
-      acc = acc ? acc + ' ' + words[wi].text : words[wi].text;
-      const normAcc = normalize(acc);
-      if (normAcc === target) {
-        ranges.push([start, wi]);
-        wi++;
-        break;
-      }
-      if (normAcc.length > target.length) {
-        // 累积超出仍未匹配 → 兜底：把已累积的词归入本句
-        ranges.push([start, wi]);
-        wi++;
-        break;
-      }
-      wi++;
-    }
+  if (wordTotal === 0) return [];
+  const out: Array<[number, number]> = [];
+  let cursor = 0;
+  for (const { index } of splitPoints) {
+    if (index < cursor || index + 1 >= wordTotal) continue;
+    out.push([cursor, index]);
+    cursor = index + 1;
   }
-  // 末尾残余单词并入最后一个区间
-  if (wi < words.length) {
-    if (ranges.length === 0) ranges.push([0, words.length - 1]);
-    else ranges[ranges.length - 1][1] = words.length - 1;
-  }
-  return ranges;
+  out.push([cursor, wordTotal - 1]);
+  return out;
 }
+
+export { stripToken, isClosingPunctuation };

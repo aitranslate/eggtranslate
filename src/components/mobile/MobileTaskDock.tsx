@@ -85,14 +85,6 @@ function MobileTaskDockActive({ file }: { file: SubtitleFileMetadata }) {
 
   const statusText = useMemo(() => {
     if (file.phases.transcribing.status === 'active') return '转录中…';
-    if (file.phases.segmenting?.status === 'active') {
-      return formatTaskPhaseChipLabel('segmenting', {
-        status: 'active',
-        segmenting: file.phases.segmenting,
-        translated: translateCounts.translated,
-        total: translateCounts.total,
-      });
-    }
     if (isQueued) return badge.text;
     if ((file.entryCount ?? 0) > 0) {
       return formatTaskPhaseChipLabel('translating', {
@@ -104,7 +96,6 @@ function MobileTaskDockActive({ file }: { file: SubtitleFileMetadata }) {
     return '暂无字幕';
   }, [
     file.phases.transcribing.status,
-    file.phases.segmenting,
     file.entryCount,
     translateCounts.translated,
     translateCounts.total,

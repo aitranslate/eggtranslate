@@ -13,7 +13,6 @@ import {
   swapLanguages,
   unsupportedImportMessage,
   writeLastExportFormat,
-  formatAiSegmentProgress,
   formatPhaseCountProgress,
   LAST_EXPORT_FORMAT_KEY,
 } from '../uxHelpers';
@@ -60,18 +59,6 @@ describe('uxHelpers', () => {
     it('shouldPromptBeforeUnload only when active job', () => {
       expect(shouldPromptBeforeUnload(true)).toBe(true);
       expect(shouldPromptBeforeUnload(false)).toBe(false);
-    });
-  });
-
-  describe('formatAiSegmentProgress', () => {
-    it('shows 0/N when first pass is done but no LLM has returned', () => {
-      expect(formatAiSegmentProgress({ entryCount: 0, totalEntries: 82 })).toBe('AI断句 0/82');
-    });
-
-    it('returns null until both counts exist', () => {
-      expect(formatAiSegmentProgress(undefined)).toBeNull();
-      expect(formatAiSegmentProgress({ entryCount: 1 })).toBeNull();
-      expect(formatAiSegmentProgress({ totalEntries: 8 })).toBeNull();
     });
   });
 

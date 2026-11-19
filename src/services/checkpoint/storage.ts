@@ -6,7 +6,6 @@
 import localforage from 'localforage';
 import {
   CHECKPOINT_VERSION,
-  type AiBreakSpanCheckpoint,
   type AsrJobCheckpoint,
   type TaskCheckpoint,
 } from './types';
@@ -56,10 +55,6 @@ export async function saveTaskCheckpoint(
       version: CHECKPOINT_VERSION,
       taskId,
       asr: patch.asr ? { ...prev.asr, ...patch.asr } : prev.asr,
-      aiBreaks:
-        patch.aiBreaks !== undefined
-          ? { ...prev.aiBreaks, ...patch.aiBreaks }
-          : prev.aiBreaks,
     };
     await localforage.setItem(storageKey(taskId), next);
     return next;
@@ -71,15 +66,6 @@ export async function saveAsrJobCheckpoint(
   asr: AsrJobCheckpoint
 ): Promise<TaskCheckpoint> {
   return saveTaskCheckpoint(taskId, { asr });
-}
-
-export async function saveAiBreakSpan(
-  taskId: string,
-  span: AiBreakSpanCheckpoint
-): Promise<TaskCheckpoint> {
-  return saveTaskCheckpoint(taskId, {
-    aiBreaks: { [String(span.spanIdx)]: span },
-  });
 }
 
 export async function removeTaskCheckpoint(taskId: string): Promise<void> {

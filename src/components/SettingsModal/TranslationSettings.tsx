@@ -242,8 +242,8 @@ function ParamsFields({
             value={config.threadCount}
             onChange={(e) => onConfigChange('threadCount', parseInt(e.target.value))}
             className={inputClass}
-            title={locked ? disabledTitle : '批译与 AI 断句共用'}
-            aria-label="LLM 并发，批译与 AI 断句共用"
+            title={locked ? disabledTitle : '批译并发数'}
+            aria-label="LLM 并发，批译并发数"
             disabled={locked}
           />
         </div>

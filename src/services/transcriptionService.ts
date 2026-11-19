@@ -16,7 +16,6 @@ import { needsTranscriptionWork } from '@/utils/taskGuards';
 import {
   asrWordsFingerprint,
   loadTaskCheckpoint,
-  saveAiBreakSpan,
   saveTaskCheckpoint,
 } from '@/services/checkpoint';
 import toast from 'react-hot-toast';
@@ -40,7 +39,6 @@ export async function startTranscription(fileId: string): Promise<void> {
     language: prevTr.language,
   });
 
-  let segmentingActive = false;
   let asrCompleted = Boolean(prevTr.asrReady);
 
   try {
@@ -86,37 +84,12 @@ export async function startTranscription(fileId: string): Promise<void> {
       logger.info('[transcription] 无本地音频，使用检查点续跑');
     }
 
-    const aiEnabled = file.aiSegmentationEnabled === true;
-    if (aiEnabled && import.meta.env.MODE !== 'test') {
-      void import('@/services/sentenceSegmentation');
-      void import('@/services/aiSentenceBreakerService');
-    }
-
     const preset = subtitleLengthPreset || 'standard';
     const resumeFingerprint = checkpoint?.asrFingerprint;
     const expectedFp =
       resumeWords && checkpoint?.language
         ? asrWordsFingerprint(resumeWords.words, checkpoint.language, preset)
         : undefined;
-    const aiBreakResume = new Map<
-      number,
-      { spanText: string; content: string | null; tokensUsed: number }
-    >();
-    if (
-      aiEnabled &&
-      expectedFp &&
-      resumeFingerprint === expectedFp &&
-      checkpoint?.aiBreaks
-    ) {
-      for (const span of Object.values(checkpoint.aiBreaks)) {
-        aiBreakResume.set(span.spanIdx, {
-          spanText: span.spanText,
-          content: span.content,
-          tokensUsed: span.tokensUsed,
-        });
-      }
-    }
-
     const result = await runTranscriptionPipeline(
       asrFile,
       allKeyterms,
@@ -132,44 +105,10 @@ export async function startTranscription(fileId: string): Promise<void> {
           });
         },
         onProgress: (percent) => {
-          useFilesStore.getState().updatePhase(
-            fileId,
-            segmentingActive ? 'segmenting' : 'transcribing',
-            { progress: percent }
-          );
-        },
-        onSegmenting: () => {
-          if (!aiEnabled || segmentingActive) return;
-          segmentingActive = true;
-          const live = useFilesStore.getState().getFile(fileId)?.phases.transcribing;
-          useFilesStore.getState().updatePhase(fileId, 'transcribing', {
-            status: 'completed',
-            progress: 100,
-            asrReady: true,
-            transcriptId: live?.transcriptId,
-            transcriptKeyFp: live?.transcriptKeyFp,
-            language: live?.language,
-          });
-          useFilesStore.getState().updatePhase(fileId, 'segmenting', {
-            status: 'active',
-            progress: -1,
-          });
-        },
-        onAiProgress: (resolved, total) => {
-          useFilesStore.getState().updatePhase(fileId, 'segmenting', {
-            entryCount: resolved,
-            totalEntries: total,
-          });
-        },
-        onAiTokens: (delta) => {
-          if (delta <= 0) return;
-          useFilesStore.getState().updatePhase(fileId, 'segmenting', {
-            tokensDelta: delta,
-          });
+          useFilesStore.getState().updatePhase(fileId, 'transcribing', { progress: percent });
         },
       },
       {
-        useAiSegmentation: aiEnabled,
         resume: {
           transcriptId: prevTr.transcriptId || checkpoint?.asr?.transcriptId,
           keyFingerprint: prevTr.transcriptKeyFp || checkpoint?.asr?.keyFingerprint,
@@ -211,10 +150,6 @@ export async function startTranscription(fileId: string): Promise<void> {
           });
           await flushFilesStorePersist();
         },
-        aiBreakResume,
-        onAiSpanPersist: async (span) => {
-          await saveAiBreakSpan(file.taskId, span);
-        },
       }
     );
 
@@ -237,17 +172,6 @@ export async function startTranscription(fileId: string): Promise<void> {
                   asrReady: true,
                   keytermGroupName: selectedKeytermGroup?.name,
                 },
-                ...(aiEnabled
-                  ? {
-                      segmenting: {
-                        status: 'completed' as const,
-                        progress: 100,
-                        tokens: result.tokensUsed ?? t.phases.segmenting?.tokens ?? 0,
-                        entryCount: result.entries.length,
-                        totalEntries: result.entries.length,
-                      },
-                    }
-                  : {}),
               },
             }
           : t
@@ -261,7 +185,7 @@ export async function startTranscription(fileId: string): Promise<void> {
       void saveTranslationHistory(
         file.taskId,
         file.name,
-        result.tokensUsed ?? 0,
+        0,
         (entry) => useHistoryStore.getState().addHistory(entry)
       );
     }
@@ -270,8 +194,8 @@ export async function startTranscription(fileId: string): Promise<void> {
     logger.error(appError.message, appError);
     toast.error(`转录失败: ${appError.message}`);
 
-    if (segmentingActive || asrCompleted) {
-      useFilesStore.getState().updatePhase(fileId, 'segmenting', { status: 'failed' });
+    if (asrCompleted) {
+      useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'completed' });
     } else {
       useFilesStore.getState().updatePhase(fileId, 'transcribing', { status: 'failed' });
     }
